@@ -30,6 +30,9 @@ Implemented:
 - PowerPoint-window discovery prototype with ScreenCaptureKit.
 - Compiled ScreenCaptureKit adapter for continuous capture of the selected PowerPoint window.
 - Deterministic frame fingerprints，stable-frame confirmation，and slide-change classification.
+- Compiled Vision text and rectangle analysis triggered by confirmed stable frames.
+- Deterministic normalized occupied-region filtering，padding，and merging.
+- Capture-monitor analysis counts and occupied-region preview overlays.
 - Click-through transparent overlay prototype.
 - Japanese or English Apple Speech prototype.
 - Platform-neutral `LectureBoardCore` package.
@@ -41,7 +44,8 @@ Not yet implemented or verified:
 
 - Runtime validation of continuous PowerPoint frame capture.
 - Runtime calibration and validation of stable slide-change detection.
-- Vision-based slide text, object, and empty-space analysis.
+- Runtime validation and accuracy calibration of Vision slide text and rectangle analysis.
+- Robust object，empty-space，and existing-ink analysis beyond detected text and rectangles.
 - Existing PowerPoint ink detection.
 - Real speaker-note and `.pptx` parsing.
 - Reliable Japanese–English code switching.

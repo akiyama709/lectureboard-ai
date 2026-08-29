@@ -20,6 +20,7 @@
 		CEDB5ACD9C3AC7C25D9D68E8 /* DigitalInkStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */; };
 		CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */; };
 		D2928CBE9C5434FD2164CA68 /* DemoBoardSceneFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */; };
+		DD91F76CC3DA3E2EF12AC7C0 /* SlideVisionAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D151DFBB724F1F892CF322C3 /* SlideVisionAnalyzer.swift */; };
 		E904C6056388B007AD5463BF /* PermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */; };
 		FB6E814A1A2348D441594CAD /* PowerPointWindowCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */; };
 /* End PBXBuildFile section */
@@ -38,6 +39,7 @@
 		A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayWindowController.swift; sourceTree = "<group>"; };
 		AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionService.swift; sourceTree = "<group>"; };
 		AD2FBD20EAAA499EF3E13F42 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D151DFBB724F1F892CF322C3 /* SlideVisionAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideVisionAnalyzer.swift; sourceTree = "<group>"; };
 		DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechRecognizerProvider.swift; sourceTree = "<group>"; };
 		E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoBoardSceneFactory.swift; sourceTree = "<group>"; };
 		F453CD2C95C2282F00144BE6 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -101,6 +103,14 @@
 			path = Transcription;
 			sourceTree = "<group>";
 		};
+		AC3829D4703268AC02D433EE /* Vision */ = {
+			isa = PBXGroup;
+			children = (
+				D151DFBB724F1F892CF322C3 /* SlideVisionAnalyzer.swift */,
+			);
+			path = Vision;
+			sourceTree = "<group>";
+		};
 		D23D7859A4951727FAE71673 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -136,6 +146,7 @@
 				429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */,
 				E613847A36C3744A8E3F5E87 /* Capture */,
 				957ECFCC42D3F06FCAC0F49D /* Transcription */,
+				AC3829D4703268AC02D433EE /* Vision */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -233,6 +244,7 @@
 				FB6E814A1A2348D441594CAD /* PowerPointWindowCapture.swift in Sources */,
 				15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */,
 				688BEC5EF09CC3DB0CD7A231 /* SettingsView.swift in Sources */,
+				DD91F76CC3DA3E2EF12AC7C0 /* SlideVisionAnalyzer.swift in Sources */,
 				1C738559CA669F8BB7BC0D5B /* TranscriptionProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

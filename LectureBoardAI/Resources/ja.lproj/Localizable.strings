@@ -40,6 +40,13 @@
 "capture.stableFrames" = "安定スナップショット";
 "capture.slideChanges" = "スライド切替";
 "capture.noStableFrame" = "安定フレームはまだ確定していません．";
+"analysis.status.idle" = "安定フレームを待っています";
+"analysis.status.analyzing" = "安定スライドの文字と図形を解析中";
+"analysis.status.ready" = "安定スライドの解析が完了しました";
+"analysis.textBlocks" = "文字領域";
+"analysis.graphicRegions" = "矩形領域";
+"analysis.occupiedRegions" = "占有領域";
+"analysis.titleCandidate" = "タイトル候補";
 "style.title" = "板書スタイル";
 "style.clean" = "整ったデジタルインク風";
 "style.handwritten" = "より手書き風";

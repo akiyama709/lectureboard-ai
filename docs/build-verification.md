@@ -105,6 +105,35 @@ The initial required `LectureBoardCore tests` check for PR #3 passed in 28 secon
 
 These results verify deterministic logic，compilation，and linking only. The app was not launched automatically because doing so could present screen-recording permission UI while the user was unavailable. Actual PowerPoint frame delivery，idle-frame behavior，window closure，window reselection，preview fidelity，and the default stability thresholds remain runtime-unverified.
 
+## Stable-frame Vision and occupied-region implementation
+
+The first Vision-analysis path was compiled on 2026-08-30. It adds:
+
+- Accurate，automatic-language Vision text recognition on newly confirmed stable frames.
+- Vision rectangle detection with bounded observation count and initial size，confidence，aspect-ratio，and quadrature thresholds.
+- Conversion from Vision's lower-left normalized coordinates to the app's top-left normalized coordinates.
+- Platform-neutral Core models and logic that trim and filter text，filter tiny or near-full-frame geometry，select a title candidate，pad occupied areas，and transitively merge touching regions.
+- Analysis-generation guards that reject results from stopped captures，newer stable frames，or reselected windows，while clearing old regions before a newly stable frame is analyzed.
+- Capture-monitor counts for text，rectangles，and occupied regions，plus a red occupied-region preview overlay.
+- Use of the latest completed visual analysis when constructing the provisional `SlideContext` for final transcript segments.
+
+Targeted verification completed before runtime testing:
+
+- The first new Core test run exposed an exact floating-point equality assertion between `0.3` and the clamped representation `0.30000000000000004`. The test was corrected to compare normalized geometry with a one-millionth tolerance; no product workaround was added.
+- The corrected Core run passed 23 tests in 7 Swift Testing suites. A JSON round-trip test for the new serializable analysis model was then added，bringing the commit candidate to 24 tests.
+- Repeated `make build` runs completed with `** BUILD SUCCEEDED **` for the native `arm64` target under Swift 6 strict concurrency，including the modern asynchronous Vision request API，stable-frame integration，localization，and preview overlay.
+- The first full `make verify` run stopped at the source-tracking gate because the two newly created Swift files had not yet been staged. After all intended files were staged，the unchanged source-tracking check passed，confirming that both files will be present in a clean checkout.
+- A final review added cancellation of superseded Vision tasks while retaining generation and window-ID guards against stale results.
+
+The final commit-candidate verification completed at 01:04 JST on 2026-08-30:
+
+- All 24 Core tests in 7 suites passed.
+- The native `arm64` app build completed with `** BUILD SUCCEEDED **`.
+- Swift format lint，tracked-source verification，the README language-boundary check，tracked-build-output，common-secret-pattern，and lecture-data-extension checks passed.
+- Both English and Japanese localization files passed `plutil -lint`.
+
+These checks verify deterministic filtering and occupancy assembly plus native compilation and linking. The app was not launched while the user was unavailable. No claim is made yet about actual OCR text，rectangle quality，title selection，coordinate alignment，preview alignment，latency，or suitability of the initial thresholds on real PowerPoint slides.
+
 ## Not yet runtime-verified on this Mac
 
 The successful native build does not verify runtime behavior. The app has not yet been launched as part of this verification session，and the following checks remain outstanding:

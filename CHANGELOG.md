@@ -12,10 +12,14 @@ All notable changes to this project will be documented in this file.
 - Selected-window ScreenCaptureKit stream for continuous PowerPoint frame capture
 - Deterministic stable-frame and slide-change detection with unit tests
 - In-app capture controls, counters, and a latest-stable-frame preview
+- Stable-frame Vision text and rectangle analysis using the native macOS framework
+- Deterministic normalized occupied-region assembly with unit tests
+- Analysis counters, title candidates, and occupied-region preview overlays
 
 ### Planned
 
 - Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
+- Runtime calibration of Vision recognition and occupied regions with real presentations
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription
 - Contextual AI-provider adapters

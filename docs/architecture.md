@@ -28,11 +28,11 @@ SwiftUI and AppKit provide the setup window, presenter controls, transparent ove
 
 ### Capture and observation layer
 
-ScreenCaptureKit discovers and captures only the selected PowerPoint window. The native adapter produces downsampled luminance fingerprints and immutable preview frames. `LectureBoardCore` confirms a stable candidate only after consecutive matching fingerprints and reports a slide change only after the new candidate is stable. Vision-based text and geometry recognition remains separate and will run only on confirmed stable frames. The app observes PowerPoint rather than modifying the source presentation in the first implementation.
+ScreenCaptureKit discovers and captures only the selected PowerPoint window. The native adapter produces downsampled luminance fingerprints and immutable preview frames. `LectureBoardCore` confirms a stable candidate only after consecutive matching fingerprints and reports a slide change only after the new candidate is stable. A native Vision adapter runs accurate text recognition and rectangle detection only on newly confirmed stable frames. Vision's lower-left coordinates are converted to the app's top-left normalized coordinate system before deterministic Core logic filters low-confidence，tiny，and near-full-frame detections，pads occupied areas，and transitively merges touching regions. The app observes PowerPoint rather than modifying the source presentation in the first implementation.
 
 ### LectureBoardCore
 
-The independent Swift package owns serializable models, importance scoring, grounded intent classification, empty-space layout, and scene composition. It does not import AppKit, ScreenCaptureKit, Speech, or any cloud SDK.
+The independent Swift package owns serializable models，stable-frame classification，slide-observation filtering，normalized occupied-region assembly，importance scoring，grounded intent classification，empty-space layout，and scene composition. It does not import AppKit，ScreenCaptureKit，Vision，Speech，or any cloud SDK.
 
 ### Provider layer
 
@@ -66,3 +66,4 @@ Board output is stored as text blocks, rounded rectangles, ellipses, lines, arro
 - The initial context engine is deterministic and heuristic, serving as a testable baseline.
 - The first overlay uses the selected display rather than exact PowerPoint-window coordinate mapping.
 - The continuous selected-window capture path compiles，but its permission flow，frame delivery，and thresholds have not yet been validated with a real PowerPoint presentation.
+- The Vision text/rectangle adapter and occupied-region preview compile，but recognition accuracy，coordinate fidelity，false detections，and thresholds have not yet been validated with real slide images.
