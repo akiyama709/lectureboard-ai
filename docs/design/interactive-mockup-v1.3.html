@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LectureBoard AI — Interactive Mockup v1.3</title>
+<style>
+  :root {
+    --bg:#eef2f7;
+    --panel:#ffffff;
+    --ink:#18212b;
+    --muted:#64748b;
+    --line:#d8e0ea;
+    --accent:#2b67d1;
+    --accent-soft:#eaf1ff;
+    --danger:#b33a3a;
+    --board:#163a72;
+    --board-red:#b33434;
+    --shadow:0 12px 30px rgba(25,40,65,.12);
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI","Yu Gothic",sans-serif;line-height:1.55}
+  button,input,select{font:inherit}
+  .app{min-height:100vh;display:grid;grid-template-rows:auto 1fr}
+  header{background:#101827;color:#fff;display:flex;align-items:center;gap:20px;padding:14px 22px;position:sticky;top:0;z-index:20;box-shadow:0 3px 16px rgba(0,0,0,.18)}
+  .brand{font-weight:760;letter-spacing:.02em;white-space:nowrap}.brand span{opacity:.65;font-weight:500;font-size:.82rem;margin-left:8px}
+  nav{display:flex;gap:8px;flex-wrap:wrap}
+  nav button{border:0;background:transparent;color:#b9c5d7;padding:8px 12px;border-radius:10px;cursor:pointer}
+  nav button.active{background:#26334a;color:#fff}
+  .tag{margin-left:auto;background:#1d3b2d;color:#b8f3cf;border:1px solid #37644a;border-radius:999px;padding:5px 10px;font-size:.82rem;white-space:nowrap}
+  main{padding:24px;max-width:1460px;width:100%;margin:0 auto}
+  .screen{display:none}.screen.active{display:block}
+  .title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+  h1{font-size:1.55rem;margin:0}h2{font-size:1.08rem;margin:0 0 12px}p{margin:0}
+  .subtitle{color:var(--muted);margin-top:5px}
+  .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+  .field{display:grid;grid-template-columns:160px 1fr;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #edf1f5}.field:last-child{border-bottom:0}
+  .field label{font-weight:650}.hint{font-size:.83rem;color:var(--muted);margin-top:4px}
+  select,input[type="text"]{width:100%;border:1px solid #cfd8e5;border-radius:10px;background:#fff;padding:10px 12px;color:var(--ink)}
+  input[type="range"]{width:100%}
+  .segmented{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .choice{border:1px solid #cfd8e5;background:#fff;border-radius:13px;padding:13px;text-align:left;cursor:pointer;transition:.18s}.choice.selected{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+  .choice b{display:block;margin-bottom:4px}.choice small{color:var(--muted)}
+  .start{display:flex;justify-content:flex-end;margin-top:18px}.primary{border:0;background:var(--accent);color:#fff;border-radius:12px;padding:12px 20px;font-weight:700;cursor:pointer}.secondary{border:1px solid #cfd8e5;background:#fff;border-radius:10px;padding:9px 12px;cursor:pointer}
+  .principle{background:#f4f8ff;border:1px solid #cfe0ff;border-radius:14px;padding:15px;margin-top:14px}.principle b{display:block;margin-bottom:5px}.principle p{color:#36506d}
+  .flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:9px;margin-top:18px}.flow .node{background:#fff;border:1px solid #d7e0ea;border-radius:12px;padding:13px;text-align:center}.arrow{color:#8593a7;font-weight:800}
+
+  .live-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px}
+  .stage-card{background:#111827;border-radius:20px;padding:16px;box-shadow:var(--shadow)}
+  .stage-top{display:flex;align-items:center;justify-content:space-between;color:#dce7f5;margin-bottom:12px;font-size:.9rem}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:7px;box-shadow:0 0 0 4px rgba(74,222,128,.15)}
+  .slide{aspect-ratio:16/9;background:#fff;border-radius:10px;position:relative;overflow:hidden;box-shadow:0 4px 22px rgba(0,0,0,.22)}
+  .slide .headerline{height:7px;background:#244f91}
+  .slide-content{position:absolute;inset:7px 0 0 0;padding:6.3% 5.5%;display:grid;grid-template-columns:48% 52%}
+  .ppt h3{font-size:2.15vw;max-font-size:30px;margin:0 0 8%;line-height:1.25}.ppt ul{font-size:1.25vw;line-height:1.8;padding-left:1.4em}.ppt .objective{font-size:.9vw;color:#577089;margin-top:10%}
+  .blank-zone{position:relative;border-left:1px dashed #dbe4ef;padding-left:7%}
+  .board{position:absolute;inset:5% 6% 6% 8%;color:var(--board);font-weight:650;transform:rotate(-.3deg)}
+  .board.digital{font-family:"Hiragino Sans","Yu Gothic UI",sans-serif;letter-spacing:.01em}
+  .board.hand{font-family:"Klee","HanziPen SC","Hiragino Maru Gothic ProN",cursive;letter-spacing:.02em;transform:rotate(-.8deg)}
+  .board .term{font-size:1.52vw;display:inline-block;border-bottom:3px solid var(--board-red);padding-bottom:2px;margin-bottom:5%}
+  .board .equation{font-size:1.14vw;line-height:1.65}.board .small{font-size:.88vw;margin-top:7%;line-height:1.5}.board .red{color:var(--board-red)}
+  .diagram{position:absolute;left:7%;right:3%;bottom:6%;height:34%}.diagram svg{width:100%;height:100%;overflow:visible}.diagram text{font:600 13px -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;fill:var(--board)}
+  .hand .diagram path,.hand .diagram line{filter:url(#wiggle)}
+  .teacher-ink{position:absolute;right:6%;bottom:5%;font-family:"Klee",cursive;color:#7c3aed;font-size:.8vw;transform:rotate(-2deg);opacity:.9}
+  .controls{margin-top:13px;display:flex;gap:9px;flex-wrap:wrap}.controls button{border:1px solid #344359;color:#e5edf8;background:#1e293b;border-radius:10px;padding:8px 11px;cursor:pointer}.controls button:hover{background:#2b3a52}.controls button.alert{color:#fecaca}
+  .status-card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:18px}
+  .status{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #edf1f5}.status:last-child{border-bottom:0}.status i{width:10px;height:10px;border-radius:50%;background:#60a5fa;margin-top:7px;flex:0 0 auto}.status b{display:block}.status small{color:var(--muted)}
+  .quiet{background:#effaf3;border:1px solid #bfe5ca;color:#245739;border-radius:13px;padding:13px;margin-top:14px;font-size:.9rem}
+  .student-only .controls,.student-only .stage-top .lecturer-only,.student-only+.status-card{display:none}
+  .student-only{grid-column:1/-1}
+
+  .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.slider-row{padding:13px 0;border-bottom:1px solid #edf1f5}.slider-row:last-child{border:0}.slider-label{display:flex;justify-content:space-between;font-weight:650;margin-bottom:7px}.value{color:var(--accent);font-variant-numeric:tabular-nums}
+  .toggle-row{display:flex;justify-content:space-between;gap:15px;align-items:center;padding:13px 0;border-bottom:1px solid #edf1f5}.switch{width:48px;height:28px;background:#cbd5e1;border-radius:20px;padding:3px;cursor:pointer;transition:.2s}.switch::after{content:"";display:block;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:.2s}.switch.on{background:var(--accent)}.switch.on::after{transform:translateX(20px)}
+  .preset-preview{background:#fbfdff;border:1px solid #d8e1ec;border-radius:15px;padding:18px;min-height:220px;position:relative}.preview-note{color:var(--board);font-weight:650;max-width:80%;font-size:1.1rem}.preview-note.hand{font-family:"Klee","HanziPen SC",cursive;transform:rotate(-1deg)}
+  .mini-flow{display:flex;align-items:center;gap:7px;margin-top:20px;color:var(--board)}.mini-flow span{border:2px solid currentColor;border-radius:11px;padding:7px 10px}.mini-flow b{font-size:1.3rem}
+  .history{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.thumb{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px;box-shadow:0 5px 16px rgba(27,45,70,.08)}.thumb-slide{aspect-ratio:16/9;border:1px solid #dbe3ee;border-radius:7px;background:linear-gradient(90deg,#fff 0 51%,#f8fbff 51%);position:relative;padding:10px}.thumb-slide:after{content:"統合知 ＝ 科学知＋実践知＋価値";position:absolute;right:7px;top:15px;width:39%;font-size:.55rem;color:var(--board);font-weight:650}.thumb b{display:block;margin-top:8px}.thumb small{color:var(--muted)}
+  .export-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}.export-row button{border:1px solid #cfd8e5;background:#fff;border-radius:10px;padding:10px 13px;cursor:pointer}
+  .toast{position:fixed;right:22px;bottom:22px;background:#111827;color:#fff;border-radius:12px;padding:12px 15px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);pointer-events:none;transition:.2s;z-index:50}.toast.show{opacity:1;transform:none}
+  @media(max-width:980px){.grid,.live-layout,.settings-grid{grid-template-columns:1fr}.field{grid-template-columns:1fr}.history{grid-template-columns:1fr 1fr}.ppt h3{font-size:3.3vw}.ppt ul{font-size:2vw}.board .term{font-size:2.4vw}.board .equation{font-size:1.8vw}.board .small{font-size:1.4vw}.student-only+.status-card{display:none}}
+  @media(max-width:620px){header{align-items:flex-start;flex-direction:column}.tag{margin-left:0}.history{grid-template-columns:1fr}.slide-content{padding:5%;grid-template-columns:46% 54%}.ppt h3{font-size:4vw}.ppt ul{font-size:2.7vw}.board .term{font-size:3vw}.board .equation{font-size:2.35vw}.board .small{font-size:1.8vw}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand">LectureBoard AI <span>interactive mockup v1.3</span></div>
+  <nav>
+    <button class="tab active" data-screen="setup">講義前</button>
+    <button class="tab" data-screen="live">講義中</button>
+    <button class="tab" data-screen="settings">詳細設定</button>
+    <button class="tab" data-screen="after">講義後</button>
+  </nav>
+  <div class="tag">macOS 26＋・音声コマンド不要</div>
+</header>
+<main>
+  <section id="setup" class="screen active">
+    <div class="title-row"><div><h1>講義を開始する</h1><p class="subtitle">通常どおり話すだけで，AIが文脈から板書内容を判断します．</p></div></div>
+    <div class="grid">
+      <div class="card">
+        <h2>講義設定</h2>
+        <div class="field"><label>PowerPoint</label><div><input type="text" value="統合学入門_第3回.pptx" readonly><div class="hint">実装版ではファイル選択または現在開いているPowerPointを検出します．</div></div></div>
+        <div class="field"><label>入力言語</label><select id="inputLang"><option>自動：日本語＋英語</option><option>日本語</option><option>英語</option></select></div>
+        <div class="field"><label>板書出力</label><select id="outputLang"><option value="same">発話と同じ言語</option><option value="ja">日本語</option><option value="en">英語</option><option value="bilingual">重要語のみ日英併記</option></select></div>
+        <div class="field"><label>描画スタイル</label>
+          <div class="segmented">
+            <button class="choice selected style-choice" data-style="digital"><b>整ったデジタルインク</b><small>読みやすく，オンライン講義にも適する</small></button>
+            <button class="choice style-choice" data-style="hand"><b>より手書き風</b><small>線の揺れとペンらしさを強める</small></button>
+          </div>
+        </div>
+        <div class="field"><label>板書量</label><div><input id="density" type="range" min="1" max="5" value="2"><div class="hint">標準は「少なめ」です．定義，対比，因果関係を優先します．</div></div></div>
+        <div class="field"><label>図式化</label><div><input id="diagram" type="range" min="1" max="5" value="3"><div class="hint">文字と図を，内容の構造に応じて自動選択します．</div></div></div>
+        <div class="field"><label>空白がない場合</label><select><option>板書せず，次の機会を待つ</option><option>右側に拡張余白を開く</option><option>半透明の一時パネルを使う</option></select></div>
+        <div class="principle"><b>ゼロコマンド標準</b><p>命令句を覚えたり，音声コマンドヘルプを開いたりする必要はありません．AIはスライド，発話，反復，対比，因果関係，講義全体の構成から自律判断します．</p></div>
+        <div class="start"><button id="startBtn" class="primary">講義を開始</button></div>
+      </div>
+      <div class="card">
+        <h2>自動判断の流れ</h2>
+        <p class="subtitle">学生に見せる前に，内部で意味を確定します．</p>
+        <div class="flow">
+          <div class="node"><b>スライド</b><br><small>既存内容と空白</small></div><div class="arrow">→</div>
+          <div class="node"><b>講義文脈</b><br><small>定義・対比・因果</small></div><div class="arrow">→</div>
+          <div class="node"><b>安定板書</b><br><small>文字または図形</small></div>
+        </div>
+        <div class="principle" style="margin-top:24px"><b>判断に迷った場合</b><p>講師を止めず，何も書かずに後続の説明を待ちます．確認ダイアログは原則として出しません．</p></div>
+        <div class="principle"><b>講師のペンが最優先</b><p>ペンタブで書き始めた領域はAIが避け，先生の手書きへ自動的に場所を譲ります．</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="live" class="screen">
+    <div class="title-row">
+      <div><h1>講義中</h1><p class="subtitle">AIは通常の講義を静かに観察し，意味が確定した事項だけを余白へ追加します．</p></div>
+      <button id="viewToggle" class="secondary">学生画面だけを表示</button>
+    </div>
+    <div class="live-layout" id="liveLayout">
+      <div class="stage-card" id="stageCard">
+        <div class="stage-top"><span><i class="live-dot"></i>講義中・スライド 7／24</span><span class="lecturer-only">AI自動判断：稼働中</span></div>
+        <div class="slide">
+          <div class="headerline"></div>
+          <div class="slide-content">
+            <div class="ppt">
+              <h3 id="slideTitle">統合知とは何か</h3>
+              <ul id="slideBullets"><li>科学知</li><li>実践知</li><li>価値の吟味</li></ul>
+              <div class="objective">既存のPowerPoint内容</div>
+            </div>
+            <div class="blank-zone">
+              <div id="board" class="board digital">
+                <div class="term" id="boardTerm">統合知</div>
+                <div class="equation" id="boardEq">＝ 科学知 ＋ 実践知<br>＋ <span class="red">価値の吟味</span></div>
+                <div class="small" id="boardNote">単なる分野の集合ではない</div>
+                <div class="diagram">
+                  <svg viewBox="0 0 320 105" aria-label="概念図">
+                    <defs>
+                      <filter id="wiggle"><feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" seed="3" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4"/></filter>
+                      <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#163a72"/></marker>
+                    </defs>
+                    <rect x="22" y="12" width="108" height="34" rx="10" fill="none" stroke="#163a72" stroke-width="2.4"/>
+                    <text x="76" y="34" text-anchor="middle" id="diagramA">知識の統合</text>
+                    <path d="M132 29 C172 29, 174 72, 207 72" fill="none" stroke="#163a72" stroke-width="2.5" marker-end="url(#arrowhead)"/>
+                    <rect x="212" y="55" width="92" height="34" rx="10" fill="none" stroke="#163a72" stroke-width="2.4"/>
+                    <text x="258" y="77" text-anchor="middle" id="diagramB">行為の変容</text>
+                  </svg>
+                </div>
+              </div>
+              <div class="teacher-ink">先生の追記 →</div>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="pauseBtn">AI一時停止</button>
+          <button id="undoBtn">直前を取消し</button>
+          <button id="pinBtn">板書を固定</button>
+          <button id="penBtn">ペン優先</button>
+          <button id="clearBtn" class="alert">現在のAI板書を消去</button>
+        </div>
+      </div>
+      <aside class="status-card">
+        <h2>講師用・非公開状態</h2>
+        <div class="status"><i></i><div><b>新しい定義を検出</b><small>スライド本文との差分が大きいため，板書しました．</small></div></div>
+        <div class="status"><i></i><div><b>因果・展開関係を検出</b><small>「知識の統合」から「行為の変容」への関係を図式化しました．</small></div></div>
+        <div class="status"><i style="background:#f59e0b"></i><div><b>次の発話は保留中</b><small>意味がまだ確定していないため，学生画面には表示していません．</small></div></div>
+        <div class="quiet">音声コマンドは不要です．不確実な内容についても，講義を止める確認表示は行いません．</div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="settings" class="screen">
+    <div class="title-row"><div><h1>詳細設定</h1><p class="subtitle">講義中ではなく，事前にプリセットとして保存する画面です．</p></div></div>
+    <div class="settings-grid">
+      <div class="card">
+        <h2>自動判断</h2>
+        <div class="slider-row"><div class="slider-label"><span>板書密度</span><span id="vDensity" class="value">2／5</span></div><input id="sDensity" type="range" min="1" max="5" value="2"></div>
+        <div class="slider-row"><div class="slider-label"><span>要約の強さ</span><span id="vCompress" class="value">3／5</span></div><input id="sCompress" type="range" min="1" max="5" value="3"></div>
+        <div class="slider-row"><div class="slider-label"><span>図の使用頻度</span><span id="vDiagram" class="value">3／5</span></div><input id="sDiagram" type="range" min="1" max="5" value="3"></div>
+        <div class="slider-row"><div class="slider-label"><span>確定までの慎重さ</span><span id="vCaution" class="value">4／5</span></div><input id="sCaution" type="range" min="1" max="5" value="4"></div>
+        <div class="toggle-row"><div><b>スライドとの差分を優先</b><div class="hint">既に表示済みの内容は原則として繰り返しません．</div></div><div class="switch on"></div></div>
+        <div class="toggle-row"><div><b>講師の修正から学習</b><div class="hint">取消し，固定，手書き追加をローカルに学習します．</div></div><div class="switch on"></div></div>
+      </div>
+      <div class="card">
+        <h2>描画と言語</h2>
+        <div class="segmented" style="margin-bottom:14px">
+          <button class="choice selected style-choice" data-style="digital"><b>整ったデジタルインク</b><small>高い可読性</small></button>
+          <button class="choice style-choice" data-style="hand"><b>より手書き風</b><small>自然な線の揺れ</small></button>
+        </div>
+        <div class="slider-row"><div class="slider-label"><span>手書き感</span><span id="vHand" class="value">2／5</span></div><input id="sHand" type="range" min="1" max="5" value="2"></div>
+        <div class="slider-row"><div class="slider-label"><span>線の太さ</span><span id="vStroke" class="value">3／5</span></div><input id="sStroke" type="range" min="1" max="5" value="3"></div>
+        <div class="field" style="grid-template-columns:130px 1fr"><label>入力言語</label><select><option>自動：日本語＋英語</option><option>日本語</option><option>英語</option></select></div>
+        <div class="field" style="grid-template-columns:130px 1fr"><label>出力言語</label><select id="settingsLang"><option value="same">発話と同じ言語</option><option value="ja">日本語</option><option value="en">英語</option><option value="bilingual">重要語のみ日英併記</option></select></div>
+        <div class="field" style="grid-template-columns:130px 1fr"><label>専門語</label><select><option>原語を保持</option><option>講義言語に翻訳</option><option>原語＋訳語を併記</option></select></div>
+        <div class="preset-preview"><div id="previewNote" class="preview-note">統合知<br>＝科学知＋実践知＋価値の吟味</div><div class="mini-flow"><span id="previewA">知識の統合</span><b>→</b><span id="previewB">行為の変容</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="after" class="screen">
+    <div class="title-row"><div><h1>講義後</h1><p class="subtitle">PowerPoint，AI板書，講師の手書きを別レイヤーのまま保存し，必要に応じて統合出力します．</p></div></div>
+    <div class="card">
+      <h2>スライド別板書履歴</h2>
+      <div class="history">
+        <div class="thumb"><div class="thumb-slide"></div><b>スライド 7</b><small>定義＋概念関係図・2項目</small></div>
+        <div class="thumb"><div class="thumb-slide"></div><b>スライド 8</b><small>比較図・3項目</small></div>
+        <div class="thumb"><div class="thumb-slide"></div><b>スライド 9</b><small>因果フロー＋講師追記</small></div>
+      </div>
+      <div class="export-row"><button>板書付きPDF</button><button>編集可能なPowerPoint複製</button><button>Markdown講義ノート</button><button>AI板書のみ</button><button>講師手書きのみ</button></div>
+    </div>
+  </section>
+</main>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+  const screens=[...document.querySelectorAll('.screen')];
+  const tabs=[...document.querySelectorAll('.tab')];
+  const board=document.getElementById('board');
+  const stageCard=document.getElementById('stageCard');
+  const liveLayout=document.getElementById('liveLayout');
+  const toast=document.getElementById('toast');
+  function showToast(msg){toast.textContent=msg;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800)}
+  function go(id){screens.forEach(s=>s.classList.toggle('active',s.id===id));tabs.forEach(t=>t.classList.toggle('active',t.dataset.screen===id));window.scrollTo({top:0,behavior:'smooth'})}
+  tabs.forEach(t=>t.addEventListener('click',()=>go(t.dataset.screen)));
+  document.getElementById('startBtn').addEventListener('click',()=>{go('live');showToast('自動判断を開始しました')});
+  document.querySelectorAll('.style-choice').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('.style-choice').forEach(b=>b.classList.toggle('selected',b.dataset.style===btn.dataset.style));
+    board.classList.toggle('hand',btn.dataset.style==='hand');board.classList.toggle('digital',btn.dataset.style==='digital');
+    document.getElementById('previewNote').classList.toggle('hand',btn.dataset.style==='hand');
+    showToast(btn.dataset.style==='hand'?'より手書き風に変更':'整ったデジタルインクに変更');
+  }));
+  let student=false;
+  document.getElementById('viewToggle').addEventListener('click',e=>{
+    student=!student;stageCard.classList.toggle('student-only',student);liveLayout.style.gridTemplateColumns=student?'1fr':'';e.target.textContent=student?'講師画面へ戻る':'学生画面だけを表示';
+  });
+  let paused=false;
+  document.getElementById('pauseBtn').addEventListener('click',e=>{paused=!paused;e.target.textContent=paused?'AIを再開':'AI一時停止';showToast(paused?'AI板書を一時停止しました':'AI板書を再開しました')});
+  document.getElementById('undoBtn').addEventListener('click',()=>showToast('直前のAI板書を取り消しました'));
+  document.getElementById('pinBtn').addEventListener('click',()=>showToast('現在の板書を固定しました'));
+  document.getElementById('penBtn').addEventListener('click',()=>showToast('ペン入力を優先します'));
+  document.getElementById('clearBtn').addEventListener('click',()=>{board.style.opacity=board.style.opacity==='0'?'1':'0';showToast(board.style.opacity==='0'?'AI板書を非表示にしました':'AI板書を再表示しました')});
+  function setLanguage(v){
+    const ja={title:'統合知とは何か', bullets:['科学知','実践知','価値の吟味'],term:'統合知',eq:'＝ 科学知 ＋ 実践知<br>＋ <span class="red">価値の吟味</span>',note:'単なる分野の集合ではない',a:'知識の統合',b:'行為の変容'};
+    const en={title:'What is integrated knowledge?', bullets:['Scientific knowledge','Practical knowledge','Value inquiry'],term:'Integrated knowledge',eq:'= scientific knowledge<br>+ practical knowledge<br>+ <span class="red">value inquiry</span>',note:'Not merely a collection of disciplines',a:'Knowledge integration',b:'Transformation of action'};
+    const bi={title:'統合知とは何か／Integrated knowledge', bullets:['科学知／scientific knowledge','実践知／practical knowledge','価値の吟味／value inquiry'],term:'統合知',eq:'＝ scientific knowledge<br>＋ practical knowledge<br>＋ <span class="red">value inquiry</span>',note:'知識の統合 → 行為の変容',a:'知識の統合',b:'行為の変容'};
+    const d=v==='en'?en:v==='bilingual'?bi:ja;
+    document.getElementById('slideTitle').textContent=d.title;
+    document.getElementById('slideBullets').innerHTML=d.bullets.map(x=>`<li>${x}</li>`).join('');
+    document.getElementById('boardTerm').textContent=d.term;document.getElementById('boardEq').innerHTML=d.eq;document.getElementById('boardNote').textContent=d.note;document.getElementById('diagramA').textContent=d.a;document.getElementById('diagramB').textContent=d.b;
+    document.getElementById('previewNote').innerHTML=v==='en'?'Integrated knowledge<br>= science + practice + value inquiry':v==='bilingual'?'統合知／Integrated knowledge<br>＝ science ＋ practice ＋ value inquiry':'統合知<br>＝科学知＋実践知＋価値の吟味';
+    document.getElementById('previewA').textContent=d.a;document.getElementById('previewB').textContent=d.b;
+  }
+  document.getElementById('outputLang').addEventListener('change',e=>setLanguage(e.target.value));
+  document.getElementById('settingsLang').addEventListener('change',e=>setLanguage(e.target.value));
+  ['Density','Compress','Diagram','Caution','Hand','Stroke'].forEach(k=>{
+    const el=document.getElementById('s'+k),out=document.getElementById('v'+k);if(el)el.addEventListener('input',()=>out.textContent=el.value+'／5');
+  });
+  document.querySelectorAll('.switch').forEach(s=>s.addEventListener('click',()=>s.classList.toggle('on')));
+</script>
+</body>
+</html>

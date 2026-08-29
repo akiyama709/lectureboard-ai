@@ -1,0 +1,446 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 90;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */; };
+		1C738559CA669F8BB7BC0D5B /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4614FE7EC712603B67D3964 /* TranscriptionProvider.swift */; };
+		31539E4CAE08EA991E8C7CB0 /* LectureBoardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0EB3F3B07961AFF36A2CE4ED /* LectureBoardCore */; };
+		32B0BAD8455006EF069C6262 /* AppleSpeechRecognizerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */; };
+		5F3046B9FDDCA5989CE8FC26 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07B930BC193AF01B1D2DCD92 /* MainView.swift */; };
+		5FCFB9CC3030B9EA0311AB64 /* LectureBoardAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA791C51645A1AC2C207D65 /* LectureBoardAIApp.swift */; };
+		688BEC5EF09CC3DB0CD7A231 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2FBD20EAAA499EF3E13F42 /* SettingsView.swift */; };
+		8101E217E14EB3CD58DCC807 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F453CD2C95C2282F00144BE6 /* AppModel.swift */; };
+		BCCABA8DA4C54B7098EC2786 /* BoardPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A63E414F9808AC19E488E50 /* BoardPreviewView.swift */; };
+		C03D6DDCDD59F00FA72354B2 /* BoardSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E93A3CA108A8AC8C8696E3 /* BoardSceneView.swift */; };
+		CEDB5ACD9C3AC7C25D9D68E8 /* DigitalInkStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */; };
+		CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */; };
+		D2928CBE9C5434FD2164CA68 /* DemoBoardSceneFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */; };
+		E904C6056388B007AD5463BF /* PermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		05E93A3CA108A8AC8C8696E3 /* BoardSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardSceneView.swift; sourceTree = "<group>"; };
+		07B930BC193AF01B1D2DCD92 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		1003BAC593ADA5F767C7421F /* LectureBoardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LectureBoardCore; path = Packages/LectureBoardCore; sourceTree = SOURCE_ROOT; };
+		123F3F9F12EBE7BBC381195F /* LectureBoardAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LectureBoardAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A63E414F9808AC19E488E50 /* BoardPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardPreviewView.swift; sourceTree = "<group>"; };
+		2FA791C51645A1AC2C207D65 /* LectureBoardAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LectureBoardAIApp.swift; sourceTree = "<group>"; };
+		429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowScanner.swift; sourceTree = "<group>"; };
+		9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalInkStyle.swift; sourceTree = "<group>"; };
+		A4614FE7EC712603B67D3964 /* TranscriptionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionProvider.swift; sourceTree = "<group>"; };
+		A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayWindowController.swift; sourceTree = "<group>"; };
+		AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionService.swift; sourceTree = "<group>"; };
+		AD2FBD20EAAA499EF3E13F42 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechRecognizerProvider.swift; sourceTree = "<group>"; };
+		E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoBoardSceneFactory.swift; sourceTree = "<group>"; };
+		F453CD2C95C2282F00144BE6 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8503B846AC44DAE88CE07349 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				31539E4CAE08EA991E8C7CB0 /* LectureBoardCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		10E35A4985AE92693F6DBD87 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1A63E414F9808AC19E488E50 /* BoardPreviewView.swift */,
+				07B930BC193AF01B1D2DCD92 /* MainView.swift */,
+				AD2FBD20EAAA499EF3E13F42 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		4568A8C5082739797AD2E31D /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				1003BAC593ADA5F767C7421F /* LectureBoardCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		5626F39D2A830DBA83B08042 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				D23D7859A4951727FAE71673 /* App */,
+				D8AB5B7E676BFCBB5999DC02 /* Rendering */,
+				E935C0E20C7DDEA9D4E288B7 /* Services */,
+				10E35A4985AE92693F6DBD87 /* Views */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		64736CA4C49959181B437FC3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				123F3F9F12EBE7BBC381195F /* LectureBoardAI.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		957ECFCC42D3F06FCAC0F49D /* Transcription */ = {
+			isa = PBXGroup;
+			children = (
+				DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */,
+				A4614FE7EC712603B67D3964 /* TranscriptionProvider.swift */,
+			);
+			path = Transcription;
+			sourceTree = "<group>";
+		};
+		D23D7859A4951727FAE71673 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F453CD2C95C2282F00144BE6 /* AppModel.swift */,
+				E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */,
+				9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */,
+				2FA791C51645A1AC2C207D65 /* LectureBoardAIApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		D8AB5B7E676BFCBB5999DC02 /* Rendering */ = {
+			isa = PBXGroup;
+			children = (
+				05E93A3CA108A8AC8C8696E3 /* BoardSceneView.swift */,
+			);
+			path = Rendering;
+			sourceTree = "<group>";
+		};
+		E935C0E20C7DDEA9D4E288B7 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */,
+				AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */,
+				429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */,
+				957ECFCC42D3F06FCAC0F49D /* Transcription */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		F0235CBDFBF36CFEB426E048 /* LectureBoardAI */ = {
+			isa = PBXGroup;
+			children = (
+				5626F39D2A830DBA83B08042 /* Sources */,
+			);
+			path = LectureBoardAI;
+			sourceTree = "<group>";
+		};
+		FDDDBA812BF7801F5FD842DB = {
+			isa = PBXGroup;
+			children = (
+				F0235CBDFBF36CFEB426E048 /* LectureBoardAI */,
+				4568A8C5082739797AD2E31D /* Packages */,
+				64736CA4C49959181B437FC3 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DEDBB62048684E7ECE339680 /* LectureBoardAI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1B8CD9E30857CA876CE4978C /* Build configuration list for PBXNativeTarget "LectureBoardAI" */;
+			buildPhases = (
+				C1A63DD328A7AD453D6A6A46 /* Sources */,
+				8503B846AC44DAE88CE07349 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LectureBoardAI;
+			packageProductDependencies = (
+				0EB3F3B07961AFF36A2CE4ED /* LectureBoardCore */,
+			);
+			productName = LectureBoardAI;
+			productReference = 123F3F9F12EBE7BBC381195F /* LectureBoardAI.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B11498035DC6233EB2CE5CAD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					DEDBB62048684E7ECE339680 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 3120CA044A6CDFF917B0C001 /* Build configuration list for PBXProject "LectureBoardAI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FDDDBA812BF7801F5FD842DB;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8A12C3F97E9AD16544DBDB48 /* XCLocalSwiftPackageReference "Packages/LectureBoardCore" */,
+			);
+			preferredProjectObjectVersion = 90;
+			productRefGroup = 64736CA4C49959181B437FC3 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DEDBB62048684E7ECE339680 /* LectureBoardAI */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C1A63DD328A7AD453D6A6A46 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8101E217E14EB3CD58DCC807 /* AppModel.swift in Sources */,
+				32B0BAD8455006EF069C6262 /* AppleSpeechRecognizerProvider.swift in Sources */,
+				BCCABA8DA4C54B7098EC2786 /* BoardPreviewView.swift in Sources */,
+				C03D6DDCDD59F00FA72354B2 /* BoardSceneView.swift in Sources */,
+				D2928CBE9C5434FD2164CA68 /* DemoBoardSceneFactory.swift in Sources */,
+				CEDB5ACD9C3AC7C25D9D68E8 /* DigitalInkStyle.swift in Sources */,
+				5FCFB9CC3030B9EA0311AB64 /* LectureBoardAIApp.swift in Sources */,
+				5F3046B9FDDCA5989CE8FC26 /* MainView.swift in Sources */,
+				CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */,
+				E904C6056388B007AD5463BF /* PermissionService.swift in Sources */,
+				15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */,
+				688BEC5EF09CC3DB0CD7A231 /* SettingsView.swift in Sources */,
+				1C738559CA669F8BB7BC0D5B /* TranscriptionProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		66C424A211A489BEB68915AF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		78952D42EA457C531DC8B957 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "LectureBoard AI";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Tomohiro Akiyama";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "LectureBoard AI observes the selected PowerPoint window to identify slide content and unused space.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LectureBoard AI uses speech recognition to create grounded lecture-board annotations.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.akiyama709.LectureBoardAI;
+				PRODUCT_NAME = "LectureBoard AI";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		8583D14FBA93C43A14EDB19D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "LectureBoard AI";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Tomohiro Akiyama";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board.";
+				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "LectureBoard AI observes the selected PowerPoint window to identify slide content and unused space.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LectureBoard AI uses speech recognition to create grounded lecture-board annotations.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.akiyama709.LectureBoardAI;
+				PRODUCT_NAME = "LectureBoard AI";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		8721881C1BC0D9352BB691FC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1B8CD9E30857CA876CE4978C /* Build configuration list for PBXNativeTarget "LectureBoardAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8583D14FBA93C43A14EDB19D /* Debug */,
+				78952D42EA457C531DC8B957 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3120CA044A6CDFF917B0C001 /* Build configuration list for PBXProject "LectureBoardAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				66C424A211A489BEB68915AF /* Debug */,
+				8721881C1BC0D9352BB691FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		8A12C3F97E9AD16544DBDB48 /* XCLocalSwiftPackageReference "Packages/LectureBoardCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LectureBoardCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0EB3F3B07961AFF36A2CE4ED /* LectureBoardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LectureBoardCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B11498035DC6233EB2CE5CAD /* Project object */;
+}

@@ -1,0 +1,43 @@
+name: Feature request
+about: Propose an educational or technical improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Lecturer or student problem
+      description: Describe the real teaching problem before proposing a solution．
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: principle
+    attributes:
+      label: Main design principle affected
+      options:
+        - Zero-command lecture flow
+        - Contextual importance
+        - Text and diagram quality
+        - Whitespace and visual stability
+        - Human pen priority
+        - Japanese and English support
+        - Privacy and local processing
+        - Accessibility
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks，privacy impact，and failure behavior
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Suggested acceptance criteria

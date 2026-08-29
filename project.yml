@@ -1,0 +1,58 @@
+name: LectureBoardAI
+options:
+  bundleIdPrefix: io.github.akiyama709
+  deploymentTarget:
+    macOS: "26.0"
+  developmentLanguage: en
+  xcodeVersion: "26.0"
+  projectFormat: xcode16_3
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+
+packages:
+  LectureBoardCore:
+    path: Packages/LectureBoardCore
+
+targets:
+  LectureBoardAI:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: LectureBoardAI/Sources
+    resources:
+      - path: LectureBoardAI/Resources
+    dependencies:
+      - package: LectureBoardCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.akiyama709.LectureBoardAI
+        PRODUCT_NAME: LectureBoard AI
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: LectureBoard AI
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
+        INFOPLIST_KEY_NSHighResolutionCapable: YES
+        INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 Tomohiro Akiyama
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "LectureBoard AI uses speech recognition to create grounded lecture-board annotations."
+        INFOPLIST_KEY_NSScreenCaptureUsageDescription: "LectureBoard AI observes the selected PowerPoint window to identify slide content and unused space."
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  LectureBoardAI:
+    build:
+      targets:
+        LectureBoardAI: all
+    run:
+      config: Debug
+    archive:
+      config: Release

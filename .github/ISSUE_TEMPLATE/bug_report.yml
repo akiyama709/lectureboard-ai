@@ -1,0 +1,64 @@
+name: Bug report
+about: Report reproducible incorrect behavior
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach real lecture audio，unpublished slides，student data，or credentials．Use synthetic examples whenever possible．
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0-alpha or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS
+      placeholder: MacBook Pro M2 Pro，macOS 26.6.1
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Context and importance decision
+        - Text or diagram planning
+        - Whitespace layout
+        - PowerPoint capture
+        - Speech recognition
+        - Pen input
+        - Composite output
+        - Export or persistence
+        - Build or installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps using synthetic data
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy check
+      description: Confirm that no private lecture，student，or credential data is included．
+    validations:
+      required: true

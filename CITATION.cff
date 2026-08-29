@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use LectureBoard AI in research or teaching scholarship, please cite this software."
+title: "LectureBoard AI"
+type: software
+authors:
+  - family-names: "Akiyama"
+    given-names: "Tomohiro"
+repository-code: "https://github.com/akiyama709/lectureboard-ai"
+license: MIT
+version: "0.1.0-alpha"
+date-released: "2026-08-29"
+abstract: "A context-aware macOS companion that adds grounded text and diagrams to unused space in live PowerPoint slides."
+keywords:
+  - education
+  - lecture
+  - PowerPoint
+  - macOS
+  - artificial intelligence
+  - digital ink
+  - multilingual

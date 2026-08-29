@@ -1,0 +1,9 @@
+# Conservative project defaults for local Codex work.
+# Project-scoped settings are loaded only after the repository is trusted.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+allow_login_shell = false
+
+[sandbox_workspace_write]
+network_access = false
+writable_roots = []
