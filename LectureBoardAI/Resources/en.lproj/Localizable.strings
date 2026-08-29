@@ -40,6 +40,13 @@
 "capture.stableFrames" = "Stable snapshots";
 "capture.slideChanges" = "Slide changes";
 "capture.noStableFrame" = "No stable frame has been confirmed yet.";
+"analysis.status.idle" = "Slide analysis is waiting for a stable frame";
+"analysis.status.analyzing" = "Analyzing stable slide text and geometry";
+"analysis.status.ready" = "Stable slide analysis is ready";
+"analysis.textBlocks" = "Text blocks";
+"analysis.graphicRegions" = "Rectangles";
+"analysis.occupiedRegions" = "Occupied regions";
+"analysis.titleCandidate" = "Title candidate";
 "style.title" = "Digital ink style";
 "style.clean" = "Clean digital ink";
 "style.handwritten" = "More handwritten";

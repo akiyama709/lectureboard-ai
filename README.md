@@ -4,7 +4,7 @@
 
 LectureBoard AI is an open-source research and development project for university lectures and online teaching. It listens to a lecturer, observes the current slide, estimates what is educationally important from context, and renders a restrained digital-ink annotation layer. The lecturer does not need to say commands such as “write this on the board.”
 
-> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, compiled selected-window capture path, transparent-overlay prototype, and tests are included. Runtime capture validation, live slide analysis, production-grade bilingual transcription, and AI-provider integrations remain under development.
+> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, compiled selected-window capture and Vision-analysis paths, transparent-overlay prototype, and tests are included. Runtime capture and slide-analysis validation, production-grade bilingual transcription, and AI-provider integrations remain under development.
 
 ## Design principles
 
@@ -32,6 +32,9 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Discovery of visible PowerPoint windows with ScreenCaptureKit
 - A compiled selected-window ScreenCaptureKit stream with stable-snapshot preview
 - Deterministic frame fingerprints and stable-frame/slide-change classification
+- A compiled Vision text/rectangle analyzer that runs on confirmed stable frames
+- Deterministic filtering, padding, and merging of normalized occupied regions
+- Capture-monitor counts and an occupied-region preview overlay
 - A click-through transparent overlay window prototype
 - A selectable Japanese or English Apple Speech recognizer prototype
 - A pure-Swift `LectureBoardCore` package containing:
@@ -50,6 +53,7 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Parsing every PowerPoint object and speaker note
 - Automatic identification of the current slide after transitions and animations
 - Runtime reliability and threshold calibration of continuous PowerPoint capture
+- Runtime accuracy and threshold calibration of Vision text, rectangle, and occupancy analysis
 - Robust empty-space segmentation on arbitrary slide designs
 - Production-grade diagram generation
 - Cloud or local large-language-model integration
@@ -132,7 +136,7 @@ Microsoft PowerPoint and other product names are trademarks of their respective 
 
 講師が「ここを板書してください」などの命令を発することは前提としません．現在のスライド，発表者ノート，直前までの発話，反復，対比，因果関係，定義，発話上の強調，既存板書などから，何を学生に残すべきかを文脈的に判断します．
 
-現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，透明オーバーレイの試作，テストを収録しています．実講義で安定して使用できる完成版であるとは，まだ位置づけていません．
+現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，コンパイル済みの連続取得・Vision解析経路，透明オーバーレイの試作，テストを収録しています．実PowerPointでの連続取得及びVision解析の精度は未検証であり，実講義で安定して使用できる完成版であるとは，まだ位置づけていません．
 
 ### 当面の対象
 

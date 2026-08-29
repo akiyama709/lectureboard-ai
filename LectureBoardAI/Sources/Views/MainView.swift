@@ -1,3 +1,4 @@
+import CoreGraphics
 import LectureBoardCore
 import SwiftUI
 
@@ -123,6 +124,7 @@ struct MainView: View {
     GroupBox("capture.title") {
       VStack(alignment: .leading, spacing: 12) {
         captureStatusLabel
+        slideAnalysisStatusLabel
 
         HStack(spacing: 24) {
           LabeledContent("capture.frames", value: "\(model.capturedFrameCount)")
@@ -130,12 +132,30 @@ struct MainView: View {
           LabeledContent("capture.slideChanges", value: "\(model.slideChangeCount)")
         }
 
+        HStack(spacing: 24) {
+          LabeledContent(
+            "analysis.textBlocks",
+            value: "\(model.latestSlideAnalysis?.textBlocks.count ?? 0)"
+          )
+          LabeledContent(
+            "analysis.graphicRegions",
+            value: "\(model.latestSlideAnalysis?.graphicRegions.count ?? 0)"
+          )
+          LabeledContent(
+            "analysis.occupiedRegions",
+            value: "\(model.latestSlideAnalysis?.occupiedRegions.count ?? 0)"
+          )
+        }
+
+        if let title = model.latestSlideAnalysis?.title, !title.isEmpty {
+          LabeledContent("analysis.titleCandidate", value: title)
+        }
+
         if let image = model.latestStableFrame {
-          Image(decorative: image, scale: 1)
-            .resizable()
-            .scaledToFit()
-            .frame(maxWidth: .infinity, maxHeight: 240)
-            .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+          AnalyzedSlidePreview(
+            image: image,
+            occupiedRegions: model.latestSlideAnalysis?.occupiedRegions ?? []
+          )
         } else {
           Text("capture.noStableFrame")
             .foregroundStyle(.secondary)
@@ -157,6 +177,24 @@ struct MainView: View {
         .foregroundStyle(.secondary)
     case .capturing:
       Label("capture.status.capturing", systemImage: "record.circle")
+        .foregroundStyle(.green)
+    case .error(let message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.red)
+    }
+  }
+
+  @ViewBuilder
+  private var slideAnalysisStatusLabel: some View {
+    switch model.slideAnalysisStatus {
+    case .idle:
+      Label("analysis.status.idle", systemImage: "viewfinder")
+        .foregroundStyle(.secondary)
+    case .analyzing:
+      Label("analysis.status.analyzing", systemImage: "text.viewfinder")
+        .foregroundStyle(.secondary)
+    case .ready:
+      Label("analysis.status.ready", systemImage: "checkmark.circle")
         .foregroundStyle(.green)
     case .error(let message):
       Label(message, systemImage: "exclamationmark.triangle")
@@ -210,6 +248,40 @@ struct MainView: View {
         .textSelection(.enabled)
         .padding(.vertical, 8)
     }
+  }
+}
+
+private struct AnalyzedSlidePreview: View {
+  let image: CGImage
+  let occupiedRegions: [NormalizedRect]
+
+  var body: some View {
+    ZStack(alignment: .topLeading) {
+      Image(decorative: image, scale: 1)
+        .resizable()
+        .scaledToFit()
+
+      GeometryReader { proxy in
+        ForEach(occupiedRegions.indices, id: \.self) { index in
+          let region = occupiedRegions[index]
+          Rectangle()
+            .fill(.red.opacity(0.08))
+            .stroke(.red.opacity(0.85), lineWidth: 1.5)
+            .frame(
+              width: region.width * proxy.size.width,
+              height: region.height * proxy.size.height
+            )
+            .position(
+              x: (region.x + region.width / 2) * proxy.size.width,
+              y: (region.y + region.height / 2) * proxy.size.height
+            )
+        }
+      }
+    }
+    .aspectRatio(CGFloat(image.width) / CGFloat(max(image.height, 1)), contentMode: .fit)
+    .frame(maxWidth: .infinity, maxHeight: 240)
+    .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
   }
 }
 

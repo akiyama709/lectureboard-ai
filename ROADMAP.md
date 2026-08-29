@@ -16,7 +16,8 @@ The roadmap describes validation gates rather than promises of release dates.
 
 - [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit — implementation builds，runtime validation pending
 - [ ] Detect slide changes and stable frames — deterministic Core tests pass，real PowerPoint calibration pending
-- [ ] Recognize slide text and geometry
+- [ ] Recognize slide text and geometry — implementation builds，real-slide accuracy validation pending
+- [ ] Build normalized occupied regions from detected text and rectangles — deterministic Core tests pass，real-slide calibration pending
 - [ ] Detect existing PowerPoint ink as occupied space
 - [ ] Route live transcript segments into the contextual board engine
 - [ ] Render stable text, boxes, arrows, and causal chains

@@ -22,6 +22,13 @@ final class AppModel: ObservableObject {
     case error(String)
   }
 
+  enum SlideAnalysisStatus: Equatable {
+    case idle
+    case analyzing
+    case ready
+    case error(String)
+  }
+
   @Published var status: Status = .ready
   @Published var powerPointWindows: [PowerPointWindowDescriptor] = []
   @Published var selectedPowerPointWindowID: CGWindowID?
@@ -34,16 +41,21 @@ final class AppModel: ObservableObject {
   @Published private(set) var stableFrameCount = 0
   @Published private(set) var slideChangeCount = 0
   @Published private(set) var latestStableFrame: CGImage?
+  @Published private(set) var slideAnalysisStatus: SlideAnalysisStatus = .idle
+  @Published private(set) var latestSlideAnalysis: SlideVisualAnalysis?
 
   let permissionService = PermissionService()
   private let scanner = PowerPointWindowScanner()
   private let overlayController = OverlayWindowController()
   private let speechProvider = AppleSpeechRecognizerProvider()
   private let windowCapture = PowerPointWindowCapture()
+  private let slideVisionAnalyzer = SlideVisionAnalyzer()
   private let boardEngine = ContextualBoardEngine()
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
   private var captureGeneration = 0
+  private var analysisGeneration = 0
+  private var slideAnalysisTask: Task<Void, Never>?
   private var transcriptSegments: [TranscriptSegment] = []
   private var boardIntents: [BoardIntent] = []
 
@@ -94,6 +106,7 @@ final class AppModel: ObservableObject {
     slideChangeCount = 0
     latestStableFrame = nil
     stableFrameDetector.reset()
+    resetSlideAnalysis()
 
     do {
       try await windowCapture.start(
@@ -126,6 +139,7 @@ final class AppModel: ObservableObject {
     captureGeneration += 1
     await windowCapture.stop()
     stableFrameDetector.reset()
+    resetSlideAnalysis()
     captureStatus = .stopped
   }
 
@@ -162,12 +176,22 @@ final class AppModel: ObservableObject {
     guard segment.isFinal else { return }
 
     transcriptSegments.append(segment)
+    let fallbackTitle =
+      selectedLanguage.rawValue.hasPrefix("ja") ? "現在のスライド" : "Current slide"
+    let analysisTitle = latestSlideAnalysis?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let title =
+      if let analysisTitle, !analysisTitle.isEmpty {
+        analysisTitle
+      } else {
+        fallbackTitle
+      }
     let slide = SlideContext(
       slideNumber: boardScene.slideNumber,
-      title: selectedLanguage.rawValue.hasPrefix("ja") ? "現在のスライド" : "Current slide",
-      textBlocks: [],
+      title: title,
+      textBlocks: latestSlideAnalysis?.textBlocks ?? [],
       speakerNotes: "",
-      occupiedRegions: [NormalizedRect(x: 0.03, y: 0.05, width: 0.62, height: 0.90)],
+      occupiedRegions: latestSlideAnalysis?.occupiedRegions
+        ?? [NormalizedRect(x: 0.03, y: 0.05, width: 0.62, height: 0.90)],
       dwellTime: 40,
       languages: [selectedLanguage]
     )
@@ -201,10 +225,12 @@ final class AppModel: ObservableObject {
     case .stable:
       stableFrameCount += 1
       latestStableFrame = frame.image
+      startSlideAnalysis(frame, captureGeneration: generation)
     case .slideChanged:
       stableFrameCount += 1
       slideChangeCount += 1
       latestStableFrame = frame.image
+      startSlideAnalysis(frame, captureGeneration: generation)
     case .invalid, .collecting, .unchanged, .transitioning:
       break
     }
@@ -215,6 +241,84 @@ final class AppModel: ObservableObject {
     captureGeneration += 1
     await windowCapture.stop()
     stableFrameDetector.reset()
+    resetSlideAnalysis()
     captureStatus = .error(message)
+  }
+
+  private func startSlideAnalysis(
+    _ frame: CapturedPowerPointFrame,
+    captureGeneration: Int
+  ) {
+    analysisGeneration += 1
+    let requestGeneration = analysisGeneration
+    slideAnalysisStatus = .analyzing
+    latestSlideAnalysis = nil
+    let analyzer = slideVisionAnalyzer
+
+    slideAnalysisTask?.cancel()
+    slideAnalysisTask = Task { [weak self] in
+      do {
+        let analysis = try await analyzer.analyze(frame)
+        guard !Task.isCancelled else { return }
+        guard let self else { return }
+        receive(
+          analysis,
+          frame: frame,
+          captureGeneration: captureGeneration,
+          requestGeneration: requestGeneration
+        )
+      } catch is CancellationError {
+        return
+      } catch {
+        guard let self else { return }
+        handleSlideAnalysisError(
+          error.localizedDescription,
+          frame: frame,
+          captureGeneration: captureGeneration,
+          requestGeneration: requestGeneration
+        )
+      }
+    }
+  }
+
+  private func receive(
+    _ analysis: SlideVisualAnalysis,
+    frame: CapturedPowerPointFrame,
+    captureGeneration: Int,
+    requestGeneration: Int
+  ) {
+    guard captureGeneration == self.captureGeneration,
+      requestGeneration == analysisGeneration,
+      frame.windowID == selectedPowerPointWindowID
+    else {
+      return
+    }
+    latestSlideAnalysis = analysis
+    slideAnalysisStatus = .ready
+    slideAnalysisTask = nil
+  }
+
+  private func handleSlideAnalysisError(
+    _ message: String,
+    frame: CapturedPowerPointFrame,
+    captureGeneration: Int,
+    requestGeneration: Int
+  ) {
+    guard captureGeneration == self.captureGeneration,
+      requestGeneration == analysisGeneration,
+      frame.windowID == selectedPowerPointWindowID
+    else {
+      return
+    }
+    slideAnalysisStatus = .error(message)
+    slideAnalysisTask = nil
+  }
+
+  private func resetSlideAnalysis() {
+    analysisGeneration += 1
+    slideAnalysisTask?.cancel()
+    slideAnalysisTask = nil
+    latestSlideAnalysis = nil
+    slideAnalysisStatus = .idle
   }
 }
