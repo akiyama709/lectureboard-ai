@@ -74,7 +74,7 @@ The documentation index is available at [`docs/README.md`](docs/README.md). Curr
 
 - macOS 26+
 - Xcode 26+
-- XcodeGen（Xcode 26に対応する版）
+- XcodeGen 2.46.0 (the locally verified version)
 
 ```bash
 git clone https://github.com/akiyama709/lectureboard-ai.git

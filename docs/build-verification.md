@@ -1,6 +1,6 @@
 # Build and verification status
 
-Updated: 2026-08-29
+Updated: 2026-08-30
 
 ## Verified in the preparation environment
 
@@ -63,6 +63,21 @@ After this fix，the seven-step `make verify` run passed locally:
 - The tracked-build-output，common-secret-pattern，and lecture-data-extension checks passed.
 
 The follow-up `Core Swift CI` run for commit `f875693` passed in 25 seconds on a clean GitHub Actions checkout. The remaining Node.js 20 deprecation warning from `actions/checkout@v4` was resolved by updating the official action to `actions/checkout@v7`，as proposed by GitHub Dependabot. The subsequent run for commit `85f3604` passed in 30 seconds with no annotations.
+
+## README language-boundary regression check
+
+The English requirements list in `README.md` accidentally contained the Japanese text `XcodeGen（Xcode 26に対応する版）`. It was replaced with `XcodeGen 2.46.0 (the locally verified version)`.
+
+The new `scripts/check-readme-language-boundary.sh` check requires exactly one Japanese-section marker and rejects Japanese-script characters before that marker. The check passed after the correction. The publication verification now contains eight steps and runs this regression check before examining tracked build output.
+
+After this change，the final `make verify` run passed with normal local Mac access on 2026-08-30:
+
+- The README language-boundary regression check passed.
+- All 10 core tests in 5 suites passed.
+- The native `arm64` app build completed with `** BUILD SUCCEEDED **`.
+- All publication-source，tracked-build-output，common-secret-pattern，and lecture-data-extension checks passed.
+
+An initial attempt from the restricted Codex sandbox could not write Swift's user-level module cache. Re-running the unchanged verification with normal local Mac access passed，so this was an execution-sandbox limitation rather than a product or test failure.
 
 ## Not yet runtime-verified on this Mac
 
