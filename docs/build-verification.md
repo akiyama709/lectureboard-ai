@@ -79,6 +79,30 @@ After this change，the final `make verify` run passed with normal local Mac acc
 
 An initial attempt from the restricted Codex sandbox could not write Swift's user-level module cache. Re-running the unchanged verification with normal local Mac access passed，so this was an execution-sandbox limitation rather than a product or test failure.
 
+The correction was published through PR #2. The required `LectureBoardCore tests` check passed in 23 seconds，and the pull request was squash-merged to `main` as commit `f63fe22` on 2026-08-30.
+
+## Continuous selected-window capture implementation
+
+The first observable-capture implementation was compiled on 2026-08-30. It adds:
+
+- A ScreenCaptureKit stream restricted to the selected PowerPoint window.
+- Ten-frame-per-second capture with a maximum 1,920-pixel edge，BGRA output，no cursor，no audio，and a three-frame queue.
+- A 32-by-18 luminance fingerprint generated from each usable frame.
+- Deterministic stable-frame confirmation and slide-change classification in `LectureBoardCore`.
+- Cancellation generations and window identifiers that reject callbacks from a stopped or reselected window.
+- A setup-window monitor showing frame count，confirmed stable snapshots，detected slide changes，and the latest stable preview.
+
+Targeted verification completed before runtime testing:
+
+- `make test-core` passed with 17 tests in 6 Swift Testing suites.
+- The seven stable-frame tests cover consecutive confirmation，small-noise tolerance，transition deferral，animation frames，malformed fingerprints，configuration bounds，and reset behavior.
+- `make build` completed with `** BUILD SUCCEEDED **` for the native `arm64` macOS target under Swift 6 strict concurrency.
+- The final eight-step `make verify` run passed，including source-format lint，all Core tests，the native build，tracked-source verification，the README language-boundary regression check，and publication safety checks.
+
+The commit-candidate verification was repeated after the changelog update at 00:47 JST on 2026-08-30. It again passed all 17 Core tests in 6 suites and completed the native `arm64` build with `** BUILD SUCCEEDED **`; all remaining publication checks also passed.
+
+These results verify deterministic logic，compilation，and linking only. The app was not launched automatically because doing so could present screen-recording permission UI while the user was unavailable. Actual PowerPoint frame delivery，idle-frame behavior，window closure，window reselection，preview fidelity，and the default stability thresholds remain runtime-unverified.
+
 ## Not yet runtime-verified on this Mac
 
 The successful native build does not verify runtime behavior. The app has not yet been launched as part of this verification session，and the following checks remain outstanding:

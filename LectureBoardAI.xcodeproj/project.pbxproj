@@ -21,6 +21,7 @@
 		CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */; };
 		D2928CBE9C5434FD2164CA68 /* DemoBoardSceneFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */; };
 		E904C6056388B007AD5463BF /* PermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */; };
+		FB6E814A1A2348D441594CAD /* PowerPointWindowCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		123F3F9F12EBE7BBC381195F /* LectureBoardAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LectureBoardAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A63E414F9808AC19E488E50 /* BoardPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardPreviewView.swift; sourceTree = "<group>"; };
 		2FA791C51645A1AC2C207D65 /* LectureBoardAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LectureBoardAIApp.swift; sourceTree = "<group>"; };
+		36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowCapture.swift; sourceTree = "<group>"; };
 		429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowScanner.swift; sourceTree = "<group>"; };
 		9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalInkStyle.swift; sourceTree = "<group>"; };
 		A4614FE7EC712603B67D3964 /* TranscriptionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionProvider.swift; sourceTree = "<group>"; };
@@ -118,12 +120,21 @@
 			path = Rendering;
 			sourceTree = "<group>";
 		};
+		E613847A36C3744A8E3F5E87 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
 		E935C0E20C7DDEA9D4E288B7 /* Services */ = {
 			isa = PBXGroup;
 			children = (
 				A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */,
 				AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */,
 				429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */,
+				E613847A36C3744A8E3F5E87 /* Capture */,
 				957ECFCC42D3F06FCAC0F49D /* Transcription */,
 			);
 			path = Services;
@@ -219,6 +230,7 @@
 				5F3046B9FDDCA5989CE8FC26 /* MainView.swift in Sources */,
 				CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */,
 				E904C6056388B007AD5463BF /* PermissionService.swift in Sources */,
+				FB6E814A1A2348D441594CAD /* PowerPointWindowCapture.swift in Sources */,
 				15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */,
 				688BEC5EF09CC3DB0CD7A231 /* SettingsView.swift in Sources */,
 				1C738559CA669F8BB7BC0D5B /* TranscriptionProvider.swift in Sources */,

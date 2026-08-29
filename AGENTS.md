@@ -18,7 +18,7 @@ The lecturer must not need to memorize or use voice commands. The system should 
 - AI board content must be grounded in the slide, speaker notes, transcript, or lecturer input.
 - Confirmed board elements should remain stable so students can read and take notes.
 - Local processing is preferred; cloud providers must remain optional adapters.
-- Planned public GitHub owner and repository: `akiyama709/lectureboard-ai`.
+- Public GitHub repository: `akiyama709/lectureboard-ai`.
 
 ## Current implementation state
 
@@ -28,6 +28,8 @@ Implemented:
 
 - Native SwiftUI/AppKit application shell.
 - PowerPoint-window discovery prototype with ScreenCaptureKit.
+- Compiled ScreenCaptureKit adapter for continuous capture of the selected PowerPoint window.
+- Deterministic frame fingerprints，stable-frame confirmation，and slide-change classification.
 - Click-through transparent overlay prototype.
 - Japanese or English Apple Speech prototype.
 - Platform-neutral `LectureBoardCore` package.
@@ -37,15 +39,15 @@ Implemented:
 
 Not yet implemented or verified:
 
-- Continuous PowerPoint frame capture.
-- Stable slide-change detection.
+- Runtime validation of continuous PowerPoint frame capture.
+- Runtime calibration and validation of stable slide-change detection.
 - Vision-based slide text, object, and empty-space analysis.
 - Existing PowerPoint ink detection.
 - Real speaker-note and `.pptx` parsing.
 - Reliable Japanese–English code switching.
 - Production-grade contextual model adapters.
 - Session export to JSON, SVG, PDF, and Markdown.
-- Native Xcode build and runtime validation on the user's Mac.
+- Native runtime validation on the user's Mac beyond compilation and linking.
 - Signing and notarization.
 
 ## Immediate next milestone

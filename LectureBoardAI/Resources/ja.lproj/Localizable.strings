@@ -30,6 +30,16 @@
 "nav.digitalInk" = "デジタルインク";
 "setup.powerPoint" = "PowerPoint";
 "setup.powerPointWindow" = "PowerPointウィンドウ";
+"capture.title" = "選択ウィンドウの取得";
+"capture.start" = "取得を開始";
+"capture.stop" = "取得を停止";
+"capture.status.stopped" = "取得停止中";
+"capture.status.starting" = "取得を開始しています";
+"capture.status.capturing" = "選択したPowerPointウィンドウを取得中";
+"capture.frames" = "取得フレーム";
+"capture.stableFrames" = "安定スナップショット";
+"capture.slideChanges" = "スライド切替";
+"capture.noStableFrame" = "安定フレームはまだ確定していません．";
 "style.title" = "板書スタイル";
 "style.clean" = "整ったデジタルインク風";
 "style.handwritten" = "より手書き風";
@@ -40,3 +50,5 @@
 "error.authorizationDenied" = "音声認識またはマイクへのアクセスが許可されていません．";
 "error.recognizerUnavailable" = "選択した言語の音声認識を現在利用できません．";
 "error.noAudioInput" = "マイク入力を開始できませんでした．";
+"error.captureWindowUnavailable" = "選択したPowerPointウィンドウを利用できなくなりました．";
+"error.captureWindowInactive" = "選択したPowerPointウィンドウが非アクティブになったか，閉じられました．";

@@ -4,7 +4,7 @@
 
 LectureBoard AI is an open-source research and development project for university lectures and online teaching. It listens to a lecturer, observes the current slide, estimates what is educationally important from context, and renders a restrained digital-ink annotation layer. The lecturer does not need to say commands such as “write this on the board.”
 
-> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, transparent-overlay prototype, and tests are included. Live slide analysis, production-grade bilingual transcription, and AI-provider integrations remain under development.
+> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, compiled selected-window capture path, transparent-overlay prototype, and tests are included. Runtime capture validation, live slide analysis, production-grade bilingual transcription, and AI-provider integrations remain under development.
 
 ## Design principles
 
@@ -30,6 +30,8 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - A native SwiftUI/AppKit application shell
 - Screen-capture permission checking
 - Discovery of visible PowerPoint windows with ScreenCaptureKit
+- A compiled selected-window ScreenCaptureKit stream with stable-snapshot preview
+- Deterministic frame fingerprints and stable-frame/slide-change classification
 - A click-through transparent overlay window prototype
 - A selectable Japanese or English Apple Speech recognizer prototype
 - A pure-Swift `LectureBoardCore` package containing:
@@ -47,6 +49,7 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Reliable recognition of Japanese and English within the same utterance
 - Parsing every PowerPoint object and speaker note
 - Automatic identification of the current slide after transitions and animations
+- Runtime reliability and threshold calibration of continuous PowerPoint capture
 - Robust empty-space segmentation on arbitrary slide designs
 - Production-grade diagram generation
 - Cloud or local large-language-model integration
