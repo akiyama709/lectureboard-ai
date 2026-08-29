@@ -16,6 +16,6 @@ build/
 *.provisionprofile
 *.key
 *.pem
-Models/
-LectureData/
-LocalData/
+/Models/
+/LectureData/
+/LocalData/

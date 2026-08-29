@@ -17,13 +17,13 @@ if [[ "$ACTIVE_ACCOUNT" != "$EXPECTED_ACCOUNT" ]]; then
   exit 1
 fi
 
-./scripts/prepublish-check.sh
-
 if [[ ! -d .git ]]; then
   git init -b main
 fi
 
 git add .
+./scripts/prepublish-check.sh
+
 if ! git diff --cached --quiet; then
   git commit -m "Initialize LectureBoard AI macOS alpha"
 fi

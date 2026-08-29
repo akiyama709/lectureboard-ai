@@ -46,6 +46,24 @@ The first normal local `make local-setup` run passed all core tests but stopped 
 
 A separate initial SwiftPM cache error occurred only inside the restricted Codex command sandbox. Re-running the unchanged command with normal local Mac access passed the core tests，confirming that this was not a repository or Swift source failure. No sandbox-specific workaround was added to the project.
 
+## GitHub publication verification
+
+The public repository `akiyama709/lectureboard-ai` was created on 2026-08-29 with `main` as the default branch. The initial push contained commit `8f0b6a3`.
+
+The first `Core Swift CI` run failed because the unanchored `Models/` entry in `.gitignore` also excluded the four required Swift files under `Packages/LectureBoardCore/Sources/LectureBoardCore/Models`. Local tests had used those ignored working-tree files，while the clean GitHub Actions checkout did not contain them.
+
+The ignore patterns for `Models`，`LectureData`，and `LocalData` were restricted to repository-root data directories. A new publication-source regression check now fails when any Swift file under the app or core source trees is absent from Git. The check reproduced the omission of all four model files before the fix and passed after they were added. The publication script now stages the candidate tree before running the strengthened seven-step verification.
+
+After this fix，the seven-step `make verify` run passed locally:
+
+- Swift format lint passed.
+- All 10 core tests in 5 suites passed.
+- The native `arm64` app build completed with `** BUILD SUCCEEDED **`.
+- All Swift source files were confirmed as included in Git.
+- The tracked-build-output，common-secret-pattern，and lecture-data-extension checks passed.
+
+The follow-up GitHub Actions result must be recorded separately after the fix is pushed. Until that run passes，only the local regression check，core tests，and native Mac build are verified for the fix.
+
 ## Not yet runtime-verified on this Mac
 
 The successful native build does not verify runtime behavior. The app has not yet been launched as part of this verification session，and the following checks remain outstanding:
