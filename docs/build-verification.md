@@ -101,6 +101,8 @@ Targeted verification completed before runtime testing:
 
 The commit-candidate verification was repeated after the changelog update at 00:47 JST on 2026-08-30. It again passed all 17 Core tests in 6 suites and completed the native `arm64` build with `** BUILD SUCCEEDED **`; all remaining publication checks also passed.
 
+The initial required `LectureBoardCore tests` check for PR #3 passed in 28 seconds on a clean GitHub Actions checkout. This CI check exercises the platform-neutral Core package; it does not build or run the native ScreenCaptureKit app.
+
 These results verify deterministic logic，compilation，and linking only. The app was not launched automatically because doing so could present screen-recording permission UI while the user was unavailable. Actual PowerPoint frame delivery，idle-frame behavior，window closure，window reselection，preview fidelity，and the default stability thresholds remain runtime-unverified.
 
 ## Not yet runtime-verified on this Mac
