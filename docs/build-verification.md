@@ -132,6 +132,8 @@ The final commit-candidate verification completed at 01:04 JST on 2026-08-30:
 - Swift format lint，tracked-source verification，the README language-boundary check，tracked-build-output，common-secret-pattern，and lecture-data-extension checks passed.
 - Both English and Japanese localization files passed `plutil -lint`.
 
+The initial required `LectureBoardCore tests` check for PR #4 passed in 22 seconds on a clean GitHub Actions checkout. This CI check covers the 24 platform-neutral Core tests; it does not compile or run the native Vision and ScreenCaptureKit adapters.
+
 These checks verify deterministic filtering and occupancy assembly plus native compilation and linking. The app was not launched while the user was unavailable. No claim is made yet about actual OCR text，rectangle quality，title selection，coordinate alignment，preview alignment，latency，or suitability of the initial thresholds on real PowerPoint slides.
 
 ## Not yet runtime-verified on this Mac
