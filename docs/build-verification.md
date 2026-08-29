@@ -62,7 +62,7 @@ After this fix，the seven-step `make verify` run passed locally:
 - All Swift source files were confirmed as included in Git.
 - The tracked-build-output，common-secret-pattern，and lecture-data-extension checks passed.
 
-The follow-up GitHub Actions result must be recorded separately after the fix is pushed. Until that run passes，only the local regression check，core tests，and native Mac build are verified for the fix.
+The follow-up `Core Swift CI` run for commit `f875693` passed in 25 seconds on a clean GitHub Actions checkout. The remaining Node.js 20 deprecation warning from `actions/checkout@v4` was resolved by updating the official action to `actions/checkout@v7`，as proposed by GitHub Dependabot. The subsequent run for commit `85f3604` passed in 30 seconds with no annotations.
 
 ## Not yet runtime-verified on this Mac
 

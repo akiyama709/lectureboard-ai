@@ -4,28 +4,28 @@
 
 ## 1．公開前の判断
 
-- [ ] リポジトリ所有アカウントが`akiyama709`である
-- [ ] リポジトリ名を`lectureboard-ai`とする
-- [ ] Publicとして公開してよい
-- [ ] MIT Licenseでよい
-- [ ] 所属機関の知財・職務発明・ソフトウェア公開規程を確認した
-- [ ] 本プロジェクトに第三者の秘密情報が含まれていない
-- [ ] 使用した既存コード・画像・フォントのライセンスを確認した
+- [x] リポジトリ所有アカウントが`akiyama709`である
+- [x] リポジトリ名を`lectureboard-ai`とする
+- [x] Publicとして公開してよい
+- [x] MIT Licenseでよい
+- [x] 所属機関の知財・職務発明・ソフトウェア公開規程を確認した
+- [x] 本プロジェクトに第三者の秘密情報が含まれていない
+- [x] 使用した既存コード・画像・フォントのライセンスを確認した
 
 ## 2．ファイル
 
-- [ ] READMEの「実装済み」と「未実装」が正確である
-- [ ] `.env`や秘密鍵がない
-- [ ] 実際のPowerPoint資料がない
-- [ ] 講義音声，学生データ，未発表原稿がない
-- [ ] 画像内に個人情報や著作物がない
-- [ ] `.DS_Store`と`.build`が除外されている
-- [ ] `swift test --package-path Packages/LectureBoardCore`が通る
+- [x] READMEの「実装済み」と「未実装」が正確である
+- [x] `.env`や秘密鍵がない
+- [x] 実際のPowerPoint資料がない
+- [x] 講義音声，学生データ，未発表原稿がない
+- [x] 画像内に個人情報や著作物がない
+- [x] `.DS_Store`と`.build`が除外されている
+- [x] `swift test --package-path Packages/LectureBoardCore`が通る
 
 ## 3．GitHub設定
 
-- [ ] Default branchを`main`とする
-- [ ] Issuesを有効にする
+- [x] Default branchを`main`とする
+- [x] Issuesを有効にする
 - [ ] Discussionsは必要に応じて有効にする
 - [ ] Private vulnerability reportingを有効にする
 - [ ] Secret scanningを有効にする
