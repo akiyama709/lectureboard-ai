@@ -21,6 +21,7 @@ struct MainView: View {
           prototypeNotice
           permissions
           powerPointSelection
+          captureMonitor
           languageAndStyle
           controls
           transcript
@@ -31,6 +32,9 @@ struct MainView: View {
     }
     .task {
       await model.refreshPowerPointWindows()
+    }
+    .onDisappear {
+      Task { await model.stopWindowCapture() }
     }
   }
 
@@ -90,14 +94,73 @@ struct MainView: View {
           }
           .labelsHidden()
           .frame(maxWidth: 500)
+          .onChange(of: model.selectedPowerPointWindowID) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            Task { await model.stopWindowCapture() }
+          }
         }
 
-        Button("setup.refresh") {
-          Task { await model.refreshPowerPointWindows() }
+        HStack(spacing: 10) {
+          Button("setup.refresh") {
+            Task { await model.refreshPowerPointWindows() }
+          }
+          Button("capture.start") {
+            Task { await model.startWindowCapture() }
+          }
+          .disabled(model.selectedPowerPointWindowID == nil || model.captureStatus == .starting)
+          Button("capture.stop") {
+            Task { await model.stopWindowCapture() }
+          }
+          .disabled(model.captureStatus == .stopped)
         }
       }
       .padding(.vertical, 8)
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private var captureMonitor: some View {
+    GroupBox("capture.title") {
+      VStack(alignment: .leading, spacing: 12) {
+        captureStatusLabel
+
+        HStack(spacing: 24) {
+          LabeledContent("capture.frames", value: "\(model.capturedFrameCount)")
+          LabeledContent("capture.stableFrames", value: "\(model.stableFrameCount)")
+          LabeledContent("capture.slideChanges", value: "\(model.slideChangeCount)")
+        }
+
+        if let image = model.latestStableFrame {
+          Image(decorative: image, scale: 1)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: .infinity, maxHeight: 240)
+            .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        } else {
+          Text("capture.noStableFrame")
+            .foregroundStyle(.secondary)
+        }
+      }
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  @ViewBuilder
+  private var captureStatusLabel: some View {
+    switch model.captureStatus {
+    case .stopped:
+      Label("capture.status.stopped", systemImage: "stop.circle")
+        .foregroundStyle(.secondary)
+    case .starting:
+      Label("capture.status.starting", systemImage: "hourglass")
+        .foregroundStyle(.secondary)
+    case .capturing:
+      Label("capture.status.capturing", systemImage: "record.circle")
+        .foregroundStyle(.green)
+    case .error(let message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.red)
     }
   }
 

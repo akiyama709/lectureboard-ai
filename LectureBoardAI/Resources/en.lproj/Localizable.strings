@@ -30,6 +30,16 @@
 "nav.digitalInk" = "Digital ink";
 "setup.powerPoint" = "PowerPoint";
 "setup.powerPointWindow" = "PowerPoint window";
+"capture.title" = "Selected-window capture";
+"capture.start" = "Start capture";
+"capture.stop" = "Stop capture";
+"capture.status.stopped" = "Capture stopped";
+"capture.status.starting" = "Starting capture";
+"capture.status.capturing" = "Capturing the selected PowerPoint window";
+"capture.frames" = "Frames observed";
+"capture.stableFrames" = "Stable snapshots";
+"capture.slideChanges" = "Slide changes";
+"capture.noStableFrame" = "No stable frame has been confirmed yet.";
 "style.title" = "Digital ink style";
 "style.clean" = "Clean digital ink";
 "style.handwritten" = "More handwritten";
@@ -40,3 +50,5 @@
 "error.authorizationDenied" = "Speech-recognition or microphone access was not granted.";
 "error.recognizerUnavailable" = "Speech recognition is currently unavailable for the selected language.";
 "error.noAudioInput" = "The microphone input could not be started.";
+"error.captureWindowUnavailable" = "The selected PowerPoint window is no longer available.";
+"error.captureWindowInactive" = "The selected PowerPoint window became inactive or was closed.";

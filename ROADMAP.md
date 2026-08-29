@@ -14,8 +14,8 @@ The roadmap describes validation gates rather than promises of release dates.
 
 ## Milestone 1 — Observable lecture prototype
 
-- [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit
-- [ ] Detect slide changes and stable frames
+- [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit — implementation builds，runtime validation pending
+- [ ] Detect slide changes and stable frames — deterministic Core tests pass，real PowerPoint calibration pending
 - [ ] Recognize slide text and geometry
 - [ ] Detect existing PowerPoint ink as occupied space
 - [ ] Route live transcript segments into the contextual board engine

@@ -9,10 +9,13 @@ All notable changes to this project will be documented in this file.
 - Local Codex handoff through `AGENTS.md` and `.codex/config.toml`
 - macOS toolchain diagnostic and first-run scripts
 - Japanese local-development and session-handoff documentation
+- Selected-window ScreenCaptureKit stream for continuous PowerPoint frame capture
+- Deterministic stable-frame and slide-change detection with unit tests
+- In-app capture controls, counters, and a latest-stable-frame preview
 
 ### Planned
 
-- Live PowerPoint frame capture and slide-state tracking
+- Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription
 - Contextual AI-provider adapters
