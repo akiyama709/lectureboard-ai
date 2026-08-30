@@ -139,7 +139,7 @@ final class RuntimeVerificationRunner: ObservableObject {
     }
 
     let selectedWindow = try await findWindow(
-      matching: configuration.targetWindowTitleSubstring,
+      matching: configuration.targetWindow,
       model: model,
       matchedWindowCount: &context.matchedWindowCount
     )
@@ -203,7 +203,7 @@ final class RuntimeVerificationRunner: ObservableObject {
   }
 
   private func findWindow(
-    matching titleSubstring: String,
+    matching target: RuntimeVerificationWindowTarget,
     model: AppModel,
     matchedWindowCount: inout Int
   ) async throws -> PowerPointWindowDescriptor {
@@ -214,15 +214,24 @@ final class RuntimeVerificationRunner: ObservableObject {
       await model.refreshPowerPointWindows()
       let selection = RuntimeVerificationWindowSelector.select(
         from: model.powerPointWindows,
-        titleSubstring: titleSubstring
+        target: target
       )
       matchedWindowCount = selection.matchedWindowCount
       lastResolution = selection.resolution
 
-      if case .selected(let windowID) = selection.resolution,
-        let window = model.powerPointWindows.first(where: { $0.id == windowID })
-      {
-        return window
+      if case .selected(let windowID) = selection.resolution {
+        let matchingDescriptors = model.powerPointWindows.filter { $0.id == windowID }
+        switch matchingDescriptors.count {
+        case 0:
+          lastResolution = .notFound
+        case 1:
+          if let window = matchingDescriptors.first {
+            return window
+          }
+        default:
+          lastResolution = .ambiguous
+        }
+        matchedWindowCount = matchingDescriptors.count
       }
 
       let remaining = deadline.timeIntervalSinceNow
@@ -238,12 +247,12 @@ final class RuntimeVerificationRunner: ObservableObject {
     case .ambiguous:
       throw Failure(
         code: .ambiguousWindow,
-        message: "More than one PowerPoint window matched the requested title."
+        message: "More than one PowerPoint window matched the requested selection."
       )
     case .notFound, .selected:
       throw Failure(
         code: .windowNotFound,
-        message: "No PowerPoint window matched the requested title."
+        message: "No PowerPoint window matched the requested selection."
       )
     }
   }

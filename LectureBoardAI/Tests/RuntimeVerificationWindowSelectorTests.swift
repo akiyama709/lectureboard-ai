@@ -1,4 +1,5 @@
 import CoreGraphics
+import LectureBoardCore
 import Testing
 
 @testable import LectureBoard_AI
@@ -59,12 +60,103 @@ struct RuntimeVerificationWindowSelectorTests {
     #expect(result.matchedWindowCount == 0)
   }
 
-  private func window(id: CGWindowID, title: String) -> PowerPointWindowDescriptor {
+  @Test func selectsOnlyTheUniquePowerPointDescriptorWithExactWindowID() {
+    let result = RuntimeVerificationWindowSelector.select(
+      from: [
+        window(id: 41, title: "Other Deck"),
+        window(id: 42, title: "Runtime Verification"),
+      ],
+      target: .windowID(42)
+    )
+
+    #expect(result.resolution == .selected(42))
+    #expect(result.matchedWindowCount == 1)
+  }
+
+  @Test func reportsMissingExactWindowID() {
+    let result = RuntimeVerificationWindowSelector.select(
+      from: [window(id: 41, title: "Runtime Verification")],
+      target: .windowID(42)
+    )
+
+    #expect(result.resolution == .notFound)
+    #expect(result.matchedWindowCount == 0)
+  }
+
+  @Test func rejectsDuplicateExactWindowID() {
+    let result = RuntimeVerificationWindowSelector.select(
+      from: [
+        window(id: 42, title: "Runtime Verification A"),
+        window(id: 42, title: "Runtime Verification B"),
+      ],
+      target: .windowID(42)
+    )
+
+    #expect(result.resolution == .ambiguous)
+    #expect(result.matchedWindowCount == 2)
+  }
+
+  @Test func rejectsDuplicateExactWindowIDEvenWhenOnlyOneOwnerIsPowerPoint() {
+    let result = RuntimeVerificationWindowSelector.select(
+      from: [
+        window(id: 42, title: "Runtime Verification"),
+        window(
+          id: 42,
+          title: "Wrong Owner",
+          applicationName: "Keynote",
+          bundleIdentifier: "com.apple.Keynote"
+        ),
+      ],
+      target: .windowID(42)
+    )
+
+    #expect(result.resolution == .ambiguous)
+    #expect(result.matchedWindowCount == 2)
+  }
+
+  @Test func rejectsExactWindowIDOwnedByWrongApplication() {
+    let result = RuntimeVerificationWindowSelector.select(
+      from: [
+        window(
+          id: 42,
+          title: "Runtime Verification",
+          applicationName: "Keynote"
+        )
+      ],
+      target: .windowID(42)
+    )
+
+    #expect(result.resolution == .notFound)
+    #expect(result.matchedWindowCount == 0)
+  }
+
+  @Test func rejectsExactWindowIDOwnedByWrongBundle() {
+    let result = RuntimeVerificationWindowSelector.select(
+      from: [
+        window(
+          id: 42,
+          title: "Runtime Verification",
+          bundleIdentifier: "com.apple.Keynote"
+        )
+      ],
+      target: .windowID(42)
+    )
+
+    #expect(result.resolution == .notFound)
+    #expect(result.matchedWindowCount == 0)
+  }
+
+  private func window(
+    id: CGWindowID,
+    title: String,
+    applicationName: String = "Microsoft PowerPoint",
+    bundleIdentifier: String = "com.microsoft.Powerpoint"
+  ) -> PowerPointWindowDescriptor {
     PowerPointWindowDescriptor(
       id: id,
       title: title,
-      applicationName: "Microsoft PowerPoint",
-      bundleIdentifier: "com.microsoft.Powerpoint",
+      applicationName: applicationName,
+      bundleIdentifier: bundleIdentifier,
       frame: .zero
     )
   }

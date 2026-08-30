@@ -114,6 +114,9 @@ run_with_timeout \
   "$invalid_stderr" \
   "$runtime_executable" \
   --runtime-verification \
+  --window-id 0 \
+  --observation-seconds 1 \
+  --output-path "$report_path" \
   || invalid_exit_status=$?
 if (( invalid_exit_status != 0 )); then
   if (( invalid_exit_status == 124 )); then

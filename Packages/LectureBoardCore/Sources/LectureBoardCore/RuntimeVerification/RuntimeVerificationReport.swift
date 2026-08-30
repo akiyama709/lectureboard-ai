@@ -19,9 +19,9 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
     case .screenRecordingUnavailable:
       "Screen Recording access is unavailable."
     case .windowNotFound:
-      "No PowerPoint window matched the requested title."
+      "No PowerPoint window matched the requested selection."
     case .ambiguousWindow:
-      "More than one PowerPoint window matched the requested title."
+      "More than one PowerPoint window matched the requested selection."
     case .captureFailed:
       "PowerPoint window capture failed."
     case .outputWriteFailed:

@@ -229,6 +229,52 @@ At orderly shutdown, Vision printed `RecognizeTextRequest was cancelled` for one
 
 The current post-lifecycle-fix executable launched directly from the Codex-authorized environment reported Screen Recording preflight as `authorized` and completed static capture without requesting access. A separate prior LaunchServices `open` attempt reported preflight as `unknown` and failed with `screenRecordingUnavailable` without making a permission request. These are different launch contexts. The direct result must not be described as standalone LaunchServices authorization, and the frozen copy at its external path was not independently launched. No reboot was performed, so post-restart permission persistence is not verified.
 
+### Exact-window mouse-ink verification
+
+This follow-up used a byte-identical copy of the synthetic deck only:
+
+- Original: `LectureBoard-Runtime-Verification.pptx`
+- Test copy: `LectureBoard-Runtime-Ink-Verification-2026-08-30.pptx`
+- SHA-256 of both files before and after the work: `c402aaace0678a03fca2c0d265e36a05de69f94af18179a563277d3fb0dbf159`
+- The test copy was closed with saving disabled after the final run, and no matching PowerPoint window remained.
+- No private slides, microphone input, lecture audio, student data, or unpublished research content was used.
+
+Before changing the selection path, `make doctor` completed with zero failures and zero warnings. `make local-setup` then passed the existing 41 Core tests in 10 suites and regenerated `LectureBoardAI.xcodeproj` successfully.
+
+PowerPoint created two substantial layer-zero windows when the synthetic presentation began: a 2,560-by-1,440 projected slide-show window and a 1,512-by-982 Presenter View window. A diagnostic run observed each candidate three times with stable Core Graphics identity and found exactly one Accessibility window with the same title and bounds for each. It sent no mouse input, launched no LectureBoard process, wrote no image, and verified the return to the exact editing window.
+
+The first ink-driver attempt correctly stopped before drawing when it found two substantial candidates, but its early-failure cleanup had not retained enough context to close the slide show. The slide show was closed by addressing the exact synthetic presentation, and both deck hashes remained unchanged. The helper now freezes the complete candidate set and permits cleanup Escape only when the same PowerPoint process and candidate set remain present and the focused Accessibility element is the unique window for one candidate title. Its GUI-free selector and cleanup regression checks cover one-of-two exact selection, zero and duplicate exact matches, safe and unsafe candidate-set cleanup, and focused-Accessibility uniqueness.
+
+The production runtime previously accepted only a title query. A new `--window-id` selection path now accepts one nonzero ASCII-decimal `UInt32`, is mutually exclusive with title selection, rejects unknown long options and duplicate or malformed values, and selects only one exact descriptor owned by application name `Microsoft PowerPoint` and bundle identifier `com.microsoft.Powerpoint`. Duplicate identifiers fail closed even if one descriptor has the expected ownership. The runtime driver passes only the already frozen Core Graphics window identifier, eliminating the title re-selection boundary for this check. The added parser, selector, report-message, and launch-smoke regressions brought the targeted results to 46 Core tests in 10 suites and 49 native app tests in 12 suites. The arm64 ad hoc runtime build and strict signature check also passed. That build's executable SHA-256 is `b7aa0311f49ee6de4ac66c353cbf53fa3d338a34e29e6df662f8db1a2d4906c9`, with CDHash `ff276fc848cc875d152d1a269cc7eb5b978e1df7`.
+
+One otherwise complete ink run then returned a helper failure because the post-Escape check required the original editing window to be already frontmost. Its runtime report and three images were retained as failed-at-restoration evidence, not as the final successful run. The helper now waits for the saved Core Graphics and Accessibility editing-window identities to reappear independently of focus, refuses restoration when a modal, dialog, or sheet is present, raises and focuses only that saved Accessibility element without posting another key or mouse event, and then repeats the complete identity and focus verification. Four GUI-free restoration-policy branches increased the helper's local self-test total to 12. An independent read-only review found no remaining P0-P2 issue in the helper. The final helper source and binary SHA-256 values were `abcd58140f07d4d74523bb58fa61a7ed26b3b0df9be1988dbabe2f8e787a5e65` and `1f1d00f4606aaf38d088a90cf81cfb1493a33ad35966900dd52543c19f940c4b`; the helper remains ignored local verification tooling rather than a publication source file.
+
+The final end-to-end helper run succeeded against the exact projected window:
+
+- Runtime report: `runtime-ink-final-2026-08-30.json`
+- Report SHA-256: `6819ec2cc0f3a08c2e88e2f26b12eaa8dff33aa283ce3b972fe5d670329b772f`
+- Observation: 12 requested seconds, 47 snapshots, selected window ID 6021, and exactly one matching `com.microsoft.Powerpoint` window
+- Permission: no Screen Recording request; preflight before and after was `authorized`
+- Result: `runStatus: completed`, no failure code or message, and runtime exit status 0
+- Capture: 107 frames, 30 new frames, and 77 idle repeats; every recorded capture state was `capturing`
+- Stability: one stable frame and no classified slide change
+- Vision states: `idle`, `analyzing`, and `completed`; maxima of 4 text observations, 8 rectangles, and 6 occupied regions
+- Driver result: five mouse-drag attempts completed, three exact-window images were saved, Shift-E was posted after re-verifying the frozen window, the slide show exited, and the exact editing window was restored
+
+All three images are 2,560-by-1,440 sRGBA captures of the same frozen slide-show window:
+
+- Before: `runtime-ink-final-before-2026-08-30.png`, SHA-256 `64c87bbec9891947f85262383982fa431ef0c8839c1275226e0e0cf2d839a019`
+- After drawing: `runtime-ink-final-after-draw-2026-08-30.png`, SHA-256 `c904067a6fe8cb94b0f2b629f9ce82e6b95b7e7071a60f5ff11e0aa69934acb8`
+- After erasing: `runtime-ink-final-after-erase-2026-08-30.png`, SHA-256 `36ef203174da21e23fe4f781e6119ed5110edaebbca7d501d2dda3ff76b9c852`
+
+An independent pixel check found 7,178 pixels changed between the before and after-drawing images. A fixed red-like color predicate found 0 pixels before drawing, 3,465 pixels after drawing, and 0 pixels after erasing. Connected-component analysis of the red-like mask found exactly five non-background components, matching the five intended mouse strokes, and visual inspection confirmed their presence and subsequent absence. The before and after-erasing images were not whole-frame identical: 2,771 pixels differed, so complete frame restoration is not claimed. The remaining visual difference was confined to PowerPoint's presentation controls and pen-mode state; no red stroke remained under the fixed predicate or visual inspection.
+
+This run verifies a narrow two-display case in which PowerPoint mouse ink was rendered on the projected slide, the same exact window was streamed by the current LectureBoard runtime while the ink appeared and was erased, and the runtime completed without requesting Screen Recording access. It does not establish that LectureBoard recognizes, classifies, or maps the ink. The stable-frame counter remained at one and the slide-change counter at zero, so the current sparse fingerprint and Vision pipeline did not produce a new stable ink-aware analysis during this run. Existing-ink detection, pen-tablet non-interference, human-ink priority, thin-stroke sensitivity, representative layouts, and long-duration reliability remain unverified.
+
+The final integrated `make verify` run completed successfully at 11:37 JST after the implementation, tests, and substantive verification record above were present. All ten stages passed: Swift format lint, 46 Core tests in 10 suites, 49 native app tests in 12 suites, the native compile-and-link build, the arm64 ad hoc runtime build and strict signature verification, launch smoke tests without a Screen Recording request, source-tracking and README-language checks, and the publication safety checks. The rebuilt executable reproduced SHA-256 `b7aa0311f49ee6de4ac66c353cbf53fa3d338a34e29e6df662f8db1a2d4906c9` and CDHash `ff276fc848cc875d152d1a269cc7eb5b978e1df7`.
+
+A byte-identical copy of that final build was saved without replacing the earlier frozen app as `LectureBoard AI Runtime Window ID 2026-08-30.app` in the external verification-artifact directory. A recursive comparison found no difference from the final build product. The copy is an arm64 executable with the same SHA-256, valid English and Japanese resources, and a valid strict ad hoc bundle signature. It was not launched independently through LaunchServices, so standalone Screen Recording authorization for this new copy is not claimed.
+
 ## Still unverified on this Mac
 
 - Independent LaunchServices capture with the frozen final app and post-restart permission persistence
@@ -239,7 +285,7 @@ The current post-lifecycle-fix executable launched directly from the Codex-autho
 - Robust empty-space analysis and existing PowerPoint ink detection
 - Transparent overlay position, size, click-through behavior, and non-interference with pen-tablet input
 - Japanese and English microphone transcription and Japanese–English code switching
-- Multi-display behavior and online-sharing composition
+- Representative multi-display arrangements, display swap or reconnection, and online-sharing composition beyond the one fixed two-display case above
 - Contextual AI board rendering and session export during a lecture
 - Developer ID distribution signing, hardened runtime, and notarization
 

@@ -123,8 +123,11 @@ struct RuntimeVerificationReportTests {
       "PRIVATE_WINDOW_TITLE /Users/person/Documents/Unpublished Lecture.pptx"
     let expectedMessages: [(RuntimeVerificationFailureCode, String)] = [
       (.screenRecordingUnavailable, "Screen Recording access is unavailable."),
-      (.windowNotFound, "No PowerPoint window matched the requested title."),
-      (.ambiguousWindow, "More than one PowerPoint window matched the requested title."),
+      (.windowNotFound, "No PowerPoint window matched the requested selection."),
+      (
+        .ambiguousWindow,
+        "More than one PowerPoint window matched the requested selection."
+      ),
       (.captureFailed, "PowerPoint window capture failed."),
       (.outputWriteFailed, "The runtime verification report could not be written."),
       (.internalFailure, "Runtime verification failed."),

@@ -20,10 +20,38 @@ struct RuntimeVerificationConfigurationTests {
     ])
     let configuration = try #require(parsed)
 
-    #expect(configuration.targetWindowTitleSubstring == "LectureBoard Runtime Verification")
+    #expect(configuration.targetWindow == .titleSubstring("LectureBoard Runtime Verification"))
     #expect(configuration.observationDurationSeconds == 12.5)
     #expect(configuration.outputPath == "/tmp/lectureboard-runtime.json")
     #expect(configuration.requestsScreenRecordingPermission)
+  }
+
+  @Test func parsesMaximumWindowID() throws {
+    let parsed = try RuntimeVerificationArguments.parse([
+      "--runtime-verification",
+      "--window-id",
+      String(UInt32.max),
+      "--observation-seconds",
+      "1",
+      "--output-path",
+      "/tmp/result.json",
+    ])
+
+    #expect(try #require(parsed).targetWindow == .windowID(UInt32.max))
+  }
+
+  @Test func parsesLeadingZeroWindowIDAsDecimal() throws {
+    let parsed = try RuntimeVerificationArguments.parse([
+      "--runtime-verification",
+      "--window-id",
+      "00042",
+      "--observation-seconds",
+      "1",
+      "--output-path",
+      "/tmp/result.json",
+    ])
+
+    #expect(try #require(parsed).targetWindow == .windowID(42))
   }
 
   @Test func defaultsScreenRecordingRequestToFalse() throws {
@@ -61,6 +89,17 @@ struct RuntimeVerificationConfigurationTests {
         "/tmp/result.json",
       ],
       equals: .missingValue(.windowTitleSubstring)
+    )
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--window-id",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .missingValue(.windowID)
     )
   }
 
@@ -108,6 +147,136 @@ struct RuntimeVerificationConfigurationTests {
       ],
       equals: .duplicateOption(.windowTitleSubstring)
     )
+
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--window-id",
+        "1",
+        "--window-id",
+        "2",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .duplicateOption(.windowID)
+    )
+  }
+
+  @Test func requiresExactlyOneWindowSelectionMode() {
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .missingWindowSelection
+    )
+
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--window-title-contains",
+        "Verification",
+        "--window-id",
+        "42",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .conflictingWindowSelectionOptions
+    )
+
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--window-id",
+        "42",
+        "--window-title-contains",
+        "Verification",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .conflictingWindowSelectionOptions
+    )
+  }
+
+  @Test(
+    arguments: [
+      "0",
+      "0000",
+      "-1",
+      "+1",
+      "1.0",
+      "1e2",
+      "0x2A",
+      " 1",
+      "1 ",
+      "１",
+      "42\0",
+      "4294967296",
+      "not-a-number",
+    ]
+  )
+  func rejectsInvalidWindowID(_ windowID: String) {
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--window-id",
+        windowID,
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .invalidWindowID
+    )
+  }
+
+  @Test func rejectsUnknownLongOption() {
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--window-id",
+        "42",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+        "--unexpected-runtime-option",
+      ],
+      equals: .unknownOption("--unexpected-runtime-option")
+    )
+
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--unexpected-runtime-option",
+        "--window-id",
+        "42",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+      ],
+      equals: .unknownOption("--unexpected-runtime-option")
+    )
+
+    do {
+      let parsed = try RuntimeVerificationArguments.parse([
+        "LectureBoardAI",
+        "--unexpected-runtime-option",
+      ])
+      #expect(parsed == nil)
+    } catch {
+      Issue.record("Runtime-only options must be ignored without activation: \(error)")
+    }
   }
 
   @Test func rejectsEmptyWindowTitleAndRelativeOutputPath() {
