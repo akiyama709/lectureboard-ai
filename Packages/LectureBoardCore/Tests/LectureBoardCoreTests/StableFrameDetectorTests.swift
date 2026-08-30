@@ -5,7 +5,7 @@ import Testing
 struct StableFrameDetectorTests {
   private let configuration = StableFrameDetectorConfiguration(
     stableDifferenceThreshold: 0.01,
-    slideChangeThreshold: 0.20,
+    significantChangeThreshold: 0.20,
     requiredConsecutiveFrames: 3
   )
 
@@ -37,7 +37,7 @@ struct StableFrameDetectorTests {
     #expect(observation.stability == .unchanged)
   }
 
-  @Test func defaultConfigurationReportsMeasuredSlideDifferenceAsAChange() {
+  @Test func defaultConfigurationReportsMeasuredDifferenceAsASignificantVisualChange() {
     var detector = StableFrameDetector()
     let firstSlide = fingerprint(100)
     let secondSlide = fingerprint(107)
@@ -50,7 +50,7 @@ struct StableFrameDetectorTests {
     let observation = detector.ingest(secondSlide)
 
     #expect(observation.differenceFromStableFrame! > 0.027)
-    #expect(observation.stability == .slideChanged)
+    #expect(observation.stability == .significantVisualChange)
   }
 
   @Test func defaultConfigurationKeepsMeasuredIdleNoiseUnchanged() {
@@ -72,7 +72,7 @@ struct StableFrameDetectorTests {
     #expect(observation.stability == .unchanged)
   }
 
-  @Test func waitsForANewStableFrameBeforeReportingSlideChange() {
+  @Test func waitsForANewStableFrameBeforeReportingASignificantVisualChange() {
     var detector = StableFrameDetector(configuration: configuration)
     let firstSlide = fingerprint(10)
     let secondSlide = fingerprint(240)
@@ -82,7 +82,7 @@ struct StableFrameDetectorTests {
 
     #expect(detector.ingest(secondSlide).stability == .transitioning)
     #expect(detector.ingest(secondSlide).stability == .transitioning)
-    #expect(detector.ingest(secondSlide).stability == .slideChanged)
+    #expect(detector.ingest(secondSlide).stability == .significantVisualChange)
     #expect(detector.ingest(secondSlide).stability == .unchanged)
   }
 
@@ -97,7 +97,7 @@ struct StableFrameDetectorTests {
     #expect(detector.ingest(fingerprint(130)).stability == .transitioning)
     #expect(detector.ingest(fingerprint(200)).stability == .transitioning)
     #expect(detector.ingest(fingerprint(200)).stability == .transitioning)
-    #expect(detector.ingest(fingerprint(200)).stability == .slideChanged)
+    #expect(detector.ingest(fingerprint(200)).stability == .significantVisualChange)
   }
 
   @Test func rejectsMalformedAndMismatchedFingerprints() {
@@ -112,21 +112,50 @@ struct StableFrameDetectorTests {
     #expect(detector.ingest(malformed).stability == .invalid)
   }
 
+  @Test func rejectsOverflowingFingerprintDimensionsWithoutTrapping() {
+    let overflowing = FrameFingerprint(
+      sampleColumns: Int.max,
+      sampleRows: 2,
+      luminance: []
+    )
+    let valid = fingerprint(0)
+    var detector = StableFrameDetector(configuration: configuration)
+
+    #expect(overflowing.isValid == false)
+    #expect(overflowing.normalizedDifference(from: valid) == 1)
+    #expect(detector.ingest(overflowing).stability == .invalid)
+  }
+
   @Test func normalizesInvalidConfigurationValues() {
     let bounded = StableFrameDetectorConfiguration(
       stableDifferenceThreshold: -1,
-      slideChangeThreshold: 2,
+      significantChangeThreshold: 2,
       requiredConsecutiveFrames: 0
     )
     let ordered = StableFrameDetectorConfiguration(
       stableDifferenceThreshold: 0.4,
-      slideChangeThreshold: 0.2
+      significantChangeThreshold: 0.2
     )
 
     #expect(bounded.stableDifferenceThreshold == 0)
-    #expect(bounded.slideChangeThreshold == 1)
+    #expect(bounded.significantChangeThreshold == 1)
     #expect(bounded.requiredConsecutiveFrames == 1)
-    #expect(ordered.slideChangeThreshold == ordered.stableDifferenceThreshold)
+    #expect(ordered.significantChangeThreshold == ordered.stableDifferenceThreshold)
+  }
+
+  @Test func normalizesNonFiniteConfigurationValuesAndStillConfirmsStability() {
+    let configuration = StableFrameDetectorConfiguration(
+      stableDifferenceThreshold: .nan,
+      significantChangeThreshold: .infinity,
+      requiredConsecutiveFrames: 2
+    )
+    var detector = StableFrameDetector(configuration: configuration)
+    let frame = fingerprint(20)
+
+    #expect(configuration.stableDifferenceThreshold == 0)
+    #expect(configuration.significantChangeThreshold == 1)
+    #expect(detector.ingest(frame).stability == .collecting(consecutiveFrames: 1))
+    #expect(detector.ingest(frame).stability == .stable)
   }
 
   @Test func resetRequiresANewStableSequence() {

@@ -2,14 +2,43 @@ import Foundation
 import LectureBoardCore
 import Vision
 
-actor SlideVisionAnalyzer {
-  private let assembler: SlideAnalysisAssembler
+protocol SlideVisualAnalyzing: Sendable {
+  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis
+}
 
-  init(assembler: SlideAnalysisAssembler = .init()) {
+enum SlideVisionAnalyzerError: LocalizedError {
+  case rasterizationFailed
+
+  var errorDescription: String? {
+    switch self {
+    case .rasterizationFailed:
+      NSLocalizedString("error.rasterizationFailed", comment: "")
+    }
+  }
+}
+
+actor SlideVisionAnalyzer: SlideVisualAnalyzing {
+  private let assembler: SlideAnalysisAssembler
+  private let rasterOccupancyDetector: RasterOccupancyDetector
+
+  init(
+    assembler: SlideAnalysisAssembler = .init(),
+    rasterOccupancyDetector: RasterOccupancyDetector = .init()
+  ) {
     self.assembler = assembler
+    self.rasterOccupancyDetector = rasterOccupancyDetector
   }
 
   func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
+    try Task.checkCancellation()
+    guard let raster = CGImageRasterizer.makeRGBRaster(from: frame.image) else {
+      throw SlideVisionAnalyzerError.rasterizationFailed
+    }
+    try Task.checkCancellation()
+
+    let strokeCandidateRegions = rasterOccupancyDetector.strokeCandidateRegions(in: raster)
+    try Task.checkCancellation()
+
     var textRequest = RecognizeTextRequest()
     textRequest.recognitionLevel = .accurate
     textRequest.automaticallyDetectsLanguage = true
@@ -24,16 +53,21 @@ actor SlideVisionAnalyzer {
     rectangleRequest.minimumConfidence = 0.50
     rectangleRequest.maximumObservations = 24
 
+    try Task.checkCancellation()
     let handler = ImageRequestHandler(frame.image)
     let (recognizedText, rectangles) = try await handler.perform(
       textRequest,
       rectangleRequest
     )
+    try Task.checkCancellation()
 
-    return assembler.assemble(
+    let analysis = assembler.assemble(
       textObservations: recognizedText.compactMap(textObservation),
-      geometryObservations: rectangles.map(geometryObservation)
+      geometryObservations: rectangles.map(geometryObservation),
+      strokeCandidateRegions: strokeCandidateRegions
     )
+    try Task.checkCancellation()
+    return analysis
   }
 
   private func textObservation(

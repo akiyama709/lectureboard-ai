@@ -4,7 +4,7 @@
 
 LectureBoard AI is an open-source research and development project for university lectures and online teaching. It is intended to listen to a lecturer, observe the current slide, estimate what is educationally important from context, and render a restrained digital-ink annotation layer. The lecturer should not need to say commands such as “write this on the board.”
 
-> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, selected-window capture and Vision-analysis paths, transparent-overlay prototype, and tests are included. The current post-lifecycle-fix executable completed a five-second static synthetic PowerPoint run with 50 frames, one stable frame, and completed Vision analysis with maxima of 35 text observations, 9 rectangles, and 4 occupied regions. An earlier pre-lifecycle-fix executable completed one dynamic run with 220 frames, 5 stable frames, and 4 classified slide changes; that earlier run is calibration evidence, not runtime evidence for the current executable. These narrow runs do not establish OCR or coordinate accuracy, representative-deck coverage, lecture-length reliability, current dynamic-slide behavior, or standalone LaunchServices authorization.
+> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, selected-window capture, stable visual/content-update paths, Vision and raster-candidate analysis, transparent-overlay prototype, and tests are included. The current source passes 80 Core tests and 71 native app tests on the development Mac. Its image-only classifier reports a stable `.significantVisualChange`; the app records that as a visual/content revision and does not claim that the PowerPoint slide identity changed. `slideChangeCount` is reserved for a future independent identity signal and remains zero in the current implementation. No live dynamic or mouse-ink result has yet been recorded for this semantic build; a dynamic attempt stopped before sending input because PowerPoint exposed no usable Accessibility window for the exact synthetic presentation.
 
 ## Design principles
 
@@ -31,11 +31,13 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Screen-capture permission checking
 - Discovery of visible PowerPoint windows with ScreenCaptureKit
 - A compiled selected-window ScreenCaptureKit stream with stable-snapshot preview
-- Deterministic frame fingerprints and stable-frame/slide-change classification
-- A compiled Vision text/rectangle analyzer that runs on confirmed stable frames
-- Deterministic filtering, padding, and merging of normalized occupied regions
+- Deterministic coarse luminance fingerprints and stable-frame/significant-visual-change classification
+- Persistent content-update detection from dense 160-by-90 RGB fingerprints
+- A compiled Vision text/rectangle analyzer that runs on confirmed stable visual frames and content updates
+- A native RGB raster path capped at a 640-pixel long edge, with deterministic `strokeCandidateRegions`
+- Deterministic filtering, padding, and merging of normalized occupied regions across text, rectangles, and stroke candidates
 - Capture-monitor counts and an occupied-region preview overlay
-- A metadata-only runtime-verification path used for the narrowly scoped synthetic runs described above
+- A metadata-only schema-3 runtime-verification path with content-revision and stroke-candidate counts; historical schema-1 and schema-2 reports remain decodable
 - A click-through transparent overlay window prototype
 - A selectable Japanese or English Apple Speech recognizer prototype
 - A pure-Swift `LectureBoardCore` package containing:
@@ -52,9 +54,12 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 
 - Reliable recognition of Japanese and English within the same utterance
 - Parsing every PowerPoint object and speaker note
-- Reliable identification of the current slide across representative transitions and animations
+- Identifying actual PowerPoint slide transitions from an independent slide-identity signal
+- Reliable visual/content-update behavior across representative transitions and animations
 - Independent LaunchServices startup, window reselection, and lecture-length reliability of continuous PowerPoint capture
 - OCR correctness and coordinate accuracy of Vision text, rectangle, and occupancy analysis across representative decks
+- Cropping analysis to the slide canvas and excluding PowerPoint controls or other window UI
+- Classifying raster stroke candidates as existing PowerPoint ink
 - Robust empty-space segmentation on arbitrary slide designs
 - Production-grade diagram generation
 - Runtime microphone transcription, click-through overlay behavior, and AI board rendering during a lecture
@@ -98,7 +103,11 @@ open LectureBoardAI.xcodeproj
 
 `make build` is a compile-and-link check with code signing disabled; it does not produce the runtime artifact used for native behavior claims. `make test-app` runs the native app unit tests with local ad hoc signing. `make build-runtime` produces an arm64 Debug app with local ad hoc signing for controlled runtime checks. Ad hoc signing is neither Developer ID distribution signing nor notarization, and rebuilding can change the app's code identity even when its name and bundle identifier remain the same. macOS may therefore require Screen Recording permission again after a rebuild.
 
-The direct executable run under the Codex-authorized environment and an independently launched app through LaunchServices are separate verification paths. The runtime figures above apply only to the direct Codex-authorized run; standalone LaunchServices startup remains unverified. The public CI currently runs only the platform-neutral core tests.
+Direct executable runs under the Codex-authorized environment and an independently launched app through LaunchServices are separate verification paths. Standalone LaunchServices startup remains unverified. The public CI currently runs only the platform-neutral Core tests.
+
+Two controlled dynamic reports remain as build-specific historical evidence. A schema-1 build recorded 372 frames and 5 image-difference events in the legacy `slideChangeCount` field. A later schema-2 but pre-semantic-correction build recorded 373 frames, the same 5 legacy heuristic events, and 2 content revisions; that report has SHA-256 `704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`. Neither report verifies slide identity or the current semantic build, and neither should be interpreted as five independently identified slide transitions.
+
+A controlled current-build dynamic attempt produced no runtime report and sent no slide, keyboard, or mouse input. Core Graphics identified exactly one synthetic editing window, but PowerPoint exposed no usable Accessibility window for that presentation. A proposed PowerPoint-scripting fallback was not used after review found unresolved target-binding and time-of-check/time-of-use risks. Current-build dynamic and mouse-ink behavior therefore remain unverified.
 
 ## Continue development locally with ChatGPT Codex
 
@@ -142,7 +151,7 @@ Microsoft PowerPoint and other product names are trademarks of their respective 
 
 　講師が「ここを板書してください」などの命令を発することなく使える構成を目指します．現在のスライド，発表者ノート，直前までの発話，反復，対比，因果関係，定義，発話上の強調，既存板書などから，何を学生に残すべきかを文脈的に判断する設計です．
 
-　現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得・Vision解析経路，透明オーバーレイの試作，テストを収録しています．競合修正後の現行実行ファイルをCodexの許可下で直接起動した5秒間の静的な合成PowerPoint検証では，50フレーム，安定フレーム1件を観測し，Visionは完了状態へ到達しました．各計数で観測した最大値は，テキスト観測35件，矩形観測9件，占有領域4件でした．競合修正前の実行ファイルでは，別の動的runで220フレーム，安定フレーム5件，スライド変更4件を観測しましたが，これは現行実行ファイルの動的検証を意味しません．いずれも実講義で安定して使用できる完成版であることを意味しません．
+　現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得，安定した視覚・内容更新の判定，Vision及びラスタ候補解析，透明オーバーレイの試作，テストを収録しています．現行ソースは，開発用Mac上でCore 80件及びネイティブApp 71件のテストに合格しています．画像差分だけからスライドの同一性を断定せず，Coreの`.significantVisualChange`をAppでは安定した視覚・内容更新として数えます．`slideChangeCount`は，将来の独立したスライド識別信号のために予約し，現行実装では増加させません．現行のruntimeレポートはschema 3であり，意味修正前のschema 2と機械的に区別できます．この意味修正後のビルドでは，動的スライド又はマウス手書きのライブ成功結果をまだ記録していません．動的検証の試行は，PowerPointが対象合成資料の利用可能なAccessibilityウィンドウを返さなかったため，入力送信前に停止しました．
 
 ### 当面の対象
 
@@ -163,7 +172,11 @@ Microsoft PowerPoint and other product names are trademarks of their respective 
 
 ### 制御された実行時検証の限界
 
-　上記の数値は，同一の合成デッキを用い，現行実行ファイルと競合修正前の実行ファイルをそれぞれCodexの許可下で直接起動した2回の制御済みrunに限られます．OCR文字列の正しさ，矩形・占有領域の座標精度，代表的な実用デッキ，アニメーション，長時間実行，ウィンドウ再選択，独立したLaunchServices起動は未検証です．マイクによる文字起こし，クリック透過オーバーレイ，AI板書の講義中表示についても，今回の検証では確認していません．
+　過去のschema 1ビルドでは，40秒間に372フレームと画像差分イベント5件を旧`slideChangeCount`欄へ記録しました．その後のschema 2対応済み・意味修正前ビルドでは，別の40秒間に373フレーム，旧方式の画像差分イベント5件及び内容更新2件を記録しました．後者のレポートSHA-256は`704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`です．いずれも特定ビルドに限る履歴証拠であり，スライド同一性又は現行の意味修正後ビルドを検証した結果ではありません．5件を確認済みスライド切替と表現してはなりません．
+
+　現行ビルドの動的検証では，Core Graphics上で合成資料の編集窓を1件へ特定しましたが，PowerPointが当該資料の利用可能なAccessibilityウィンドウを返しませんでした．補助はスライド，キーボード又はマウス入力を一度も送らず停止し，runtimeレポートも生成していません．PowerPointのスクリプト命令を使う代替案は，対象プロセスへの束縛及び照合から命令までの時間差に未解決の安全問題が見つかったため使用しませんでした．したがって，現行ビルドの動的挙動及びマウス手書き挙動は未検証です．
+
+　現行実装は，160×90のRGB指紋による持続的な内容更新判定，長辺640ピクセル以下のRGBラスタ，及び`strokeCandidateRegions`を備えます．ただし，筆跡候補は既存PowerPointインクの確定分類ではありません．スライドキャンバスの切り出し，PowerPointの操作UI除外，OCR文字列，矩形・占有領域の座標精度，代表的な実用デッキ，アニメーション，長時間実行，ウィンドウ再選択，独立したLaunchServices起動は未検証です．マイクによる文字起こし，クリック透過オーバーレイ，AI板書の講義中表示についても，今回の検証では確認していません．
 
 ### ビルド
 
@@ -180,7 +193,7 @@ open LectureBoardAI.xcodeproj
 
 　`make build`は，署名を無効にしたコンパイル・リンク検査であり，ネイティブ動作確認に用いるアプリを生成する手順ではありません．`make test-app`は，ローカルのアドホック署名を用いてmacOSアプリの単体テストを実行します．`make build-runtime`は，制御された動作確認用としてarm64 Debugアプリをアドホック署名で生成します．アドホック署名はDeveloper ID配布署名又はnotarizationではありません．
 
-　同じアプリ名及びbundle identifierであっても，再ビルドによりコードIDが変化し，macOSから画面収録の再許可を求められる場合があります．Codexの許可下で実行ファイルを直接起動する経路と，LaunchServicesを介して独立起動する経路は別の検証対象です．上記の実測値は前者だけに該当し，後者は未検証です．公開CIが現在実行するのは，プラットフォーム非依存のCoreテストだけです．
+　同じアプリ名及びbundle identifierであっても，再ビルドによりコードIDが変化し，macOSから画面収録の再許可を求められる場合があります．Codexの許可下で実行ファイルを直接起動する経路と，LaunchServicesを介して独立起動する経路は別の検証対象です．上記の履歴実測値は前者だけに該当し，後者は未検証です．公開CIが現在実行するのは，プラットフォーム非依存のCoreテストだけです．
 
 ### Mac上でローカル開発を継続する
 

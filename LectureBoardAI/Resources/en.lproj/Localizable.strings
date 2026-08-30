@@ -39,13 +39,15 @@
 "capture.status.capturing" = "Capturing the selected PowerPoint window";
 "capture.frames" = "Frames observed";
 "capture.stableFrames" = "Stable snapshots";
-"capture.slideChanges" = "Slide changes";
+"capture.slideChanges" = "Confirmed slide changes";
+"capture.contentRevisions" = "Stable visual updates";
 "capture.noStableFrame" = "No stable frame has been confirmed yet.";
 "analysis.status.idle" = "Slide analysis is waiting for a stable frame";
 "analysis.status.analyzing" = "Analyzing stable slide text and geometry";
 "analysis.status.ready" = "Stable slide analysis is ready";
 "analysis.textBlocks" = "Text blocks";
 "analysis.graphicRegions" = "Rectangles";
+"analysis.strokeCandidateRegions" = "Stroke candidates";
 "analysis.occupiedRegions" = "Occupied regions";
 "analysis.titleCandidate" = "Title candidate";
 "style.title" = "Digital ink style";
@@ -60,3 +62,4 @@
 "error.noAudioInput" = "The microphone input could not be started.";
 "error.captureWindowUnavailable" = "The selected PowerPoint window is no longer available.";
 "error.captureWindowInactive" = "The selected PowerPoint window became inactive or was closed.";
+"error.rasterizationFailed" = "The captured PowerPoint frame could not be prepared for visual occupancy analysis.";

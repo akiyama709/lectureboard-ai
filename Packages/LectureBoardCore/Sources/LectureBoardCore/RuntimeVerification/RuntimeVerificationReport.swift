@@ -34,7 +34,7 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
 
 /// A metadata-only runtime verification record that excludes captured content and window titles.
 public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
-  public static let currentSchemaVersion = 1
+  public static let currentSchemaVersion = 3
 
   public let schemaVersion: Int
   public let startedAt: Date
@@ -53,7 +53,7 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
   public let snapshots: [RuntimeVerificationSnapshot]
 
   public init(
-    schemaVersion: Int = currentSchemaVersion,
+    schemaVersion _: Int = currentSchemaVersion,
     startedAt: Date,
     finishedAt: Date,
     requestedDurationSeconds: TimeInterval,
@@ -79,7 +79,9 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
       ? finishedAt
       : normalizedStartedAt
 
-    self.schemaVersion = max(schemaVersion, Self.currentSchemaVersion)
+    // Producers must never label the current payload as a future schema.
+    // Decoding older reports still preserves the version encoded in that report.
+    self.schemaVersion = Self.currentSchemaVersion
     self.startedAt = normalizedStartedAt
     self.finishedAt = max(finiteFinishedAt, normalizedStartedAt)
     self.requestedDurationSeconds =

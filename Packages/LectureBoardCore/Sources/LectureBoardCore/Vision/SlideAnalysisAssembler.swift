@@ -41,19 +41,52 @@ public struct SlideGeometryObservation: Codable, Hashable, Sendable, Identifiabl
 public struct SlideVisualAnalysis: Codable, Hashable, Sendable {
   public var title: String
   public var textBlocks: [SlideTextBlock]
+  public var strokeCandidateRegions: [NormalizedRect]
   public var graphicRegions: [NormalizedRect]
   public var occupiedRegions: [NormalizedRect]
 
   public init(
     title: String = "",
     textBlocks: [SlideTextBlock] = [],
+    strokeCandidateRegions: [NormalizedRect] = [],
     graphicRegions: [NormalizedRect] = [],
     occupiedRegions: [NormalizedRect] = []
   ) {
     self.title = title
     self.textBlocks = textBlocks
+    self.strokeCandidateRegions = strokeCandidateRegions
     self.graphicRegions = graphicRegions
     self.occupiedRegions = occupiedRegions
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case title
+    case textBlocks
+    case strokeCandidateRegions
+    case graphicRegions
+    case occupiedRegions
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    title = try container.decode(String.self, forKey: .title)
+    textBlocks = try container.decode([SlideTextBlock].self, forKey: .textBlocks)
+    strokeCandidateRegions =
+      try container.decodeIfPresent(
+        [NormalizedRect].self,
+        forKey: .strokeCandidateRegions
+      ) ?? []
+    graphicRegions = try container.decode([NormalizedRect].self, forKey: .graphicRegions)
+    occupiedRegions = try container.decode([NormalizedRect].self, forKey: .occupiedRegions)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(title, forKey: .title)
+    try container.encode(textBlocks, forKey: .textBlocks)
+    try container.encode(strokeCandidateRegions, forKey: .strokeCandidateRegions)
+    try container.encode(graphicRegions, forKey: .graphicRegions)
+    try container.encode(occupiedRegions, forKey: .occupiedRegions)
   }
 }
 
@@ -100,7 +133,8 @@ public struct SlideAnalysisAssembler: Sendable {
 
   public func assemble(
     textObservations: [SlideTextObservation],
-    geometryObservations: [SlideGeometryObservation]
+    geometryObservations: [SlideGeometryObservation],
+    strokeCandidateRegions: [NormalizedRect] = []
   ) -> SlideVisualAnalysis {
     let acceptedText = textObservations.compactMap(acceptedTextObservation)
       .sorted(by: spatiallyPrecedes)
@@ -114,14 +148,21 @@ public struct SlideAnalysisAssembler: Sendable {
 
     let graphicRegions = geometryObservations.compactMap(acceptedGeometryRegion)
       .sorted(by: spatiallyPrecedes)
-    let paddedRegions = (textBlocks.map(\.region) + graphicRegions).map {
-      expanded($0, by: configuration.occupancyPadding)
-    }
+    let acceptedStrokeCandidateRegions =
+      strokeCandidateRegions
+      .map { $0.clamped() }
+      .filter { $0.area > 0 }
+      .sorted(by: spatiallyPrecedes)
+    let paddedRegions = (textBlocks.map(\.region) + acceptedStrokeCandidateRegions + graphicRegions)
+      .map {
+        expanded($0, by: configuration.occupancyPadding)
+      }
     let occupiedRegions = merged(paddedRegions).sorted(by: spatiallyPrecedes)
 
     return SlideVisualAnalysis(
       title: titleCandidate(in: acceptedText),
       textBlocks: textBlocks,
+      strokeCandidateRegions: acceptedStrokeCandidateRegions,
       graphicRegions: graphicRegions,
       occupiedRegions: occupiedRegions
     )
@@ -227,15 +268,9 @@ public struct SlideAnalysisAssembler: Sendable {
   }
 
   private func spatiallyPrecedes(_ lhs: NormalizedRect, _ rhs: NormalizedRect) -> Bool {
-    if abs(lhs.y - rhs.y) > 0.002 {
-      return lhs.y < rhs.y
-    }
-    if abs(lhs.x - rhs.x) > 0.002 {
-      return lhs.x < rhs.x
-    }
-    if abs(lhs.height - rhs.height) > 0.002 {
-      return lhs.height > rhs.height
-    }
+    if lhs.y != rhs.y { return lhs.y < rhs.y }
+    if lhs.x != rhs.x { return lhs.x < rhs.x }
+    if lhs.height != rhs.height { return lhs.height > rhs.height }
     return lhs.width > rhs.width
   }
 }

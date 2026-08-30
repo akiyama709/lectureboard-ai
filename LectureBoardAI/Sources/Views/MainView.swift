@@ -179,6 +179,7 @@ struct MainView: View {
           LabeledContent("capture.frames", value: "\(model.capturedFrameCount)")
           LabeledContent("capture.stableFrames", value: "\(model.stableFrameCount)")
           LabeledContent("capture.slideChanges", value: "\(model.slideChangeCount)")
+          LabeledContent("capture.contentRevisions", value: "\(model.contentRevisionCount)")
         }
 
         HStack(spacing: 24) {
@@ -189,6 +190,10 @@ struct MainView: View {
           LabeledContent(
             "analysis.graphicRegions",
             value: "\(model.latestSlideAnalysis?.graphicRegions.count ?? 0)"
+          )
+          LabeledContent(
+            "analysis.strokeCandidateRegions",
+            value: "\(model.latestSlideAnalysis?.strokeCandidateRegions.count ?? 0)"
           )
           LabeledContent(
             "analysis.occupiedRegions",

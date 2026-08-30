@@ -14,10 +14,11 @@ The roadmap describes validation gates rather than promises of release dates.
 
 ## Milestone 1 — Observable lecture prototype
 
-- [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit — the current post-lifecycle-fix executable delivered 50 frames in a five-second static synthetic run; independent LaunchServices launch, dynamic rerun, representative decks, window reselection, and long-duration reliability remain pending
-- [ ] Detect slide changes and stable frames — an earlier pre-lifecycle-fix run confirmed 5 stable frames and classified 4 slide changes, while the current executable confirmed one static stable frame; dynamic rerun and animations remain unverified, and broader threshold calibration across representative transitions remains pending
-- [ ] Recognize slide text and geometry — Vision completed on the current executable with maxima of 35 text and 9 rectangle observations; OCR correctness and coordinate accuracy remain pending
-- [ ] Build normalized occupied regions from detected text and rectangles — the current static run produced up to 4 occupied regions; coordinate and overlap-avoidance accuracy remain pending
+- [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit — historical direct-executable builds delivered 372 frames in one schema-1 run and 373 frames in a separate schema-2 pre-semantic run; a current-build dynamic attempt stopped before input because PowerPoint exposed no usable Accessibility window, so live validation of the current semantic build, independent LaunchServices launch, representative decks, window reselection, and long-duration reliability remain pending
+- [ ] Confirm stable visual frames and persistent content updates — the current source has deterministic coarse luminance classification plus dense 160-by-90 RGB persistence detection and corresponding Core/App tests; no successful live dynamic or mouse-ink result has yet been recorded for this semantic build
+- [ ] Identify actual slide transitions — image-only `.significantVisualChange` is now counted as a stable visual/content update, not slide identity; `slideChangeCount` remains zero until an independent identity signal is implemented and tested
+- [ ] Recognize slide text and geometry — Vision has run in historical controlled builds, but the current semantic build and OCR correctness remain unverified; coordinate accuracy is also pending
+- [ ] Build normalized occupied regions from detected text, rectangles, and raster candidates — the current source produces a maximum-640-pixel RGB raster and keeps `strokeCandidateRegions` separate from confirmed ink; slide-canvas cropping, PowerPoint UI exclusion, coordinate accuracy, and overlap-avoidance accuracy remain pending
 - [ ] Detect existing PowerPoint ink as occupied space
 - [ ] Route live transcript segments into the contextual board engine
 - [ ] Render stable text, boxes, arrows, and causal chains

@@ -34,4 +34,18 @@ struct RuntimeVerificationSnapshotProjectorTests {
       ) == 0
     )
   }
+
+  @Test func projectsDefaultContentRevisionAndStrokeCandidateMetadata() {
+    let model = AppModel()
+
+    let snapshot = RuntimeVerificationSnapshotProjector.makeSnapshot(
+      from: model,
+      timestamp: Date(timeIntervalSince1970: 0),
+      elapsedMilliseconds: 0,
+      screenRecordingPermission: .authorized
+    )
+
+    #expect(snapshot.contentRevisionCount == model.contentRevisionCount)
+    #expect(snapshot.strokeCandidateRegionCount == 0)
+  }
 }

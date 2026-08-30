@@ -13,16 +13,23 @@ missing=0
 while IFS= read -r source_file; do
   source_file="${source_file#./}"
   if ! git ls-files --error-unmatch "$source_file" >/dev/null 2>&1; then
-    echo "Required Swift source is not included in Git: $source_file" >&2
+    echo "Required source is not included in Git: $source_file" >&2
     missing=1
   fi
 done < <(
-  find LectureBoardAI/Sources Packages/LectureBoardCore/Sources \
-    -type f -name '*.swift' -print | sort
+  {
+    find \
+      LectureBoardAI/Sources \
+      LectureBoardAI/Tests \
+      Packages/LectureBoardCore/Sources \
+      Packages/LectureBoardCore/Tests \
+      -type f -name '*.swift' -print
+    find scripts -maxdepth 1 -type f -print
+  } | sort -u
 )
 
 if (( missing > 0 )); then
   exit 1
 fi
 
-echo "All Swift source files are included in Git."
+echo "All required source files are included in Git."

@@ -20,8 +20,10 @@ enum RuntimeVerificationSnapshotProjector {
       repeatedFrameCount: model.repeatedCapturedFrameCount,
       stableFrameCount: model.stableFrameCount,
       slideChangeCount: model.slideChangeCount,
+      contentRevisionCount: model.contentRevisionCount,
       recognizedTextCount: model.latestSlideAnalysis?.textBlocks.count ?? 0,
       detectedRectangleCount: model.latestSlideAnalysis?.graphicRegions.count ?? 0,
+      strokeCandidateRegionCount: model.latestSlideAnalysis?.strokeCandidateRegions.count ?? 0,
       occupiedRegionCount: model.latestSlideAnalysis?.occupiedRegions.count ?? 0,
       lastNewFrameAt: model.lastNewFrameAt,
       latestDifferenceFromStableFrame: model.latestDifferenceFromStableFrame

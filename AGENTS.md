@@ -29,30 +29,36 @@ Implemented:
 - Native SwiftUI/AppKit application shell.
 - PowerPoint-window discovery prototype with ScreenCaptureKit.
 - Compiled ScreenCaptureKit adapter for continuous capture of the selected PowerPoint window.
-- Deterministic frame fingerprints, stable-frame confirmation, and slide-change classification.
-- Compiled Vision text and rectangle analysis triggered by confirmed stable frames.
-- Deterministic normalized occupied-region filtering, padding, and merging.
+- Deterministic coarse luminance fingerprints and stable-frame or significant-visual-change classification. Image difference alone is not treated as slide identity.
+- Persistent visual-content updates from dense 160-by-90 RGB fingerprints.
+- Compiled Vision text and rectangle analysis triggered by confirmed stable visual frames or content updates.
+- A native RGB raster path, limited to a 640-pixel long edge, and deterministic `strokeCandidateRegions` that remain distinct from confirmed PowerPoint ink.
+- Deterministic normalized occupied-region filtering, padding, and merging across text, rectangles, and stroke candidates.
 - Capture-monitor analysis counts and occupied-region preview overlays.
+- Metadata-only runtime reports at schema version 3, including content-revision and stroke-candidate counts. Schema 1 and pre-semantic-correction schema 2 remain decodable as historical formats.
 - Click-through transparent overlay prototype.
 - Japanese or English Apple Speech prototype.
 - Platform-neutral `LectureBoardCore` package.
 - Contextual importance scoring and board-intent classification.
 - Vector board-scene models and simple empty-region placement.
-- Core unit tests and open-source repository documentation.
+- Core unit tests and open-source repository documentation. The current source passes 80 Core tests and 71 native app tests on the development Mac.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
-- The current post-lifecycle-fix executable was launched directly under the Codex-authorized environment, not through LaunchServices. A five-second static run delivered 50 frames, confirmed one stable frame, and reached completed Vision analysis with observed maxima of 35 text observations, 9 rectangles, and 4 occupied regions.
-- An earlier pre-lifecycle-fix executable completed one dynamic slideshow run with 220 frames, 5 stable frames, and 4 classified slide changes. That run remains threshold-calibration evidence, but it is not runtime evidence for the current executable.
-- Neither run establishes standalone LaunchServices authorization, recognition or coordinate accuracy, representative-deck coverage, or lecture-length reliability.
+- A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
+- A later schema-2 but pre-semantic-correction build completed a separate 40-second exact-window run with 373 frames, 6 stable snapshots, the same 5 legacy heuristic change classifications, and 2 content revisions. The report SHA-256 is `704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`. This is build-specific historical evidence for capture and metadata production; it must not be presented as verification of the current source or of slide identity.
+- No live dynamic or mouse-ink result has yet been recorded for the current build in which image-only changes are content revisions and `slideChangeCount` is reserved for a future independent identity signal. A current-build dynamic attempt stopped before sending input because PowerPoint exposed no usable Accessibility window for the exact synthetic presentation; no runtime report was produced.
+- Neither historical run establishes standalone LaunchServices authorization, recognition or coordinate accuracy, slide-canvas isolation, representative-deck coverage, or lecture-length reliability.
 
 Not yet implemented or verified:
 
 - Independent LaunchServices runtime validation of continuous PowerPoint frame capture.
-- Dynamic slideshow validation of slide-change delivery with the current post-lifecycle-fix executable.
-- Representative-deck, animation, reselection, and long-duration calibration of stable slide-change detection.
+- Live dynamic and same-slide mouse-ink validation with the current semantic build.
+- An independent signal that identifies actual PowerPoint slide transitions. Until it is implemented, `slideChangeCount` remains zero rather than inferring identity from pixels.
+- Representative-deck, animation, reselection, and long-duration calibration of stable visual/content-update detection.
 - OCR correctness and coordinate-accuracy calibration of Vision text, rectangle, and occupied-region analysis.
-- Robust object, empty-space, and existing-ink analysis beyond detected text and rectangles.
+- Slide-canvas cropping and exclusion of PowerPoint controls or other window UI from analysis.
+- Robust object, empty-space, and existing-ink analysis beyond detected text, rectangles, and raster stroke candidates.
 - Existing PowerPoint ink detection.
 - Real speaker-note and `.pptx` parsing.
 - Reliable Japanese–English code switching.
@@ -66,12 +72,13 @@ Not yet implemented or verified:
 Implement and validate the observable lecture path in this order:
 
 1. Continuously capture only the selected PowerPoint window with ScreenCaptureKit.
-2. Produce stable frame snapshots and detect slide transitions.
-3. Run Vision text and geometry analysis on stable frames.
-4. Build a normalized occupied-region map, including existing presenter ink.
-5. Feed real `SlideContext` data and final transcript segments into `ContextualBoardEngine`.
-6. Render stable text, boxes, arrows, and causal chains without overlap.
-7. Persist a minimal lecture session as JSON and SVG.
+2. Produce stable visual snapshots and persistent content-update events.
+3. Add an independent slide-identity signal before counting slide transitions.
+4. Run Vision text, geometry, and raster candidate analysis on stable visual frames.
+5. Crop to the slide canvas and build a normalized occupied-region map, including verified existing presenter ink.
+6. Feed real `SlideContext` data and final transcript segments into `ContextualBoardEngine`.
+7. Render stable text, boxes, arrows, and causal chains without overlap.
+8. Persist a minimal lecture session as JSON and SVG.
 
 Do not jump to cloud LLM integration before the capture, slide-state, occupancy, and grounding path is observable and testable.
 

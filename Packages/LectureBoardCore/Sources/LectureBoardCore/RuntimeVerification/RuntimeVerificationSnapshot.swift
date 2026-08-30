@@ -34,8 +34,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let repeatedFrameCount: Int
   public let stableFrameCount: Int
   public let slideChangeCount: Int
+  public let contentRevisionCount: Int
   public let recognizedTextCount: Int
   public let detectedRectangleCount: Int
+  public let strokeCandidateRegionCount: Int
   public let occupiedRegionCount: Int
   public let lastNewFrameAt: Date?
   public let latestDifferenceFromStableFrame: Double?
@@ -51,8 +53,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     repeatedFrameCount: Int,
     stableFrameCount: Int,
     slideChangeCount: Int,
+    contentRevisionCount: Int = 0,
     recognizedTextCount: Int,
     detectedRectangleCount: Int,
+    strokeCandidateRegionCount: Int = 0,
     occupiedRegionCount: Int,
     lastNewFrameAt: Date? = nil,
     latestDifferenceFromStableFrame: Double? = nil
@@ -70,8 +74,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.repeatedFrameCount = max(repeatedFrameCount, 0)
     self.stableFrameCount = max(stableFrameCount, 0)
     self.slideChangeCount = max(slideChangeCount, 0)
+    self.contentRevisionCount = max(contentRevisionCount, 0)
     self.recognizedTextCount = max(recognizedTextCount, 0)
     self.detectedRectangleCount = max(detectedRectangleCount, 0)
+    self.strokeCandidateRegionCount = max(strokeCandidateRegionCount, 0)
     self.occupiedRegionCount = max(occupiedRegionCount, 0)
     self.lastNewFrameAt = lastNewFrameAt.flatMap {
       $0.timeIntervalSinceReferenceDate.isFinite ? $0 : nil
@@ -79,5 +85,63 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.latestDifferenceFromStableFrame = latestDifferenceFromStableFrame.flatMap {
       $0.isFinite ? min(max($0, 0), 1) : nil
     }
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case timestamp
+    case elapsedMilliseconds
+    case screenRecordingPermission
+    case captureState
+    case visionState
+    case frameCount
+    case newFrameCount
+    case repeatedFrameCount
+    case stableFrameCount
+    case slideChangeCount
+    case contentRevisionCount
+    case recognizedTextCount
+    case detectedRectangleCount
+    case strokeCandidateRegionCount
+    case occupiedRegionCount
+    case lastNewFrameAt
+    case latestDifferenceFromStableFrame
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      timestamp: try container.decode(Date.self, forKey: .timestamp),
+      elapsedMilliseconds: try container.decode(Int.self, forKey: .elapsedMilliseconds),
+      screenRecordingPermission: try container.decode(
+        ScreenRecordingPermissionState.self,
+        forKey: .screenRecordingPermission
+      ),
+      captureState: try container.decode(RuntimeCaptureState.self, forKey: .captureState),
+      visionState: try container.decode(RuntimeVisionState.self, forKey: .visionState),
+      frameCount: try container.decode(Int.self, forKey: .frameCount),
+      newFrameCount: try container.decode(Int.self, forKey: .newFrameCount),
+      repeatedFrameCount: try container.decode(Int.self, forKey: .repeatedFrameCount),
+      stableFrameCount: try container.decode(Int.self, forKey: .stableFrameCount),
+      slideChangeCount: try container.decode(Int.self, forKey: .slideChangeCount),
+      contentRevisionCount: try container.decodeIfPresent(
+        Int.self,
+        forKey: .contentRevisionCount
+      ) ?? 0,
+      recognizedTextCount: try container.decode(Int.self, forKey: .recognizedTextCount),
+      detectedRectangleCount: try container.decode(
+        Int.self,
+        forKey: .detectedRectangleCount
+      ),
+      strokeCandidateRegionCount: try container.decodeIfPresent(
+        Int.self,
+        forKey: .strokeCandidateRegionCount
+      ) ?? 0,
+      occupiedRegionCount: try container.decode(Int.self, forKey: .occupiedRegionCount),
+      lastNewFrameAt: try container.decodeIfPresent(Date.self, forKey: .lastNewFrameAt),
+      latestDifferenceFromStableFrame: try container.decodeIfPresent(
+        Double.self,
+        forKey: .latestDifferenceFromStableFrame
+      )
+    )
   }
 }

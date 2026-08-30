@@ -39,13 +39,15 @@
 "capture.status.capturing" = "選択したPowerPointウィンドウを取得中";
 "capture.frames" = "取得フレーム";
 "capture.stableFrames" = "安定スナップショット";
-"capture.slideChanges" = "スライド切替";
+"capture.slideChanges" = "確認済みスライド切替";
+"capture.contentRevisions" = "安定した視覚更新";
 "capture.noStableFrame" = "安定フレームはまだ確定していません．";
 "analysis.status.idle" = "安定フレームを待っています";
 "analysis.status.analyzing" = "安定スライドの文字と図形を解析中";
 "analysis.status.ready" = "安定スライドの解析が完了しました";
 "analysis.textBlocks" = "文字領域";
 "analysis.graphicRegions" = "矩形領域";
+"analysis.strokeCandidateRegions" = "筆跡候補";
 "analysis.occupiedRegions" = "占有領域";
 "analysis.titleCandidate" = "タイトル候補";
 "style.title" = "板書スタイル";
@@ -60,3 +62,4 @@
 "error.noAudioInput" = "マイク入力を開始できませんでした．";
 "error.captureWindowUnavailable" = "選択したPowerPointウィンドウを利用できなくなりました．";
 "error.captureWindowInactive" = "選択したPowerPointウィンドウが非アクティブになったか，閉じられました．";
+"error.rasterizationFailed" = "取得したPowerPoint画面を視覚的な占有領域の解析用に準備できませんでした．";

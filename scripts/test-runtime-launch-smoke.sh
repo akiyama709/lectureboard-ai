@@ -3,12 +3,15 @@ set -euo pipefail
 
 script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd -- "$script_directory/.." && pwd)"
+source "$script_directory/runtime-launch-preflight.sh"
 runtime_app="$repository_root/DerivedData/RuntimeBuild/Build/Products/Debug/LectureBoard AI.app"
 runtime_executable="$runtime_app/Contents/MacOS/LectureBoard AI"
 temporary_parent="${TMPDIR:-/tmp}"
 temporary_directory="$(mktemp -d "$temporary_parent/lectureboard-runtime-smoke.XXXXXX")"
+invalid_report_path="$temporary_directory/invalid-runtime-report.json"
 report_path="$temporary_directory/runtime-report.json"
 report_plist="$temporary_directory/runtime-report.plist"
+root_report_plist="$temporary_directory/runtime-report-root.plist"
 invalid_stdout="$temporary_directory/invalid.stdout"
 invalid_stderr="$temporary_directory/invalid.stderr"
 smoke_stdout="$temporary_directory/smoke.stdout"
@@ -36,8 +39,10 @@ cleanup() {
   terminate_active_process
 
   rm -f -- \
+    "$invalid_report_path" \
     "$report_path" \
     "$report_plist" \
+    "$root_report_plist" \
     "$invalid_stdout" \
     "$invalid_stderr" \
     "$smoke_stdout" \
@@ -94,6 +99,13 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
+if ! runtime_window_server_is_accessible; then
+  printf '%s\n' \
+    'Runtime launch smoke testing requires access to the macOS WindowServer; no app was launched.' \
+    >&2
+  exit 1
+fi
+
 for required_command in plutil mktemp uuidgen; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     printf 'Required command not found: %s\n' "$required_command" >&2
@@ -116,7 +128,7 @@ run_with_timeout \
   --runtime-verification \
   --window-id 0 \
   --observation-seconds 1 \
-  --output-path "$report_path" \
+  --output-path "$invalid_report_path" \
   || invalid_exit_status=$?
 if (( invalid_exit_status != 0 )); then
   if (( invalid_exit_status == 124 )); then
@@ -137,6 +149,12 @@ if ! grep -Fq 'Invalid runtime verification arguments:' "$invalid_stderr"; then
     "$invalid_stdout" \
     "$invalid_stderr"
 fi
+if [[ -e "$invalid_report_path" ]]; then
+  fail_with_logs \
+    'Invalid runtime arguments unexpectedly produced a report.' \
+    "$invalid_stdout" \
+    "$invalid_stderr"
+fi
 
 impossible_title="LectureBoard-Runtime-Smoke-No-Match-$(uuidgen)"
 runtime_arguments=(
@@ -152,6 +170,13 @@ for argument in "${runtime_arguments[@]}"; do
     exit 1
   fi
 done
+
+if [[ -e "$report_path" ]]; then
+  fail_with_logs \
+    'The no-match smoke report path was not unused before launch.' \
+    "$smoke_stdout" \
+    "$smoke_stderr"
+fi
 
 smoke_exit_status=0
 run_with_timeout \
@@ -189,7 +214,10 @@ if ! grep -Eq '^[[:space:]]*\{' "$report_path" \
     "$smoke_stderr"
 fi
 
-allowed_report_keys="$(
+cp -- "$report_plist" "$root_report_plist"
+plutil -replace snapshots -json '[]' "$root_report_plist"
+
+allowed_root_report_keys="$(
   printf '%s\n' \
     schemaVersion \
     startedAt \
@@ -205,41 +233,28 @@ allowed_report_keys="$(
     runStatus \
     failureCode \
     failureMessage \
-    snapshots \
-    timestamp \
-    elapsedMilliseconds \
-    screenRecordingPermission \
-    captureState \
-    visionState \
-    frameCount \
-    newFrameCount \
-    repeatedFrameCount \
-    stableFrameCount \
-    slideChangeCount \
-    recognizedTextCount \
-    detectedRectangleCount \
-    occupiedRegionCount \
-    lastNewFrameAt \
-    latestDifferenceFromStableFrame
+    snapshots
 )"
 
 while IFS= read -r report_key; do
-  if ! grep -Fxq "$report_key" <<<"$allowed_report_keys"; then
+  if ! grep -Fxq "$report_key" <<<"$allowed_root_report_keys"; then
     fail_with_logs \
-      "Runtime verification report contains a non-metadata key: $report_key" \
+      "Runtime verification report root contains an unexpected key: $report_key" \
       "$smoke_stdout" \
       "$smoke_stderr"
   fi
-done < <(sed -n 's/^[[:space:]]*<key>\([^<]*\)<\/key>$/\1/p' "$report_plist")
+done < <(sed -n 's/^[[:space:]]*<key>\([^<]*\)<\/key>$/\1/p' "$root_report_plist")
 
 permission_was_requested="$(
   plutil -extract permissionWasRequested raw -o - "$report_path"
 )"
+schema_version="$(plutil -extract schemaVersion raw -o - "$report_path")"
 run_status="$(plutil -extract runStatus raw -o - "$report_path")"
 failure_code="$(plutil -extract failureCode raw -o - "$report_path")"
 snapshot_count="$(plutil -extract snapshots raw -o - "$report_path")"
 
-if [[ "$permission_was_requested" != "false" \
+if [[ "$schema_version" != "3" \
+  || "$permission_was_requested" != "false" \
   || "$run_status" != "failed" \
   || "$snapshot_count" != "0" ]] \
   || [[ "$failure_code" != "screenRecordingUnavailable" \

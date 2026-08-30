@@ -121,6 +121,87 @@ struct SlideAnalysisAssemblerTests {
     #expect(abs(occupied.maxY - 0.21) < 0.000_001)
   }
 
+  @Test func keepsStrokeCandidatesSeparateFromGraphicRegions() {
+    let strokeRegion = NormalizedRect(x: 0.15, y: 0.40, width: 0.20, height: 0.02)
+    let graphicRegion = NormalizedRect(x: 0.60, y: 0.40, width: 0.20, height: 0.20)
+    let analysis = SlideAnalysisAssembler(
+      configuration: SlideAnalysisConfiguration(occupancyPadding: 0, mergeTolerance: 0)
+    ).assemble(
+      textObservations: [],
+      geometryObservations: [
+        SlideGeometryObservation(region: graphicRegion, confidence: 1)
+      ],
+      strokeCandidateRegions: [strokeRegion]
+    )
+
+    #expect(analysis.strokeCandidateRegions.count == 1)
+    #expect(approximatelyEqual(analysis.strokeCandidateRegions[0], strokeRegion))
+    #expect(analysis.graphicRegions.count == 1)
+    #expect(approximatelyEqual(analysis.graphicRegions[0], graphicRegion))
+    #expect(analysis.occupiedRegions.count == 2)
+    #expect(approximatelyEqual(analysis.occupiedRegions[0], strokeRegion))
+    #expect(approximatelyEqual(analysis.occupiedRegions[1], graphicRegion))
+  }
+
+  @Test func transitivelyMergesTextThenStrokeThenGraphicOccupancy() {
+    let analysis = SlideAnalysisAssembler(
+      configuration: SlideAnalysisConfiguration(occupancyPadding: 0, mergeTolerance: 0)
+    ).assemble(
+      textObservations: [
+        SlideTextObservation(
+          text: "Text",
+          region: NormalizedRect(x: 0.10, y: 0.20, width: 0.10, height: 0.10),
+          confidence: 1
+        )
+      ],
+      geometryObservations: [
+        SlideGeometryObservation(
+          region: NormalizedRect(x: 0.30, y: 0.20, width: 0.10, height: 0.10),
+          confidence: 1
+        )
+      ],
+      strokeCandidateRegions: [
+        NormalizedRect(x: 0.20, y: 0.20, width: 0.10, height: 0.10)
+      ]
+    )
+
+    #expect(analysis.occupiedRegions.count == 1)
+    #expect(
+      approximatelyEqual(
+        analysis.occupiedRegions[0],
+        NormalizedRect(x: 0.10, y: 0.20, width: 0.30, height: 0.10)
+      )
+    )
+  }
+
+  @Test func clampsAndDropsEmptyStrokeCandidateRegions() {
+    let analysis = SlideAnalysisAssembler(
+      configuration: SlideAnalysisConfiguration(occupancyPadding: 0, mergeTolerance: 0)
+    ).assemble(
+      textObservations: [],
+      geometryObservations: [],
+      strokeCandidateRegions: [
+        NormalizedRect(x: -0.10, y: 0.30, width: 0.30, height: 0.05),
+        NormalizedRect(x: 1.20, y: 0.20, width: 0.10, height: 0.10),
+      ]
+    )
+
+    #expect(analysis.strokeCandidateRegions.count == 1)
+    #expect(
+      approximatelyEqual(
+        analysis.strokeCandidateRegions[0],
+        NormalizedRect(x: 0, y: 0.30, width: 0.20, height: 0.05)
+      )
+    )
+    #expect(analysis.occupiedRegions.count == 1)
+    #expect(
+      approximatelyEqual(
+        analysis.occupiedRegions[0],
+        analysis.strokeCandidateRegions[0]
+      )
+    )
+  }
+
   @Test func preservesSeparatedOccupiedRegionsInSpatialOrder() {
     let configuration = SlideAnalysisConfiguration(
       occupancyPadding: 0,
@@ -145,6 +226,33 @@ struct SlideAnalysisAssemblerTests {
     #expect(analysis.textBlocks.map(\.text) == ["Upper", "Lower"])
     #expect(analysis.occupiedRegions.count == 2)
     #expect(analysis.occupiedRegions[0].y < analysis.occupiedRegions[1].y)
+  }
+
+  @Test func ordersNearRowsWithAStrictLexicographicComparator() {
+    let analysis = SlideAnalysisAssembler(
+      configuration: SlideAnalysisConfiguration(occupancyPadding: 0, mergeTolerance: 0)
+    ).assemble(
+      textObservations: [
+        SlideTextObservation(
+          text: "C",
+          region: NormalizedRect(x: 0, y: 0.003, width: 0.1, height: 0.01),
+          confidence: 1
+        ),
+        SlideTextObservation(
+          text: "B",
+          region: NormalizedRect(x: 0.5, y: 0.0015, width: 0.1, height: 0.01),
+          confidence: 1
+        ),
+        SlideTextObservation(
+          text: "A",
+          region: NormalizedRect(x: 0.9, y: 0, width: 0.1, height: 0.01),
+          confidence: 1
+        ),
+      ],
+      geometryObservations: []
+    )
+
+    #expect(analysis.textBlocks.map(\.text) == ["A", "B", "C"])
   }
 
   @Test func normalizesInvalidConfigurationBounds() {
@@ -178,6 +286,9 @@ struct SlideAnalysisAssemblerTests {
           region: NormalizedRect(x: 0.08, y: 0.06, width: 0.42, height: 0.08)
         )
       ],
+      strokeCandidateRegions: [
+        NormalizedRect(x: 0.18, y: 0.60, width: 0.35, height: 0.03)
+      ],
       graphicRegions: [
         NormalizedRect(x: 0.12, y: 0.30, width: 0.28, height: 0.24)
       ],
@@ -191,4 +302,32 @@ struct SlideAnalysisAssemblerTests {
     let decoded = try JSONDecoder().decode(SlideVisualAnalysis.self, from: data)
     #expect(decoded == analysis)
   }
+
+  @Test func visualAnalysisDecodesLegacyJSONWithoutStrokeCandidateKey() throws {
+    let legacyJSON = Data(
+      """
+      {
+        "title": "Legacy",
+        "textBlocks": [],
+        "graphicRegions": [],
+        "occupiedRegions": []
+      }
+      """.utf8
+    )
+
+    let decoded = try JSONDecoder().decode(SlideVisualAnalysis.self, from: legacyJSON)
+    #expect(decoded.title == "Legacy")
+    #expect(decoded.strokeCandidateRegions.isEmpty)
+  }
+}
+
+private func approximatelyEqual(
+  _ lhs: NormalizedRect,
+  _ rhs: NormalizedRect,
+  tolerance: Double = 0.000_001
+) -> Bool {
+  abs(lhs.x - rhs.x) < tolerance
+    && abs(lhs.y - rhs.y) < tolerance
+    && abs(lhs.width - rhs.width) < tolerance
+    && abs(lhs.height - rhs.height) < tolerance
 }

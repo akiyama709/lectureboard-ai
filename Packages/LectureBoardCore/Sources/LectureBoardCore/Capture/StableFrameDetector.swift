@@ -12,9 +12,9 @@ public struct FrameFingerprint: Equatable, Sendable {
   }
 
   public var isValid: Bool {
-    sampleColumns > 0
-      && sampleRows > 0
-      && luminance.count == sampleColumns * sampleRows
+    guard sampleColumns > 0, sampleRows > 0 else { return false }
+    let (expectedSampleCount, overflow) = sampleColumns.multipliedReportingOverflow(by: sampleRows)
+    return !overflow && luminance.count == expectedSampleCount
   }
 
   public func normalizedDifference(from other: FrameFingerprint) -> Double {
@@ -30,19 +30,25 @@ public struct FrameFingerprint: Equatable, Sendable {
 
 public struct StableFrameDetectorConfiguration: Equatable, Sendable {
   public var stableDifferenceThreshold: Double
-  public var slideChangeThreshold: Double
+  public var significantChangeThreshold: Double
   public var requiredConsecutiveFrames: Int
 
   public init(
     stableDifferenceThreshold: Double = 0.012,
-    slideChangeThreshold: Double = 0.02,
+    significantChangeThreshold: Double = 0.02,
     requiredConsecutiveFrames: Int = 3
   ) {
-    let stableThreshold = min(max(stableDifferenceThreshold, 0), 1)
-    let changeThreshold = min(max(slideChangeThreshold, 0), 1)
+    let stableThreshold = Self.normalizedUnitInterval(stableDifferenceThreshold)
+    let changeThreshold = Self.normalizedUnitInterval(significantChangeThreshold)
     self.stableDifferenceThreshold = stableThreshold
-    self.slideChangeThreshold = max(stableThreshold, changeThreshold)
+    self.significantChangeThreshold = max(stableThreshold, changeThreshold)
     self.requiredConsecutiveFrames = max(requiredConsecutiveFrames, 1)
+  }
+
+  private static func normalizedUnitInterval(_ value: Double) -> Double {
+    if value.isNaN || value <= 0 { return 0 }
+    if value >= 1 { return 1 }
+    return value
   }
 }
 
@@ -52,7 +58,7 @@ public enum FrameStability: Equatable, Sendable {
   case unchanged
   case stable
   case transitioning
-  case slideChanged
+  case significantVisualChange
 }
 
 public struct StableFrameObservation: Equatable, Sendable {
@@ -123,7 +129,7 @@ public struct StableFrameDetector: Sendable {
     guard candidateCount >= configuration.requiredConsecutiveFrames else {
       let isTransitioning =
         differenceFromStable.map {
-          $0 >= configuration.slideChangeThreshold
+          $0 >= configuration.significantChangeThreshold
         } ?? false
       return StableFrameObservation(
         stability: isTransitioning
@@ -134,16 +140,16 @@ public struct StableFrameDetector: Sendable {
       )
     }
 
-    let didChangeSlide =
+    let isSignificantChange =
       differenceFromStable.map {
-        $0 >= configuration.slideChangeThreshold
+        $0 >= configuration.significantChangeThreshold
       } ?? false
     stableFrame = frame
     candidateFrame = nil
     candidateCount = 0
 
     return StableFrameObservation(
-      stability: didChangeSlide ? .slideChanged : .stable,
+      stability: isSignificantChange ? .significantVisualChange : .stable,
       differenceFromStableFrame: differenceFromStable,
       stableFrame: frame
     )

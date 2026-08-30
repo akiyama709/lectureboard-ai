@@ -16,8 +16,10 @@ struct RuntimeVerificationSnapshotTests {
       repeatedFrameCount: 116,
       stableFrameCount: 3,
       slideChangeCount: 2,
+      contentRevisionCount: 4,
       recognizedTextCount: 7,
       detectedRectangleCount: 2,
+      strokeCandidateRegionCount: 3,
       occupiedRegionCount: 5,
       lastNewFrameAt: Date(timeIntervalSince1970: 1_788_045_599),
       latestDifferenceFromStableFrame: 0.42
@@ -31,6 +33,8 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["image"] == nil)
     #expect(object["recognizedText"] == nil)
     #expect(object["title"] == nil)
+    #expect(object["contentRevisionCount"] as? Int == 4)
+    #expect(object["strokeCandidateRegionCount"] as? Int == 3)
   }
 
   @Test func normalizesInvalidCountersAndMeasurements() {
@@ -45,8 +49,10 @@ struct RuntimeVerificationSnapshotTests {
       repeatedFrameCount: -3,
       stableFrameCount: -4,
       slideChangeCount: -5,
+      contentRevisionCount: -6,
       recognizedTextCount: -6,
       detectedRectangleCount: -7,
+      strokeCandidateRegionCount: -8,
       occupiedRegionCount: -8,
       lastNewFrameAt: Date(timeIntervalSince1970: .infinity),
       latestDifferenceFromStableFrame: .nan
@@ -58,8 +64,10 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.repeatedFrameCount == 0)
     #expect(snapshot.stableFrameCount == 0)
     #expect(snapshot.slideChangeCount == 0)
+    #expect(snapshot.contentRevisionCount == 0)
     #expect(snapshot.recognizedTextCount == 0)
     #expect(snapshot.detectedRectangleCount == 0)
+    #expect(snapshot.strokeCandidateRegionCount == 0)
     #expect(snapshot.occupiedRegionCount == 0)
     #expect(snapshot.lastNewFrameAt == nil)
     #expect(snapshot.latestDifferenceFromStableFrame == nil)

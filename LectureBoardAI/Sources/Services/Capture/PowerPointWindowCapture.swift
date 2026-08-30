@@ -17,6 +17,43 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
   let deliveryKind: CapturedFrameDeliveryKind
   let image: CGImage
   let fingerprint: FrameFingerprint
+  let contentFingerprint: ContentFingerprint?
+}
+
+enum CapturedPowerPointFrameFactory {
+  static func makeNewFrame(
+    windowID: CGWindowID,
+    sequenceNumber: UInt64,
+    capturedAt: Date,
+    image: CGImage,
+    fingerprint: FrameFingerprint
+  ) -> CapturedPowerPointFrame {
+    CapturedPowerPointFrame(
+      windowID: windowID,
+      sequenceNumber: sequenceNumber,
+      capturedAt: capturedAt,
+      deliveryKind: .new,
+      image: image,
+      fingerprint: fingerprint,
+      contentFingerprint: CGImageRasterizer.makeContentFingerprint(from: image)
+    )
+  }
+
+  static func makeIdleRepeat(
+    from lastFrame: CapturedPowerPointFrame,
+    sequenceNumber: UInt64,
+    capturedAt: Date
+  ) -> CapturedPowerPointFrame {
+    CapturedPowerPointFrame(
+      windowID: lastFrame.windowID,
+      sequenceNumber: sequenceNumber,
+      capturedAt: capturedAt,
+      deliveryKind: .idleRepeat,
+      image: lastFrame.image,
+      fingerprint: lastFrame.fingerprint,
+      contentFingerprint: lastFrame.contentFingerprint
+    )
+  }
 }
 
 enum PowerPointWindowCaptureError: LocalizedError {
@@ -259,13 +296,10 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     guard let lastFrame else { return }
     sequenceNumber &+= 1
     frameHandler(
-      CapturedPowerPointFrame(
-        windowID: windowID,
+      CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: lastFrame,
         sequenceNumber: sequenceNumber,
-        capturedAt: Date(),
-        deliveryKind: .idleRepeat,
-        image: lastFrame.image,
-        fingerprint: lastFrame.fingerprint
+        capturedAt: Date()
       )
     )
   }
@@ -282,11 +316,10 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     }
 
     sequenceNumber &+= 1
-    let frame = CapturedPowerPointFrame(
+    let frame = CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
-      deliveryKind: .new,
       image: image,
       fingerprint: fingerprint
     )

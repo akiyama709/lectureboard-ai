@@ -49,7 +49,9 @@ final class AppModel: ObservableObject {
   @Published private(set) var lastNewFrameAt: Date?
   @Published private(set) var latestDifferenceFromStableFrame: Double?
   @Published private(set) var stableFrameCount = 0
+  /// Reserved for transitions confirmed by an independent slide-identity signal.
   @Published private(set) var slideChangeCount = 0
+  @Published private(set) var contentRevisionCount = 0
   @Published private(set) var latestStableFrame: CGImage?
   @Published private(set) var slideAnalysisStatus: SlideAnalysisStatus = .idle
   @Published private(set) var latestSlideAnalysis: SlideVisualAnalysis?
@@ -59,15 +61,17 @@ final class AppModel: ObservableObject {
   private let overlayController = OverlayWindowController()
   private let speechProvider = AppleSpeechRecognizerProvider()
   private let windowCapture: any PowerPointWindowCapturing
-  private let slideVisionAnalyzer = SlideVisionAnalyzer()
+  private let slideVisionAnalyzer: any SlideVisualAnalyzing
   private let boardEngine = ContextualBoardEngine()
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
+  private var stableContentChangeDetector = StableContentChangeDetector()
   private var captureDeliveryMetrics = CaptureDeliveryMetrics()
   private var refreshGeneration: UInt64 = 0
   private var nextCaptureOperationRawValue: UInt64 = 0
   private var activeCaptureSessionID: CaptureOperationID?
   private var activeCaptureWindowID: CGWindowID?
+  private var lastAcceptedCaptureSequenceNumber: UInt64?
   private var analysisGeneration = 0
   private var slideAnalysisTask: Task<Void, Never>?
   private var transcriptSegments: [TranscriptSegment] = []
@@ -76,11 +80,13 @@ final class AppModel: ObservableObject {
   init(
     permissionService: PermissionService = PermissionService(),
     windowCapture: any PowerPointWindowCapturing = PowerPointWindowCapture(),
-    scanner: any PowerPointWindowScanning = PowerPointWindowScanner()
+    scanner: any PowerPointWindowScanning = PowerPointWindowScanner(),
+    slideVisionAnalyzer: any SlideVisualAnalyzing = SlideVisionAnalyzer()
   ) {
     self.permissionService = permissionService
     self.windowCapture = windowCapture
     self.scanner = scanner
+    self.slideVisionAnalyzer = slideVisionAnalyzer
   }
 
   var selectedWindow: PowerPointWindowDescriptor? {
@@ -161,8 +167,11 @@ final class AppModel: ObservableObject {
     latestDifferenceFromStableFrame = nil
     stableFrameCount = 0
     slideChangeCount = 0
+    contentRevisionCount = 0
     latestStableFrame = nil
     stableFrameDetector.reset()
+    stableContentChangeDetector.reset()
+    lastAcceptedCaptureSequenceNumber = nil
     resetSlideAnalysis()
 
     do {
@@ -186,6 +195,8 @@ final class AppModel: ObservableObject {
         activeCaptureSessionID = nil
         activeCaptureWindowID = nil
         stableFrameDetector.reset()
+        stableContentChangeDetector.reset()
+        lastAcceptedCaptureSequenceNumber = nil
         resetSlideAnalysis()
         captureStatus = .stopped
         await windowCapture.stop(operationID: stopOperationID)
@@ -198,6 +209,8 @@ final class AppModel: ObservableObject {
       activeCaptureWindowID = nil
       captureStatus = .error(error.localizedDescription)
       stableFrameDetector.reset()
+      stableContentChangeDetector.reset()
+      lastAcceptedCaptureSequenceNumber = nil
       resetSlideAnalysis()
       await windowCapture.stop(operationID: nextCaptureOperationID())
     }
@@ -222,6 +235,8 @@ final class AppModel: ObservableObject {
     activeCaptureSessionID = nil
     activeCaptureWindowID = nil
     stableFrameDetector.reset()
+    stableContentChangeDetector.reset()
+    lastAcceptedCaptureSequenceNumber = nil
     resetSlideAnalysis()
     captureStatus = .stopped
     await windowCapture.stop(operationID: operationID)
@@ -303,10 +318,16 @@ final class AppModel: ObservableObject {
     else {
       return
     }
-    capturedFrameCount = Int(frame.sequenceNumber)
+    if let lastAcceptedCaptureSequenceNumber,
+      frame.sequenceNumber <= lastAcceptedCaptureSequenceNumber
+    {
+      return
+    }
+    lastAcceptedCaptureSequenceNumber = frame.sequenceNumber
     captureDeliveryMetrics.record(frame.deliveryKind, capturedAt: frame.capturedAt)
     newCapturedFrameCount = captureDeliveryMetrics.newFrameCount
     repeatedCapturedFrameCount = captureDeliveryMetrics.repeatedFrameCount
+    capturedFrameCount = newCapturedFrameCount + repeatedCapturedFrameCount
     lastNewFrameAt = captureDeliveryMetrics.lastNewFrameAt
     let observation = stableFrameDetector.ingest(frame.fingerprint)
     latestDifferenceFromStableFrame = observation.differenceFromStableFrame
@@ -314,15 +335,30 @@ final class AppModel: ObservableObject {
     switch observation.stability {
     case .stable:
       stableFrameCount += 1
+      if observation.differenceFromStableFrame != nil {
+        contentRevisionCount += 1
+      }
+      if let contentFingerprint = frame.contentFingerprint {
+        stableContentChangeDetector.rebase(to: contentFingerprint)
+      } else {
+        stableContentChangeDetector.reset()
+      }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
-    case .slideChanged:
+    case .significantVisualChange:
+      if let contentFingerprint = frame.contentFingerprint {
+        stableContentChangeDetector.rebase(to: contentFingerprint)
+      } else {
+        stableContentChangeDetector.reset()
+      }
       stableFrameCount += 1
-      slideChangeCount += 1
+      contentRevisionCount += 1
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
-    case .invalid, .collecting, .unchanged, .transitioning:
-      break
+    case .unchanged:
+      receiveContentFingerprintIfAvailable(frame, captureSessionID: sessionID)
+    case .invalid, .collecting, .transitioning:
+      stableContentChangeDetector.discardPendingChange()
     }
   }
 
@@ -335,6 +371,8 @@ final class AppModel: ObservableObject {
     activeCaptureSessionID = nil
     activeCaptureWindowID = nil
     stableFrameDetector.reset()
+    stableContentChangeDetector.reset()
+    lastAcceptedCaptureSequenceNumber = nil
     resetSlideAnalysis()
     captureStatus = .error(message)
     await windowCapture.stop(operationID: stopOperationID)
@@ -363,7 +401,12 @@ final class AppModel: ObservableObject {
           requestGeneration: requestGeneration
         )
       } catch is CancellationError {
-        return
+        guard let self else { return }
+        handleSlideAnalysisCancellation(
+          frame: frame,
+          captureSessionID: captureSessionID,
+          requestGeneration: requestGeneration
+        )
       } catch {
         guard let self else { return }
         handleSlideAnalysisError(
@@ -374,6 +417,22 @@ final class AppModel: ObservableObject {
         )
       }
     }
+  }
+
+  private func receiveContentFingerprintIfAvailable(
+    _ frame: CapturedPowerPointFrame,
+    captureSessionID: CaptureOperationID
+  ) {
+    guard let contentFingerprint = frame.contentFingerprint else {
+      stableContentChangeDetector.discardPendingChange()
+      return
+    }
+    let observation = stableContentChangeDetector.ingest(contentFingerprint)
+    guard observation.state == .contentChanged else { return }
+
+    contentRevisionCount += 1
+    latestStableFrame = frame.image
+    startSlideAnalysis(frame, captureSessionID: captureSessionID)
   }
 
   private func receive(
@@ -406,6 +465,21 @@ final class AppModel: ObservableObject {
       return
     }
     slideAnalysisStatus = .error(message)
+    slideAnalysisTask = nil
+  }
+
+  private func handleSlideAnalysisCancellation(
+    frame: CapturedPowerPointFrame,
+    captureSessionID: CaptureOperationID,
+    requestGeneration: Int
+  ) {
+    guard captureSessionID == activeCaptureSessionID,
+      requestGeneration == analysisGeneration,
+      frame.windowID == selectedPowerPointWindowID
+    else {
+      return
+    }
+    slideAnalysisStatus = .idle
     slideAnalysisTask = nil
   }
 
