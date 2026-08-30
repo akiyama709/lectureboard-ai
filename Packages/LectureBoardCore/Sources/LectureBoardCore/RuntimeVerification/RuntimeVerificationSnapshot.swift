@@ -34,6 +34,9 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let repeatedFrameCount: Int
   public let stableFrameCount: Int
   public let slideChangeCount: Int
+  public let slideIdentityState: SlideIdentityState
+  public let slideIdentitySampleCount: Int
+  public let slideIdentityContinuityBreakCount: Int
   public let contentRevisionCount: Int
   public let recognizedTextCount: Int
   public let detectedRectangleCount: Int
@@ -53,6 +56,9 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     repeatedFrameCount: Int,
     stableFrameCount: Int,
     slideChangeCount: Int,
+    slideIdentityState: SlideIdentityState = .unavailable,
+    slideIdentitySampleCount: Int = 0,
+    slideIdentityContinuityBreakCount: Int = 0,
     contentRevisionCount: Int = 0,
     recognizedTextCount: Int,
     detectedRectangleCount: Int,
@@ -74,6 +80,9 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.repeatedFrameCount = max(repeatedFrameCount, 0)
     self.stableFrameCount = max(stableFrameCount, 0)
     self.slideChangeCount = max(slideChangeCount, 0)
+    self.slideIdentityState = slideIdentityState
+    self.slideIdentitySampleCount = max(slideIdentitySampleCount, 0)
+    self.slideIdentityContinuityBreakCount = max(slideIdentityContinuityBreakCount, 0)
     self.contentRevisionCount = max(contentRevisionCount, 0)
     self.recognizedTextCount = max(recognizedTextCount, 0)
     self.detectedRectangleCount = max(detectedRectangleCount, 0)
@@ -98,6 +107,9 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case repeatedFrameCount
     case stableFrameCount
     case slideChangeCount
+    case slideIdentityState
+    case slideIdentitySampleCount
+    case slideIdentityContinuityBreakCount
     case contentRevisionCount
     case recognizedTextCount
     case detectedRectangleCount
@@ -123,6 +135,18 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
       repeatedFrameCount: try container.decode(Int.self, forKey: .repeatedFrameCount),
       stableFrameCount: try container.decode(Int.self, forKey: .stableFrameCount),
       slideChangeCount: try container.decode(Int.self, forKey: .slideChangeCount),
+      slideIdentityState: try container.decodeIfPresent(
+        SlideIdentityState.self,
+        forKey: .slideIdentityState
+      ) ?? .unavailable,
+      slideIdentitySampleCount: try container.decodeIfPresent(
+        Int.self,
+        forKey: .slideIdentitySampleCount
+      ) ?? 0,
+      slideIdentityContinuityBreakCount: try container.decodeIfPresent(
+        Int.self,
+        forKey: .slideIdentityContinuityBreakCount
+      ) ?? 0,
       contentRevisionCount: try container.decodeIfPresent(
         Int.self,
         forKey: .contentRevisionCount

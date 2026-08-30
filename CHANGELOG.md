@@ -24,11 +24,16 @@ All notable changes to this project will be documented in this file.
 - Exact whole-requirement team binding checks, including disjunction and negation regressions, for the optional Developer-signing path
 - Fixed-message runtime failure reports that discard untrusted framework error details
 - Build-specific historical synthetic PowerPoint evidence for static frame delivery, Vision execution, and pre-semantic dynamic calibration; not evidence for the current semantic build
+- Deterministic independent slide-identity tracking with two-sample confirmation, interruption-safe baselines, and presentation-session separation
+- Fail-closed app integration for identity target, session, and sequence checks; candidate-frame exclusion from visual analysis; stale final-transcript rejection; boundary cleanup; and post-boundary new-frame gating
+- A no-side-effect default identity provider that performs no Automation permission request or Apple Event
+- Metadata-only runtime schema 4 identity state, sample count, and continuity-break count with schema-1-through-schema-3 decoding compatibility
 
 ### Planned
 
 - Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
-- An independent PowerPoint slide-identity signal before actual slide transitions are counted
+- An exact-window-bound production PowerPoint slide-identity provider and live validation before actual slide transitions are claimed
+- Fresh-frame resynchronization or an explicit timeout/state for a static slide after an identity boundary
 - Runtime calibration of Vision recognition and occupied regions with real presentations
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription

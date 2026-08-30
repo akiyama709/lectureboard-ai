@@ -77,7 +77,7 @@ struct RuntimeVerificationReportTests {
       snapshots: []
     )
 
-    #expect(RuntimeVerificationReport.currentSchemaVersion == 3)
+    #expect(RuntimeVerificationReport.currentSchemaVersion == 4)
     #expect(report.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
   }
 
@@ -108,6 +108,9 @@ struct RuntimeVerificationReportTests {
     snapshots[0]["stableFrameCount"] = 6
     snapshots[0]["slideChangeCount"] = 5
     snapshots[0]["contentRevisionCount"] = 2
+    snapshots[0].removeValue(forKey: "slideIdentityState")
+    snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
+    snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
@@ -117,6 +120,47 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].stableFrameCount == 6)
     #expect(decoded.snapshots[0].slideChangeCount == 5)
     #expect(decoded.snapshots[0].contentRevisionCount == 2)
+    #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
+    #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
+    #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
+  }
+
+  @Test func decodesSchemaThreeWithoutSlideIdentityMetadata() throws {
+    let report = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+      finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+      requestedDurationSeconds: 12,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 42,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .completed,
+      failureCode: nil,
+      untrustedFailureDetail: nil,
+      snapshots: [snapshot()]
+    )
+
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object["schemaVersion"] = 3
+    var snapshots = try #require(object["snapshots"] as? [[String: Any]])
+    snapshots[0].removeValue(forKey: "slideIdentityState")
+    snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
+    snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
+    object["snapshots"] = snapshots
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
+
+    #expect(decoded.schemaVersion == 3)
+    #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
+    #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
+    #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
   }
 
   @Test func decodesSchemaOneSnapshotsWithoutNewMetadataCounters() throws {
@@ -145,6 +189,9 @@ struct RuntimeVerificationReportTests {
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0].removeValue(forKey: "contentRevisionCount")
     snapshots[0].removeValue(forKey: "strokeCandidateRegionCount")
+    snapshots[0].removeValue(forKey: "slideIdentityState")
+    snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
+    snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
@@ -153,6 +200,9 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.schemaVersion == 1)
     #expect(decoded.snapshots[0].contentRevisionCount == 0)
     #expect(decoded.snapshots[0].strokeCandidateRegionCount == 0)
+    #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
+    #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
+    #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
   }
 
   @Test func clampsFinishTimeAndClearsFailureFromCompletedRun() {
@@ -210,6 +260,14 @@ struct RuntimeVerificationReportTests {
       "occupiedRegions",
       "windowTitle",
       "targetWindowTitleSubstring",
+      "slideID",
+      "slideIdentifier",
+      "slideIndex",
+      "slidePath",
+      "presentationPath",
+      "presentationToken",
+      "presentationSessionIdentifier",
+      "presentationSessionToken",
     ]
 
     #expect(allKeys(in: object).isDisjoint(with: forbiddenKeys))
@@ -271,6 +329,9 @@ struct RuntimeVerificationReportTests {
         "repeatedFrameCount",
         "stableFrameCount",
         "slideChangeCount",
+        "slideIdentityState",
+        "slideIdentitySampleCount",
+        "slideIdentityContinuityBreakCount",
         "contentRevisionCount",
         "recognizedTextCount",
         "detectedRectangleCount",
@@ -284,6 +345,9 @@ struct RuntimeVerificationReportTests {
     #expect(root["strokeCandidateRegionCount"] == nil)
     #expect(encodedSnapshot["contentRevisionCount"] as? Int == 2)
     #expect(encodedSnapshot["strokeCandidateRegionCount"] as? Int == 1)
+    #expect(encodedSnapshot["slideIdentityState"] as? String == "identified")
+    #expect(encodedSnapshot["slideIdentitySampleCount"] as? Int == 12)
+    #expect(encodedSnapshot["slideIdentityContinuityBreakCount"] as? Int == 1)
   }
 
   @Test func replacesUntrustedFailureDetailsWithFixedSafeMessages() throws {
@@ -341,6 +405,9 @@ struct RuntimeVerificationReportTests {
       repeatedFrameCount: 9,
       stableFrameCount: 1,
       slideChangeCount: 0,
+      slideIdentityState: .identified,
+      slideIdentitySampleCount: 12,
+      slideIdentityContinuityBreakCount: 1,
       contentRevisionCount: 2,
       recognizedTextCount: 3,
       detectedRectangleCount: 2,

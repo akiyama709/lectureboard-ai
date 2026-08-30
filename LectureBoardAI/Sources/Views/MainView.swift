@@ -174,6 +174,18 @@ struct MainView: View {
       VStack(alignment: .leading, spacing: 12) {
         captureStatusLabel
         slideAnalysisStatusLabel
+        slideIdentityStatusLabel
+
+        HStack(spacing: 24) {
+          LabeledContent(
+            "capture.slideIdentitySamples",
+            value: "\(model.slideIdentitySampleCount)"
+          )
+          LabeledContent(
+            "capture.slideIdentityInterruptions",
+            value: "\(model.slideIdentityContinuityBreakCount)"
+          )
+        }
 
         HStack(spacing: 24) {
           LabeledContent("capture.frames", value: "\(model.capturedFrameCount)")
@@ -253,6 +265,27 @@ struct MainView: View {
     case .error(let message):
       Label(message, systemImage: "exclamationmark.triangle")
         .foregroundStyle(.red)
+    }
+  }
+
+  @ViewBuilder
+  private var slideIdentityStatusLabel: some View {
+    switch model.slideIdentityState {
+    case .unavailable:
+      Label("capture.slideIdentity.unavailable", systemImage: "questionmark.circle")
+        .foregroundStyle(.secondary)
+    case .establishing:
+      Label("capture.slideIdentity.establishing", systemImage: "ellipsis.circle")
+        .foregroundStyle(.secondary)
+    case .identified:
+      Label("capture.slideIdentity.identified", systemImage: "checkmark.seal")
+        .foregroundStyle(.green)
+    case .interrupted:
+      Label(
+        "capture.slideIdentity.interrupted",
+        systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
+      )
+      .foregroundStyle(.orange)
     }
   }
 

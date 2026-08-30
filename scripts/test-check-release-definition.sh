@@ -107,10 +107,45 @@ fi
 mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
 
 cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
+printf '\n- Deterministic stable-frame and slide-change detection with unit tests\n' \
+  >>"$fixture_root/CHANGELOG.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted an appended slide-change overclaim.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
+
+cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
 sed 's/Build-specific historical synthetic PowerPoint evidence for static frame delivery, Vision execution, and pre-semantic dynamic calibration; not evidence for the current semantic build/Controlled synthetic PowerPoint runtime evidence for current static frame delivery and Vision execution/' \
   "$fixture_root/CHANGELOG.backup" >"$fixture_root/CHANGELOG.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted historical runtime evidence as current-build evidence.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
+
+cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
+printf '\n- Controlled synthetic PowerPoint runtime evidence for current static frame delivery and Vision execution\n' \
+  >>"$fixture_root/CHANGELOG.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted appended historical evidence as current evidence.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
+
+cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
+sed 's/An exact-window-bound production PowerPoint slide-identity provider and live validation before actual slide transitions are claimed/PowerPoint slide identity is complete/' \
+  "$fixture_root/CHANGELOG.backup" >"$fixture_root/CHANGELOG.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted removal of the unverified production identity-provider gate.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
+
+cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
+printf '\n- PowerPoint slide identity is complete\n' >>"$fixture_root/CHANGELOG.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted an appended production-identity overclaim.\n' >&2
   exit 1
 fi
 mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"

@@ -16,6 +16,9 @@ struct RuntimeVerificationSnapshotTests {
       repeatedFrameCount: 116,
       stableFrameCount: 3,
       slideChangeCount: 2,
+      slideIdentityState: .identified,
+      slideIdentitySampleCount: 8,
+      slideIdentityContinuityBreakCount: 1,
       contentRevisionCount: 4,
       recognizedTextCount: 7,
       detectedRectangleCount: 2,
@@ -35,6 +38,12 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["title"] == nil)
     #expect(object["contentRevisionCount"] as? Int == 4)
     #expect(object["strokeCandidateRegionCount"] as? Int == 3)
+    #expect(object["slideIdentityState"] as? String == "identified")
+    #expect(object["slideIdentitySampleCount"] as? Int == 8)
+    #expect(object["slideIdentityContinuityBreakCount"] as? Int == 1)
+    #expect(object["slideID"] == nil)
+    #expect(object["slideIndex"] == nil)
+    #expect(object["presentationSessionToken"] == nil)
   }
 
   @Test func normalizesInvalidCountersAndMeasurements() {
@@ -49,6 +58,9 @@ struct RuntimeVerificationSnapshotTests {
       repeatedFrameCount: -3,
       stableFrameCount: -4,
       slideChangeCount: -5,
+      slideIdentityState: .interrupted,
+      slideIdentitySampleCount: -6,
+      slideIdentityContinuityBreakCount: -7,
       contentRevisionCount: -6,
       recognizedTextCount: -6,
       detectedRectangleCount: -7,
@@ -64,6 +76,9 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.repeatedFrameCount == 0)
     #expect(snapshot.stableFrameCount == 0)
     #expect(snapshot.slideChangeCount == 0)
+    #expect(snapshot.slideIdentityState == .interrupted)
+    #expect(snapshot.slideIdentitySampleCount == 0)
+    #expect(snapshot.slideIdentityContinuityBreakCount == 0)
     #expect(snapshot.contentRevisionCount == 0)
     #expect(snapshot.recognizedTextCount == 0)
     #expect(snapshot.detectedRectangleCount == 0)

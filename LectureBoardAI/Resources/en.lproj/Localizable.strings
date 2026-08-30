@@ -41,6 +41,12 @@
 "capture.stableFrames" = "Stable snapshots";
 "capture.slideChanges" = "Confirmed slide changes";
 "capture.contentRevisions" = "Stable visual updates";
+"capture.slideIdentity.unavailable" = "Independent slide identity is unavailable";
+"capture.slideIdentity.establishing" = "Stabilizing independent slide-identity signal";
+"capture.slideIdentity.identified" = "Independent slide-identity signal is stable";
+"capture.slideIdentity.interrupted" = "Slide-identity continuity was interrupted";
+"capture.slideIdentitySamples" = "Identity observations";
+"capture.slideIdentityInterruptions" = "Identity interruptions";
 "capture.noStableFrame" = "No stable frame has been confirmed yet.";
 "analysis.status.idle" = "Slide analysis is waiting for a stable frame";
 "analysis.status.analyzing" = "Analyzing stable slide text and geometry";

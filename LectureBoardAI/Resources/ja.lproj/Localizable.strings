@@ -41,6 +41,12 @@
 "capture.stableFrames" = "安定スナップショット";
 "capture.slideChanges" = "確認済みスライド切替";
 "capture.contentRevisions" = "安定した視覚更新";
+"capture.slideIdentity.unavailable" = "独立したスライド識別は利用できません";
+"capture.slideIdentity.establishing" = "独立したスライド識別信号を安定化しています";
+"capture.slideIdentity.identified" = "独立したスライド識別信号が安定しました";
+"capture.slideIdentity.interrupted" = "スライド識別の連続性が中断しました";
+"capture.slideIdentitySamples" = "識別観測";
+"capture.slideIdentityInterruptions" = "識別中断";
 "capture.noStableFrame" = "安定フレームはまだ確定していません．";
 "analysis.status.idle" = "安定フレームを待っています";
 "analysis.status.analyzing" = "安定スライドの文字と図形を解析中";

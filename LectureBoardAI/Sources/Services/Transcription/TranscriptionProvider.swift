@@ -1,11 +1,17 @@
 import Foundation
 import LectureBoardCore
 
+struct TranscriptionObservation: Sendable {
+  let segment: TranscriptSegment
+  /// Locally sampled mach absolute time when the speech callback delivered this result.
+  let sourceMachTime: UInt64
+}
+
 @MainActor
 protocol TranscriptionProvider: AnyObject {
   func start(
     language: LanguageTag,
-    onSegment: @escaping @MainActor (TranscriptSegment) -> Void
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
   ) async throws
   func stop()
 }

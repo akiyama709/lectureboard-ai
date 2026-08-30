@@ -4,6 +4,8 @@ set -euo pipefail
 script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 preflight_script="$script_directory/runtime-launch-preflight.sh"
 probe_source="$script_directory/runtime-window-server-probe.swift"
+smoke_script="$script_directory/test-runtime-launch-smoke.sh"
+runtime_report_source="$script_directory/../Packages/LectureBoardCore/Sources/LectureBoardCore/RuntimeVerification/RuntimeVerificationReport.swift"
 temporary_parent="${TMPDIR:-/tmp}"
 temporary_directory="$(mktemp -d "$temporary_parent/lectureboard-runtime-preflight.XXXXXX")"
 
@@ -13,7 +15,26 @@ cleanup() {
 trap cleanup EXIT
 
 bash -n "$preflight_script"
+bash -n "$smoke_script"
 source "$preflight_script"
+
+core_schema_version="$(
+  sed -nE 's/^[[:space:]]*public static let currentSchemaVersion = ([0-9]+)$/\1/p' \
+    "$runtime_report_source"
+)"
+smoke_schema_version="$(
+  sed -nE 's/^expected_schema_version="([0-9]+)"$/\1/p' "$smoke_script"
+)"
+if [[ -z "$core_schema_version" \
+  || -z "$smoke_schema_version" \
+  || "$core_schema_version" != "$smoke_schema_version" ]]; then
+  printf \
+    'The runtime smoke expected schema does not match LectureBoardCore (%s != %s).\n' \
+    "${smoke_schema_version:-missing}" \
+    "${core_schema_version:-missing}" \
+    >&2
+  exit 1
+fi
 
 env \
   SWIFT_MODULECACHE_PATH="$temporary_directory/swift" \

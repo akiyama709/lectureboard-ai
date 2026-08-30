@@ -14,10 +14,32 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
   let windowID: CGWindowID
   let sequenceNumber: UInt64
   let capturedAt: Date
+  /// ScreenCaptureKit's mach absolute time for the displayed source frame.
+  let displayTime: UInt64?
   let deliveryKind: CapturedFrameDeliveryKind
   let image: CGImage
   let fingerprint: FrameFingerprint
   let contentFingerprint: ContentFingerprint?
+
+  init(
+    windowID: CGWindowID,
+    sequenceNumber: UInt64,
+    capturedAt: Date,
+    displayTime: UInt64? = nil,
+    deliveryKind: CapturedFrameDeliveryKind,
+    image: CGImage,
+    fingerprint: FrameFingerprint,
+    contentFingerprint: ContentFingerprint?
+  ) {
+    self.windowID = windowID
+    self.sequenceNumber = sequenceNumber
+    self.capturedAt = capturedAt
+    self.displayTime = displayTime
+    self.deliveryKind = deliveryKind
+    self.image = image
+    self.fingerprint = fingerprint
+    self.contentFingerprint = contentFingerprint
+  }
 }
 
 enum CapturedPowerPointFrameFactory {
@@ -25,6 +47,7 @@ enum CapturedPowerPointFrameFactory {
     windowID: CGWindowID,
     sequenceNumber: UInt64,
     capturedAt: Date,
+    displayTime: UInt64? = nil,
     image: CGImage,
     fingerprint: FrameFingerprint
   ) -> CapturedPowerPointFrame {
@@ -32,6 +55,7 @@ enum CapturedPowerPointFrameFactory {
       windowID: windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: capturedAt,
+      displayTime: displayTime,
       deliveryKind: .new,
       image: image,
       fingerprint: fingerprint,
@@ -48,6 +72,7 @@ enum CapturedPowerPointFrameFactory {
       windowID: lastFrame.windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: capturedAt,
+      displayTime: lastFrame.displayTime,
       deliveryKind: .idleRepeat,
       image: lastFrame.image,
       fingerprint: lastFrame.fingerprint,
@@ -64,6 +89,18 @@ enum PowerPointWindowCaptureError: LocalizedError {
     case .selectedWindowUnavailable:
       NSLocalizedString("error.captureWindowUnavailable", comment: "")
     }
+  }
+}
+
+enum CaptureFrameDisplayTimeParser {
+  static func parse(_ value: Any?) -> UInt64? {
+    if let value = value as? UInt64, value > 0 {
+      return value
+    }
+    if let value = value as? NSNumber, value.uint64Value > 0 {
+      return UInt64(value.stringValue)
+    }
+    return nil
   }
 }
 
@@ -366,6 +403,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
       windowID: windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
+      displayTime: frameDisplayTime(in: sampleBuffer),
       image: image,
       fingerprint: fingerprint
     )
@@ -384,6 +422,18 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
       return nil
     }
     return SCFrameStatus(rawValue: rawValue)
+  }
+
+  private func frameDisplayTime(in sampleBuffer: CMSampleBuffer) -> UInt64? {
+    guard
+      let attachments = CMSampleBufferGetSampleAttachmentsArray(
+        sampleBuffer,
+        createIfNecessary: false
+      ) as? [[SCStreamFrameInfo: Any]]
+    else {
+      return nil
+    }
+    return CaptureFrameDisplayTimeParser.parse(attachments.first?[.displayTime])
   }
 }
 

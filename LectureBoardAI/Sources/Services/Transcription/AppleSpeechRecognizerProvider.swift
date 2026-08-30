@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import Darwin
 import Foundation
 import LectureBoardCore
 @preconcurrency import Speech
@@ -13,7 +14,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
 
   func start(
     language: LanguageTag,
-    onSegment: @escaping @MainActor (TranscriptSegment) -> Void
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
   ) async throws {
     stop()
 
@@ -53,6 +54,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
 
     recognitionTask = recognizer.recognitionTask(with: request) {
       [weak self] result, error in
+      let sourceMachTime = mach_absolute_time()
       Task { @MainActor [weak self] in
         guard let self else { return }
 
@@ -72,7 +74,12 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
             isFinal: result.isFinal,
             emphasis: 0.5
           )
-          onSegment(segment)
+          onObservation(
+            TranscriptionObservation(
+              segment: segment,
+              sourceMachTime: sourceMachTime
+            )
+          )
         }
 
         if error != nil {

@@ -81,11 +81,13 @@ struct CGImageRasterizerTests {
       luminance: Array(repeating: 42, count: 32 * 18)
     )
     let capturedAt = Date(timeIntervalSince1970: 123)
+    let displayTime: UInt64 = 12_345
 
     let frame = CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: 42,
       sequenceNumber: 7,
       capturedAt: capturedAt,
+      displayTime: displayTime,
       image: image,
       fingerprint: coarseFingerprint
     )
@@ -93,6 +95,7 @@ struct CGImageRasterizerTests {
     #expect(frame.windowID == 42)
     #expect(frame.sequenceNumber == 7)
     #expect(frame.capturedAt == capturedAt)
+    #expect(frame.displayTime == displayTime)
     #expect(frame.deliveryKind == .new)
     #expect(frame.fingerprint == coarseFingerprint)
     let contentFingerprint = try #require(frame.contentFingerprint)
@@ -110,10 +113,17 @@ struct CGImageRasterizerTests {
     #expect(repeated.windowID == frame.windowID)
     #expect(repeated.sequenceNumber == 8)
     #expect(repeated.capturedAt == repeatedAt)
+    #expect(repeated.displayTime == displayTime)
     #expect(repeated.deliveryKind == .idleRepeat)
     #expect(repeated.image === frame.image)
     #expect(repeated.fingerprint == coarseFingerprint)
     #expect(repeated.contentFingerprint == contentFingerprint)
+    #expect(CaptureFrameDisplayTimeParser.parse(UInt64(123)) == 123)
+    #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: 456)) == 456)
+    #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: -1)) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: 1.5)) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse(UInt64(0)) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse("123") == nil)
   }
 
   @Test func compositesTransparentAndSemitransparentPixelsOverWhite() throws {

@@ -6,6 +6,7 @@ repository_root="$(cd -- "$script_directory/.." && pwd)"
 source "$script_directory/runtime-launch-preflight.sh"
 runtime_app="$repository_root/DerivedData/RuntimeBuild/Build/Products/Debug/LectureBoard AI.app"
 runtime_executable="$runtime_app/Contents/MacOS/LectureBoard AI"
+expected_schema_version="4"
 temporary_parent="${TMPDIR:-/tmp}"
 temporary_directory="$(mktemp -d "$temporary_parent/lectureboard-runtime-smoke.XXXXXX")"
 invalid_report_path="$temporary_directory/invalid-runtime-report.json"
@@ -253,7 +254,7 @@ run_status="$(plutil -extract runStatus raw -o - "$report_path")"
 failure_code="$(plutil -extract failureCode raw -o - "$report_path")"
 snapshot_count="$(plutil -extract snapshots raw -o - "$report_path")"
 
-if [[ "$schema_version" != "3" \
+if [[ "$schema_version" != "$expected_schema_version" \
   || "$permission_was_requested" != "false" \
   || "$run_status" != "failed" \
   || "$snapshot_count" != "0" ]] \
