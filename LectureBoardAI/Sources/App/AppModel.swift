@@ -40,6 +40,14 @@ private struct BoardCandidateContext {
   }
 }
 
+private struct RenderedProductionOverlayState: Equatable {
+  let captureOperationID: CaptureOperationID
+  let windowID: CGWindowID
+  let scene: BoardScene
+  let style: DigitalInkStyle
+  let appKitTargetFrame: CGRect
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -98,7 +106,12 @@ final class AppModel: ObservableObject {
 
   let permissionService: PermissionService
   private let scanner: any PowerPointWindowScanning
-  private let overlayController = OverlayWindowController()
+  private let overlayController: any OverlayWindowControlling
+  private let displayCoordinateSnapshotProvider: any DisplayCoordinateSnapshotProviding
+  private let productionOverlayEligibilityProvider: any ProductionOverlayEligibilityProviding
+  private let productionOverlayLeaseScheduler: any ProductionOverlayLeaseScheduling
+  private let productionOverlayLeaseDuration: Duration
+  private let productionOverlaySafetyEventProvider: any ProductionOverlaySafetyEventProviding
   private let speechProvider: any TranscriptionProvider
   private let windowCapture: any PowerPointWindowCapturing
   private let slideIdentityProvider: any PowerPointSlideIdentityProviding
@@ -117,6 +130,7 @@ final class AppModel: ObservableObject {
   private var activeCaptureWindowID: CGWindowID?
   private var activeCaptureIdentity: PowerPointWindowIdentity?
   private var lastAcceptedCaptureSequenceNumber: UInt64?
+  private var captureContentRequiresNewFrame = false
   private var slideIdentityTracker = SlideIdentityTracker()
   private var slideIdentityFrameGate = PostIdentityBoundaryFrameGate()
   private var lastAcceptedSlideIdentitySequenceNumber: UInt64?
@@ -124,6 +138,7 @@ final class AppModel: ObservableObject {
   private var slideIdentityQuarantineActive = false
   private var latestSlideIdentityBoundaryMachTime: UInt64?
   private var latestSlideIdentityFrameSynchronizationMachTime: UInt64?
+  private var latestVisualFreshnessBoundaryMachTime: UInt64?
   private var slideIdentityFrameTimeoutTask: Task<Void, Never>?
   private var analysisGeneration = 0
   private var slideCanvasGeneration = 0
@@ -132,9 +147,16 @@ final class AppModel: ObservableObject {
   private var latestEligibleWindowFrame: CapturedPowerPointFrame?
   private var slideAnalysisTask: Task<Void, Never>?
   private var slideAnalysisNeedsRefresh = true
+  private var latestCompletedAnalysisGeneration: Int?
   private var boardCandidateContext = BoardCandidateContext()
+  private var boardSceneAnalysisGeneration: Int?
   private var transcriptionOperationGate = TranscriptionOperationGate()
   private var overlayDemoSceneIsLoaded = false
+  private var productionOverlayIsManuallySuppressed = false
+  private var latestOverlayPlacement: SlideCanvasOverlayPlacement?
+  private var renderedProductionOverlayState: RenderedProductionOverlayState?
+  private var productionOverlayLeaseGeneration: UInt64 = 0
+  private var productionOverlayLeaseIsValid = false
 
   init(
     permissionService: PermissionService = PermissionService(),
@@ -147,7 +169,17 @@ final class AppModel: ObservableObject {
     slideCanvasConfirmationMode: SlideCanvasConfirmationMode = .userConfirmed,
     slideIdentityFrameTimeout: Duration = .seconds(2),
     slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
-      TaskSlideIdentityFrameTimeoutWaiter()
+      TaskSlideIdentityFrameTimeoutWaiter(),
+    overlayController: any OverlayWindowControlling = OverlayWindowController(),
+    displayCoordinateSnapshotProvider: any DisplayCoordinateSnapshotProviding =
+      SystemDisplayCoordinateSnapshotProvider(),
+    productionOverlayEligibilityProvider: any ProductionOverlayEligibilityProviding =
+      SystemProductionOverlayEligibilityProvider(),
+    productionOverlayLeaseScheduler: any ProductionOverlayLeaseScheduling =
+      TaskProductionOverlayLeaseScheduler(),
+    productionOverlayLeaseDuration: Duration = .seconds(1),
+    productionOverlaySafetyEventProvider: any ProductionOverlaySafetyEventProviding =
+      SystemProductionOverlaySafetyEventProvider()
   ) {
     self.permissionService = permissionService
     self.windowCapture = windowCapture
@@ -158,6 +190,24 @@ final class AppModel: ObservableObject {
     self.slideCanvasConfirmationMode = slideCanvasConfirmationMode
     self.slideIdentityFrameTimeout = max(slideIdentityFrameTimeout, .zero)
     self.slideIdentityFrameTimeoutWaiter = slideIdentityFrameTimeoutWaiter
+    self.overlayController = overlayController
+    self.displayCoordinateSnapshotProvider = displayCoordinateSnapshotProvider
+    self.productionOverlayEligibilityProvider = productionOverlayEligibilityProvider
+    self.productionOverlayLeaseScheduler = productionOverlayLeaseScheduler
+    self.productionOverlayLeaseDuration = max(productionOverlayLeaseDuration, .zero)
+    self.productionOverlaySafetyEventProvider = productionOverlaySafetyEventProvider
+    productionOverlaySafetyEventProvider.start { [weak self] in
+      self?.handleProductionOverlayUnsafeEvent()
+    }
+  }
+
+  deinit {
+    let leaseScheduler = productionOverlayLeaseScheduler
+    let safetyEventProvider = productionOverlaySafetyEventProvider
+    Task { @MainActor in
+      leaseScheduler.cancel()
+      safetyEventProvider.stop()
+    }
   }
 
   var selectedWindow: PowerPointWindowDescriptor? {
@@ -237,6 +287,10 @@ final class AppModel: ObservableObject {
     resetCanvasVisualPipeline()
 
     if let latestEligibleWindowFrame {
+      refreshOverlayPlacement(
+        using: latestEligibleWindowFrame,
+        sessionID: activeCaptureSessionID
+      )
       guard
         let canvasFrame = SlideCanvasFramePreparer.makeFrame(
           from: latestEligibleWindowFrame,
@@ -334,6 +388,7 @@ final class AppModel: ObservableObject {
     }
 
     let operationID = nextCaptureOperationID()
+    productionOverlayIsManuallySuppressed = false
     activeCaptureSessionID = operationID
     activeCaptureWindowID = selectedPowerPointWindowID
     activeCaptureIdentity = selectedIdentity
@@ -352,6 +407,8 @@ final class AppModel: ObservableObject {
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
+    captureContentRequiresNewFrame = false
+    latestVisualFreshnessBoundaryMachTime = nil
     prepareSlideIdentityForNewCapture()
     resetSlideAnalysis()
 
@@ -362,6 +419,14 @@ final class AppModel: ObservableObject {
         onFrame: { [weak self] frame in
           Task { @MainActor [weak self] in
             self?.receive(frame, sessionID: operationID)
+          }
+        },
+        onContentUnavailable: { [weak self] sequenceNumber in
+          Task { @MainActor [weak self] in
+            self?.receiveCaptureContentUnavailable(
+              sequenceNumber: sequenceNumber,
+              sessionID: operationID
+            )
           }
         },
         onError: { [weak self] message in
@@ -437,6 +502,7 @@ final class AppModel: ObservableObject {
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
+    captureContentRequiresNewFrame = false
     invalidateSlideCanvasAfterCaptureEnd()
     resetSlideAnalysis()
     captureStatus = .stopped
@@ -446,14 +512,19 @@ final class AppModel: ObservableObject {
 
   func showOverlayDemo() {
     guard canShowOverlayDemo else { return }
+    productionOverlayIsManuallySuppressed = false
+    invalidateProductionOverlayLease(hidePanel: false)
+    renderedProductionOverlayState = nil
     boardScene = DemoBoardSceneFactory.make(language: selectedLanguage)
-    overlayController.show(scene: boardScene, style: digitalInkStyle)
+    boardSceneAnalysisGeneration = nil
+    overlayController.showDemo(scene: boardScene, style: digitalInkStyle, on: NSScreen.main)
     overlayDemoSceneIsLoaded = true
     status = .overlayVisible
   }
 
   func hideOverlay() {
-    overlayController.hide()
+    productionOverlayIsManuallySuppressed = true
+    invalidateProductionOverlayLease()
     status = .ready
   }
 
@@ -515,7 +586,8 @@ final class AppModel: ObservableObject {
     guard
       slideCanvasStatus == .confirmed,
       slideAnalysisStatus == .ready,
-      !slideAnalysisNeedsRefresh
+      !slideAnalysisNeedsRefresh,
+      latestCompletedAnalysisGeneration == analysisGeneration
     else { return }
     guard !isSlideIdentityQuarantined, !slideIdentityFrameGate.requiresFreshFrame else {
       return
@@ -528,6 +600,10 @@ final class AppModel: ObservableObject {
       SlideIdentityTranscriptBoundary.accepts(
         sourceMachTime: observation.sourceMachTime,
         after: latestSlideIdentityFrameSynchronizationMachTime
+      ),
+      SlideIdentityTranscriptBoundary.accepts(
+        sourceMachTime: observation.sourceMachTime,
+        after: latestVisualFreshnessBoundaryMachTime
       )
     else { return }
 
@@ -566,7 +642,8 @@ final class AppModel: ObservableObject {
       to: boardScene,
       slideOccupied: slide.occupiedRegions
     )
-    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    boardSceneAnalysisGeneration = analysisGeneration
+    renderAlignedOverlayIfPossible()
   }
 
   private func receive(_ frame: CapturedPowerPointFrame, sessionID: CaptureOperationID) {
@@ -586,6 +663,10 @@ final class AppModel: ObservableObject {
     repeatedCapturedFrameCount = captureDeliveryMetrics.repeatedFrameCount
     capturedFrameCount = newCapturedFrameCount + repeatedCapturedFrameCount
     lastNewFrameAt = captureDeliveryMetrics.lastNewFrameAt
+    if captureContentRequiresNewFrame {
+      guard frame.deliveryKind == .new else { return }
+      captureContentRequiresNewFrame = false
+    }
     if slideIdentityQuarantineActive {
       return
     }
@@ -613,10 +694,14 @@ final class AppModel: ObservableObject {
     else {
       if confirmedSlideCanvasSelection != nil {
         invalidateConfirmedSlideCanvas()
+      } else {
+        invalidateOverlayPlacement()
       }
       return
     }
     processVisualFrame(canvasFrame, sessionID: sessionID)
+    refreshOverlayPlacement(using: frame, sessionID: sessionID)
+    renderAlignedOverlayIfPossible(renewLeaseFromCurrentFrame: true)
   }
 
   private func observeWindowFrameForSlideCanvas(
@@ -679,6 +764,7 @@ final class AppModel: ObservableObject {
     invalidateTranscriptionContext()
     resetBoardCandidateContext()
     clearOverlayDemoForCaptureStart()
+    invalidateOverlayPlacement()
     slideCanvasGeneration &+= 1
     confirmedSlideCanvasSelection = nil
     confirmedSlideCanvasRegion = nil
@@ -705,7 +791,8 @@ final class AppModel: ObservableObject {
     slideCanvasCalibrationRevision &+= 1
     slideCanvasStatus = .unavailable
     boardScene = BoardScene(slideNumber: boardScene.slideNumber)
-    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    boardSceneAnalysisGeneration = nil
+    invalidateOverlayPlacement()
   }
 
   private func clearConfirmedSlideCanvas(resetVisualPipeline: Bool) {
@@ -713,6 +800,7 @@ final class AppModel: ObservableObject {
     slideCanvasGeneration &+= 1
     confirmedSlideCanvasSelection = nil
     confirmedSlideCanvasRegion = nil
+    invalidateOverlayPlacement()
     if resetVisualPipeline {
       resetCanvasVisualPipeline()
     }
@@ -737,7 +825,8 @@ final class AppModel: ObservableObject {
     resetSlideAnalysis()
     resetBoardCandidateContext()
     boardScene = BoardScene(slideNumber: boardScene.slideNumber)
-    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    boardSceneAnalysisGeneration = nil
+    invalidateProductionOverlayLease()
   }
 
   private func processVisualFrame(
@@ -790,10 +879,36 @@ final class AppModel: ObservableObject {
     await stopCaptureProviders(operationID: stopOperationID)
   }
 
+  private func receiveCaptureContentUnavailable(
+    sequenceNumber: UInt64,
+    sessionID: CaptureOperationID
+  ) {
+    guard sessionID == activeCaptureSessionID else { return }
+    if let lastAcceptedCaptureSequenceNumber,
+      sequenceNumber <= lastAcceptedCaptureSequenceNumber
+    {
+      return
+    }
+    lastAcceptedCaptureSequenceNumber = sequenceNumber
+    captureContentRequiresNewFrame = true
+    invalidateTranscriptionContext()
+    latestEligibleWindowFrame = nil
+    stableFrameDetector.reset()
+    stableContentChangeDetector.reset()
+    latestDifferenceFromStableFrame = nil
+    latestStableFrame = nil
+    resetSlideAnalysis()
+    resetBoardCandidateContext()
+    boardScene = BoardScene(slideNumber: boardScene.slideNumber)
+    boardSceneAnalysisGeneration = nil
+    invalidateOverlayPlacement()
+  }
+
   private func startSlideAnalysis(
     _ frame: CapturedSlideCanvasFrame,
     captureSessionID: CaptureOperationID
   ) {
+    invalidateProductionSceneForVisualFreshness()
     slideAnalysisNeedsRefresh = true
     analysisGeneration += 1
     let requestGeneration = analysisGeneration
@@ -907,7 +1022,9 @@ final class AppModel: ObservableObject {
     latestSlideAnalysis = analysis
     slideAnalysisStatus = .ready
     slideAnalysisNeedsRefresh = false
+    latestCompletedAnalysisGeneration = requestGeneration
     slideAnalysisTask = nil
+    renderAlignedOverlayIfPossible()
   }
 
   private func handleSlideAnalysisError(
@@ -927,7 +1044,9 @@ final class AppModel: ObservableObject {
       return
     }
     slideAnalysisStatus = .error(message)
+    latestCompletedAnalysisGeneration = nil
     slideAnalysisTask = nil
+    invalidateProductionOverlayLease()
   }
 
   private func handleSlideAnalysisCancellation(
@@ -946,7 +1065,9 @@ final class AppModel: ObservableObject {
       return
     }
     slideAnalysisStatus = .idle
+    latestCompletedAnalysisGeneration = nil
     slideAnalysisTask = nil
+    invalidateProductionOverlayLease()
   }
 
   private func resetSlideAnalysis() {
@@ -955,10 +1076,12 @@ final class AppModel: ObservableObject {
     slideAnalysisTask?.cancel()
     slideAnalysisTask = nil
     latestSlideAnalysis = nil
+    latestCompletedAnalysisGeneration = nil
     slideAnalysisStatus = .idle
   }
 
   private func invalidateSlideAnalysisForVisualFreshness() {
+    invalidateProductionSceneForVisualFreshness()
     guard
       !slideAnalysisNeedsRefresh
         || slideAnalysisTask != nil
@@ -970,11 +1093,152 @@ final class AppModel: ObservableObject {
     resetSlideAnalysis()
   }
 
+  private func invalidateProductionSceneForVisualFreshness() {
+    latestVisualFreshnessBoundaryMachTime = mach_absolute_time()
+    resetBoardCandidateContext()
+    boardScene = BoardScene(slideNumber: boardScene.slideNumber)
+    boardSceneAnalysisGeneration = nil
+    invalidateProductionOverlayLease()
+  }
+
+  private func refreshOverlayPlacement(
+    using frame: CapturedPowerPointFrame,
+    sessionID: CaptureOperationID
+  ) {
+    guard
+      let confirmedSlideCanvasSelection,
+      frame.captureScreenGeometry != nil
+    else {
+      invalidateOverlayPlacement()
+      return
+    }
+
+    latestOverlayPlacement = SlideCanvasOverlayMapper.makePlacement(
+      selection: confirmedSlideCanvasSelection,
+      frame: frame,
+      captureOperationID: sessionID,
+      displays: displayCoordinateSnapshotProvider.currentSnapshots()
+    )
+  }
+
+  private func renderAlignedOverlayIfPossible(
+    renewLeaseFromCurrentFrame: Bool = false
+  ) {
+    guard
+      !overlayDemoSceneIsLoaded,
+      !productionOverlayIsManuallySuppressed,
+      captureStatus == .capturing,
+      slideCanvasStatus == .confirmed,
+      slideIdentityState == .identified,
+      !slideIdentityQuarantineActive,
+      !slideIdentityFrameGate.requiresFreshFrame,
+      slideAnalysisStatus == .ready,
+      !slideAnalysisNeedsRefresh,
+      latestCompletedAnalysisGeneration == analysisGeneration,
+      let activeCaptureSessionID,
+      let activeCaptureWindowID,
+      let activeCaptureIdentity,
+      let latestEligibleWindowFrame,
+      let captureScreenGeometry = latestEligibleWindowFrame.captureScreenGeometry,
+      let latestOverlayPlacement,
+      latestOverlayPlacement.captureOperationID == activeCaptureSessionID,
+      latestOverlayPlacement.windowID == activeCaptureWindowID,
+      latestOverlayPlacement.frameSequenceNumber == latestEligibleWindowFrame.sequenceNumber
+    else {
+      invalidateProductionOverlayLease()
+      return
+    }
+
+    guard
+      productionOverlayEligibilityProvider.allowsProductionOverlay(
+        for: activeCaptureIdentity,
+        screenGeometry: captureScreenGeometry
+      )
+    else {
+      invalidateProductionOverlayLease()
+      return
+    }
+
+    if renewLeaseFromCurrentFrame {
+      renewProductionOverlayLease()
+    }
+
+    guard
+      productionOverlayLeaseIsValid,
+      !boardScene.elements.isEmpty,
+      boardSceneAnalysisGeneration == analysisGeneration
+    else {
+      hideProductionOverlayPanel()
+      return
+    }
+
+    let renderState = RenderedProductionOverlayState(
+      captureOperationID: activeCaptureSessionID,
+      windowID: activeCaptureWindowID,
+      scene: boardScene,
+      style: digitalInkStyle,
+      appKitTargetFrame: latestOverlayPlacement.appKitTargetFrame
+    )
+    guard renderState != renderedProductionOverlayState else { return }
+
+    overlayController.render(
+      scene: boardScene,
+      style: digitalInkStyle,
+      in: latestOverlayPlacement.appKitTargetFrame
+    )
+    renderedProductionOverlayState = renderState
+  }
+
+  private func invalidateOverlayPlacement() {
+    latestOverlayPlacement = nil
+    invalidateProductionOverlayLease()
+  }
+
+  private func hideProductionOverlayPanel() {
+    renderedProductionOverlayState = nil
+    overlayController.hide()
+  }
+
+  private func renewProductionOverlayLease() {
+    productionOverlayLeaseGeneration &+= 1
+    let generation = productionOverlayLeaseGeneration
+    productionOverlayLeaseIsValid = true
+    productionOverlayLeaseScheduler.schedule(after: productionOverlayLeaseDuration) {
+      [weak self] in
+      self?.expireProductionOverlayLease(expectedGeneration: generation)
+    }
+  }
+
+  private func expireProductionOverlayLease(expectedGeneration: UInt64) {
+    guard
+      productionOverlayLeaseIsValid,
+      productionOverlayLeaseGeneration == expectedGeneration
+    else {
+      return
+    }
+    invalidateProductionOverlayLease()
+  }
+
+  private func invalidateProductionOverlayLease(hidePanel: Bool = true) {
+    productionOverlayLeaseGeneration &+= 1
+    productionOverlayLeaseIsValid = false
+    productionOverlayLeaseScheduler.cancel()
+    if hidePanel {
+      hideProductionOverlayPanel()
+    }
+  }
+
+  private func handleProductionOverlayUnsafeEvent() {
+    guard !overlayDemoSceneIsLoaded else { return }
+    invalidateProductionOverlayLease()
+  }
+
   private func clearOverlayDemoForCaptureStart() {
     guard overlayDemoSceneIsLoaded else { return }
     overlayDemoSceneIsLoaded = false
+    invalidateProductionOverlayLease()
     boardScene = BoardScene(slideNumber: boardScene.slideNumber)
-    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    boardSceneAnalysisGeneration = nil
     if status == .overlayVisible {
       status = .ready
     }
@@ -1048,10 +1312,10 @@ final class AppModel: ObservableObject {
   private func enterSlideIdentityQuarantine() {
     slideIdentityQuarantineActive = true
     cancelSlideIdentityFrameWait()
-    resetVisualStateForSlideIdentityBoundary()
+    resetVisualStateForSlideIdentityBoundary(clearBoardScene: false)
   }
 
-  private func resetVisualStateForSlideIdentityBoundary() {
+  private func resetVisualStateForSlideIdentityBoundary(clearBoardScene: Bool) {
     invalidateTranscriptionContext()
     slideIdentityGeneration += 1
     latestEligibleWindowFrame = nil
@@ -1059,22 +1323,28 @@ final class AppModel: ObservableObject {
     stableContentChangeDetector.reset()
     latestDifferenceFromStableFrame = nil
     latestStableFrame = nil
+    invalidateOverlayPlacement()
     resetSlideAnalysis()
+    resetBoardCandidateContext()
+    boardSceneAnalysisGeneration = nil
+    if clearBoardScene {
+      boardScene = BoardScene(slideNumber: boardScene.slideNumber)
+    }
   }
 
   private func rebaseBoardContext(to sample: SlideIdentitySample, acceptedMachTime: UInt64) {
     slideIdentityQuarantineActive = false
     latestSlideIdentityBoundaryMachTime = acceptedMachTime
-    resetVisualStateForSlideIdentityBoundary()
+    resetVisualStateForSlideIdentityBoundary(clearBoardScene: true)
     beginSlideIdentityFrameWait(after: acceptedMachTime)
-    resetBoardCandidateContext()
     boardScene = BoardScene(slideNumber: sample.slideIndex)
-    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    boardSceneAnalysisGeneration = nil
+    renderAlignedOverlayIfPossible()
   }
 
   private func updateBoardSlideNumber(to slideNumber: Int) {
     boardScene.slideNumber = slideNumber
-    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    renderAlignedOverlayIfPossible()
   }
 
   private func resetBoardCandidateContext() {
@@ -1084,7 +1354,7 @@ final class AppModel: ObservableObject {
   private func abandonSlideIdentityCandidate(acceptedMachTime: UInt64) {
     slideIdentityQuarantineActive = false
     latestSlideIdentityBoundaryMachTime = acceptedMachTime
-    resetVisualStateForSlideIdentityBoundary()
+    resetVisualStateForSlideIdentityBoundary(clearBoardScene: false)
     beginSlideIdentityFrameWait(after: acceptedMachTime)
   }
 

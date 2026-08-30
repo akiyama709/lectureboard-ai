@@ -92,6 +92,11 @@ struct CGImageRasterizerTests {
         outputPixelHeight: 180
       )
     )
+    let screenGeometry = try #require(
+      CaptureScreenGeometry(
+        screenRect: CGRect(x: -320, y: 24, width: 320, height: 180)
+      )
+    )
 
     let frame = CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: 42,
@@ -99,6 +104,7 @@ struct CGImageRasterizerTests {
       capturedAt: capturedAt,
       displayTime: displayTime,
       captureSurfaceGeometry: geometry,
+      captureScreenGeometry: screenGeometry,
       image: image,
       fingerprint: coarseFingerprint
     )
@@ -109,6 +115,7 @@ struct CGImageRasterizerTests {
     #expect(frame.displayTime == displayTime)
     #expect(frame.deliveryKind == .new)
     #expect(frame.captureSurfaceGeometry == geometry)
+    #expect(frame.captureScreenGeometry == screenGeometry)
     #expect(frame.fingerprint == coarseFingerprint)
     let contentFingerprint = try #require(frame.contentFingerprint)
     #expect(contentFingerprint.sampleColumns == 160)
@@ -158,7 +165,7 @@ struct CGImageRasterizerTests {
     #expect(
       CaptureFrameDeliveryDecisionResolver.resolve(
         statusValue: SCFrameStatus.stopped.rawValue
-      ) == .drop
+      ) == .terminalFailure
     )
   }
 
@@ -183,6 +190,21 @@ struct CGImageRasterizerTests {
     )
   }
 
+  @Test func unavailableDeliveryBreaksIdleRepeatContinuityUntilANewPayload() {
+    var continuity = CaptureOutputContinuity<Int>()
+
+    continuity.acceptNewPayload(1)
+    #expect(continuity.repeatablePayload == 1)
+
+    continuity.markContentUnavailable()
+    #expect(continuity.repeatablePayload == nil)
+    // An idle delivery cannot restore a payload after this gap.
+    #expect(continuity.repeatablePayload == nil)
+
+    continuity.acceptNewPayload(2)
+    #expect(continuity.repeatablePayload == 2)
+  }
+
   @Test func idleRepeatUsesCurrentMatchingGeometryAndReusesVisualPayload() throws {
     let frame = try makeFactoryTestFrame(
       geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
@@ -193,7 +215,8 @@ struct CGImageRasterizerTests {
       sequenceNumber: 8,
       capturedAt: repeatedAt,
       currentAttachments: makeSurfaceGeometryAttachments(
-        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+        screenRect: CGRect(x: 120, y: 80, width: 320, height: 180)
       )
     )
 
@@ -203,6 +226,10 @@ struct CGImageRasterizerTests {
     #expect(repeated.displayTime == frame.displayTime)
     #expect(repeated.deliveryKind == .idleRepeat)
     #expect(repeated.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(
+      repeated.captureScreenGeometry?.screenRect
+        == CGRect(x: 120, y: 80, width: 320, height: 180)
+    )
     #expect(repeated.image === frame.image)
     #expect(repeated.fingerprint == frame.fingerprint)
     #expect(repeated.contentFingerprint == frame.contentFingerprint)
@@ -268,6 +295,47 @@ struct CGImageRasterizerTests {
     #expect(repeated.captureSurfaceGeometry == nil)
   }
 
+  @Test func idleRepeatUsesOnlyTheCurrentSamplesScreenPosition() throws {
+    let previousRect = CGRect(x: 20, y: 30, width: 320, height: 180)
+    let currentRect = CGRect(x: -700, y: 50, width: 320, height: 180)
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+      screenRect: previousRect
+    )
+
+    let moved = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 8,
+      capturedAt: Date(timeIntervalSince1970: 124),
+      currentAttachments: makeSurfaceGeometryAttachments(
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+        screenRect: currentRect
+      )
+    )
+    let missing = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 9,
+      capturedAt: Date(timeIntervalSince1970: 125),
+      currentAttachments: makeSurfaceGeometryAttachments(
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+      )
+    )
+    let invalid = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 10,
+      capturedAt: Date(timeIntervalSince1970: 126),
+      currentAttachments: makeSurfaceGeometryAttachments(
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+        screenRect: CGRect(x: 40, y: 50, width: 0, height: 180)
+      )
+    )
+
+    #expect(frame.captureScreenGeometry?.screenRect == previousRect)
+    #expect(moved.captureScreenGeometry?.screenRect == currentRect)
+    #expect(missing.captureScreenGeometry == nil)
+    #expect(invalid.captureScreenGeometry == nil)
+  }
+
   @Test func parsesCompleteScreenCaptureKitSurfaceGeometry() throws {
     let rect = CGRect(x: 12.5, y: 6.25, width: 960, height: 540)
     let bridgedAttachments: [SCStreamFrameInfo: Any] = [
@@ -304,6 +372,74 @@ struct CGImageRasterizerTests {
     )
   }
 
+  @Test func parsesDictionaryRepresentedScreenCaptureKitContentRect() throws {
+    let rect = CGRect(x: 12.5, y: 6.25, width: 960, height: 540)
+    let attachments: [SCStreamFrameInfo: Any] = [
+      .contentRect: rect.dictionaryRepresentation,
+      .scaleFactor: NSNumber(value: 2.0),
+      .contentScale: NSNumber(value: 0.8),
+    ]
+
+    let geometry = try #require(
+      CaptureSurfaceGeometryParser.parse(
+        attachments,
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      )
+    )
+
+    #expect(geometry.contentRect == rect)
+  }
+
+  @Test func parsesSupportedScreenCaptureKitScreenRectRepresentations() throws {
+    let rect = CGRect(x: -1_200.5, y: -60.25, width: 960, height: 540)
+    let representations: [Any] = [
+      rect,
+      NSValue(rect: rect),
+      rect.dictionaryRepresentation,
+    ]
+
+    for representation in representations {
+      let geometry = try #require(
+        CaptureScreenGeometryParser.parse([.screenRect: representation])
+      )
+      #expect(geometry.screenRect == rect)
+      #expect(geometry.screenOriginX == -1_200.5)
+      #expect(geometry.screenOriginY == -60.25)
+      #expect(geometry.screenWidth == 960)
+      #expect(geometry.screenHeight == 540)
+    }
+  }
+
+  @Test func rejectsMissingOrInvalidScreenCaptureKitScreenRect() {
+    let invalidRects = [
+      CGRect(x: 0, y: 0, width: 0, height: 540),
+      CGRect(x: 0, y: 0, width: 960, height: 0),
+      CGRect(x: 0, y: 0, width: -1, height: 540),
+      CGRect(x: 0, y: 0, width: 960, height: -1),
+      CGRect(x: CGFloat.infinity, y: 0, width: 960, height: 540),
+      CGRect(x: 0, y: -CGFloat.infinity, width: 960, height: 540),
+      CGRect(x: 0, y: 0, width: CGFloat.nan, height: 540),
+      CGRect(x: 0, y: 0, width: 960, height: CGFloat.infinity),
+    ]
+
+    #expect(CaptureScreenGeometryParser.parse(nil) == nil)
+    #expect(CaptureScreenGeometryParser.parse([:]) == nil)
+    #expect(CaptureScreenGeometryParser.parse([.screenRect: "invalid"]) == nil)
+    #expect(
+      CaptureScreenGeometryParser.parse([.screenRect: NSNumber(value: 42)]) == nil
+    )
+    #expect(
+      CaptureScreenGeometryParser.parse(
+        [.screenRect: NSValue(point: CGPoint(x: 20, y: 30))]
+      ) == nil
+    )
+    for rect in invalidRects {
+      #expect(CaptureScreenGeometryParser.parse([.screenRect: rect]) == nil)
+      #expect(CaptureScreenGeometry(screenRect: rect) == nil)
+    }
+  }
+
   @Test func rejectsMissingOrInvalidScreenCaptureKitSurfaceGeometry() {
     let rect = CGRect(x: 0, y: 0, width: 960, height: 540)
     let valid: [SCStreamFrameInfo: Any] = [
@@ -330,6 +466,17 @@ struct CGImageRasterizerTests {
       CaptureSurfaceGeometryParser.parse(
         [
           .contentRect: CGRect(x: -.infinity, y: 0, width: 960, height: 540),
+          .scaleFactor: 2.0,
+          .contentScale: 1.0,
+        ],
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        [
+          .contentRect: CGRect(x: 0, y: 0, width: -960, height: 540),
           .scaleFactor: 2.0,
           .contentScale: 1.0,
         ],
@@ -544,7 +691,8 @@ struct CGImageRasterizerTests {
   }
 
   private func makeFactoryTestFrame(
-    geometryRect: CGRect?
+    geometryRect: CGRect?,
+    screenRect: CGRect? = nil
   ) throws -> CapturedPowerPointFrame {
     let image = try #require(makeSolidImage(width: 320, height: 180))
     let geometry: CaptureSurfaceGeometry?
@@ -561,12 +709,19 @@ struct CGImageRasterizerTests {
     } else {
       geometry = nil
     }
+    let screenGeometry: CaptureScreenGeometry?
+    if let screenRect {
+      screenGeometry = try #require(CaptureScreenGeometry(screenRect: screenRect))
+    } else {
+      screenGeometry = nil
+    }
     return CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: 42,
       sequenceNumber: 7,
       capturedAt: Date(timeIntervalSince1970: 123),
       displayTime: 12_345,
       captureSurfaceGeometry: geometry,
+      captureScreenGeometry: screenGeometry,
       image: image,
       fingerprint: FrameFingerprint(
         sampleColumns: 32,
@@ -577,13 +732,18 @@ struct CGImageRasterizerTests {
   }
 
   private func makeSurfaceGeometryAttachments(
-    contentRect: CGRect
+    contentRect: CGRect,
+    screenRect: CGRect? = nil
   ) -> [SCStreamFrameInfo: Any] {
-    [
+    var attachments: [SCStreamFrameInfo: Any] = [
       .contentRect: contentRect,
       .scaleFactor: Double(2),
       .contentScale: Double(0.75),
     ]
+    if let screenRect {
+      attachments[.screenRect] = screenRect
+    }
+    return attachments
   }
 
   private func makeSolidImage(width: Int, height: Int) -> CGImage? {

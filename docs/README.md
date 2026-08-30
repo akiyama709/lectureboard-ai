@@ -29,7 +29,11 @@
 
 ## Architecture decision records
 
-The [`adr`](adr/) directory records the platform, overlay, context, AI-provider, grounding, license, public-v1 completion, fail-closed frame-synchronization timeout, and user-confirmed slide-canvas boundary decisions.
+The [`adr`](adr/) directory records the platform, overlay, context, AI-provider, grounding, license, public-v1 completion, and fail-closed runtime-boundary decisions.
+
+- [ADR 0008 — Post-identity frame timeout](adr/0008-post-identity-frame-timeout.md)
+- [ADR 0009 — User-confirmed slide-canvas boundary](adr/0009-user-confirmed-slide-canvas-boundary.md)
+- [ADR 0010 — Fail-closed production-overlay boundary](adr/0010-fail-closed-production-overlay-boundary.md)
 
 ## Local development handoff
 

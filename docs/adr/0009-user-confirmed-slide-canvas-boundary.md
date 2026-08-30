@@ -65,3 +65,9 @@ The transparent overlay is still full-screen. Canvas cropping establishes analys
 2. Measure ScreenCaptureKit surface padding, `contentRect`, scale, and source-image mapping before making coordinate-accuracy claims.
 3. Map confirmed canvas coordinates to the overlay's screen coordinates with an independently tested, fail-closed geometry boundary.
 4. Calibrate live OCR, raster candidates, occupied regions, existing ink, and board placement only after the canvas boundary is verified for the tested mode.
+
+## Follow-up — 2026-08-31
+
+The full-screen-overlay consequence and follow-up item 3 above record the state when this ADR was accepted. [ADR 0010](0010-fail-closed-production-overlay-boundary.md) subsequently accepts an implemented fail-closed production mapper from the confirmed canvas and current ScreenCaptureKit geometry to one exact AppKit target rectangle. Full-display rendering is now a separate demo-only path rather than a production fallback.
+
+This follow-up changes the implementation status, not the evidence boundary of this ADR. The mapper and its production-display safety gates have deterministic synthetic and native integration coverage only. Live PowerPoint alignment, window-list z-order, multiple displays, resize and movement, click-through behavior, and pen-input non-interference remain unverified.

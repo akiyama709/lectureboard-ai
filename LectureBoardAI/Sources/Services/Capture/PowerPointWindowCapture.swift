@@ -13,6 +13,7 @@ enum CapturedFrameDeliveryKind: Equatable, Sendable {
 enum CaptureFrameDeliveryDecision: Equatable, Sendable {
   case newFrame
   case idleRepeat
+  case terminalFailure
   case drop
 }
 
@@ -32,8 +33,10 @@ enum CaptureFrameDeliveryDecisionResolver {
       return .newFrame
     case .idle:
       return .idleRepeat
-    case .blank, .suspended, .stopped:
+    case .blank, .suspended:
       return .drop
+    case .stopped:
+      return .terminalFailure
     @unknown default:
       return .drop
     }
@@ -42,6 +45,18 @@ enum CaptureFrameDeliveryDecisionResolver {
   private static func isBoolean(_ value: Any) -> Bool {
     guard let number = value as? NSNumber else { return false }
     return CFGetTypeID(number) == CFBooleanGetTypeID()
+  }
+}
+
+struct CaptureOutputContinuity<Payload> {
+  private(set) var repeatablePayload: Payload?
+
+  mutating func acceptNewPayload(_ payload: Payload) {
+    repeatablePayload = payload
+  }
+
+  mutating func markContentUnavailable() {
+    repeatablePayload = nil
   }
 }
 
@@ -64,11 +79,13 @@ struct CaptureSurfaceGeometry: Equatable, Sendable {
     outputPixelWidth: Int,
     outputPixelHeight: Int
   ) {
+    let rawWidth = Double(contentRect.size.width)
+    let rawHeight = Double(contentRect.size.height)
     let values = [
       Double(contentRect.origin.x),
       Double(contentRect.origin.y),
-      Double(contentRect.width),
-      Double(contentRect.height),
+      rawWidth,
+      rawHeight,
       scaleFactor,
       contentScale,
     ]
@@ -76,8 +93,8 @@ struct CaptureSurfaceGeometry: Equatable, Sendable {
       values.allSatisfy(\.isFinite),
       contentRect.origin.x >= 0,
       contentRect.origin.y >= 0,
-      contentRect.width > 0,
-      contentRect.height > 0,
+      rawWidth > 0,
+      rawHeight > 0,
       scaleFactor >= 1,
       scaleFactor <= 4,
       contentScale > 0,
@@ -89,8 +106,8 @@ struct CaptureSurfaceGeometry: Equatable, Sendable {
 
     contentOriginX = Double(contentRect.origin.x)
     contentOriginY = Double(contentRect.origin.y)
-    contentWidth = Double(contentRect.width)
-    contentHeight = Double(contentRect.height)
+    contentWidth = rawWidth
+    contentHeight = rawHeight
     self.scaleFactor = scaleFactor
     self.contentScale = contentScale
     self.outputPixelWidth = outputPixelWidth
@@ -107,6 +124,67 @@ struct CaptureSurfaceGeometry: Equatable, Sendable {
   }
 }
 
+/// The current onscreen location reported for one ScreenCaptureKit sample.
+///
+/// Unlike `CaptureSurfaceGeometry`, a negative origin is valid because a window
+/// may be located on a display to the left of or above the main display.
+struct CaptureScreenGeometry: Equatable, Sendable {
+  let screenOriginX: Double
+  let screenOriginY: Double
+  let screenWidth: Double
+  let screenHeight: Double
+
+  init?(screenRect: CGRect) {
+    let rawWidth = Double(screenRect.size.width)
+    let rawHeight = Double(screenRect.size.height)
+    let values = [
+      Double(screenRect.origin.x),
+      Double(screenRect.origin.y),
+      rawWidth,
+      rawHeight,
+    ]
+    guard
+      values.allSatisfy(\.isFinite),
+      rawWidth > 0,
+      rawHeight > 0
+    else {
+      return nil
+    }
+
+    screenOriginX = Double(screenRect.origin.x)
+    screenOriginY = Double(screenRect.origin.y)
+    screenWidth = rawWidth
+    screenHeight = rawHeight
+  }
+
+  var screenRect: CGRect {
+    CGRect(
+      x: screenOriginX,
+      y: screenOriginY,
+      width: screenWidth,
+      height: screenHeight
+    )
+  }
+}
+
+enum CaptureFrameRectParser {
+  static func parse(_ value: Any?) -> CGRect? {
+    if let rect = value as? CGRect {
+      return rect
+    }
+    if let value = value as? NSValue {
+      let actualType = String(cString: value.objCType)
+      let rectType = String(cString: NSValue(rect: .zero).objCType)
+      guard actualType == rectType else { return nil }
+      return value.rectValue
+    }
+    if let value = value as? NSDictionary {
+      return CGRect(dictionaryRepresentation: value as CFDictionary)
+    }
+    return nil
+  }
+}
+
 enum CaptureSurfaceGeometryParser {
   static func parse(
     _ attachments: [SCStreamFrameInfo: Any]?,
@@ -115,7 +193,7 @@ enum CaptureSurfaceGeometryParser {
   ) -> CaptureSurfaceGeometry? {
     guard
       let attachments,
-      let contentRect = parseRect(attachments[.contentRect]),
+      let contentRect = CaptureFrameRectParser.parse(attachments[.contentRect]),
       let scaleFactor = parsePositiveDouble(attachments[.scaleFactor]),
       let contentScale = parsePositiveDouble(attachments[.contentScale])
     else {
@@ -129,16 +207,6 @@ enum CaptureSurfaceGeometryParser {
       outputPixelWidth: outputPixelWidth,
       outputPixelHeight: outputPixelHeight
     )
-  }
-
-  private static func parseRect(_ value: Any?) -> CGRect? {
-    if let rect = value as? CGRect {
-      return rect
-    }
-    if let value = value as? NSValue {
-      return value.rectValue
-    }
-    return nil
   }
 
   private static func parsePositiveDouble(_ value: Any?) -> Double? {
@@ -155,6 +223,19 @@ enum CaptureSurfaceGeometryParser {
   }
 }
 
+enum CaptureScreenGeometryParser {
+  static func parse(
+    _ attachments: [SCStreamFrameInfo: Any]?
+  ) -> CaptureScreenGeometry? {
+    guard
+      let screenRect = CaptureFrameRectParser.parse(attachments?[.screenRect])
+    else {
+      return nil
+    }
+    return CaptureScreenGeometry(screenRect: screenRect)
+  }
+}
+
 struct CapturedPowerPointFrame: @unchecked Sendable {
   let windowID: CGWindowID
   let sequenceNumber: UInt64
@@ -163,6 +244,7 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
   let displayTime: UInt64?
   let deliveryKind: CapturedFrameDeliveryKind
   let captureSurfaceGeometry: CaptureSurfaceGeometry?
+  let captureScreenGeometry: CaptureScreenGeometry?
   let image: CGImage
   let fingerprint: FrameFingerprint
   let contentFingerprint: ContentFingerprint?
@@ -174,6 +256,7 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
     displayTime: UInt64? = nil,
     deliveryKind: CapturedFrameDeliveryKind,
     captureSurfaceGeometry: CaptureSurfaceGeometry? = nil,
+    captureScreenGeometry: CaptureScreenGeometry? = nil,
     image: CGImage,
     fingerprint: FrameFingerprint,
     contentFingerprint: ContentFingerprint?
@@ -184,6 +267,7 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
     self.displayTime = displayTime
     self.deliveryKind = deliveryKind
     self.captureSurfaceGeometry = captureSurfaceGeometry
+    self.captureScreenGeometry = captureScreenGeometry
     self.image = image
     self.fingerprint = fingerprint
     self.contentFingerprint = contentFingerprint
@@ -197,6 +281,7 @@ enum CapturedPowerPointFrameFactory {
     capturedAt: Date,
     displayTime: UInt64? = nil,
     captureSurfaceGeometry: CaptureSurfaceGeometry? = nil,
+    captureScreenGeometry: CaptureScreenGeometry? = nil,
     image: CGImage,
     fingerprint: FrameFingerprint
   ) -> CapturedPowerPointFrame {
@@ -207,6 +292,7 @@ enum CapturedPowerPointFrameFactory {
       displayTime: displayTime,
       deliveryKind: .new,
       captureSurfaceGeometry: captureSurfaceGeometry,
+      captureScreenGeometry: captureScreenGeometry,
       image: image,
       fingerprint: fingerprint,
       contentFingerprint: CGImageRasterizer.makeContentFingerprint(from: image)
@@ -246,6 +332,7 @@ enum CapturedPowerPointFrameFactory {
       displayTime: lastFrame.displayTime,
       deliveryKind: .idleRepeat,
       captureSurfaceGeometry: repeatedSurfaceGeometry,
+      captureScreenGeometry: CaptureScreenGeometryParser.parse(currentAttachments),
       image: lastFrame.image,
       fingerprint: lastFrame.fingerprint,
       contentFingerprint: lastFrame.contentFingerprint
@@ -318,6 +405,7 @@ struct CaptureSessionLifecycle: Sendable {
 }
 
 typealias CaptureFrameHandler = @Sendable (CapturedPowerPointFrame) -> Void
+typealias CaptureContentUnavailableHandler = @Sendable (UInt64) -> Void
 typealias CaptureErrorHandler = @Sendable (String) -> Void
 
 protocol PowerPointWindowCapturing: Sendable {
@@ -328,7 +416,32 @@ protocol PowerPointWindowCapturing: Sendable {
     onError: @escaping CaptureErrorHandler
   ) async throws
 
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onError: @escaping CaptureErrorHandler
+  ) async throws
+
   func stop(operationID: CaptureOperationID) async
+}
+
+extension PowerPointWindowCapturing {
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onError: @escaping CaptureErrorHandler
+  ) async throws {
+    try await start(
+      operationID: operationID,
+      identity: identity,
+      onFrame: onFrame,
+      onError: onError
+    )
+  }
 }
 
 struct ReenumeratedPowerPointWindowCandidate: Equatable, Sendable {
@@ -374,6 +487,22 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     operationID: CaptureOperationID,
     identity: PowerPointWindowIdentity,
     onFrame: @escaping CaptureFrameHandler,
+    onError: @escaping CaptureErrorHandler
+  ) async throws {
+    try await start(
+      operationID: operationID,
+      identity: identity,
+      onFrame: onFrame,
+      onContentUnavailable: { _ in },
+      onError: onError
+    )
+  }
+
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
     onError: @escaping CaptureErrorHandler
   ) async throws {
     guard lifecycle.acceptStart(operationID) else {
@@ -432,6 +561,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     let output = CaptureOutput(
       windowID: identity.windowID,
       frameHandler: onFrame,
+      contentUnavailableHandler: onContentUnavailable,
       errorHandler: onError
     )
     let stream = SCStream(
@@ -505,18 +635,21 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
 
   private let windowID: CGWindowID
   private let frameHandler: CaptureFrameHandler
+  private let contentUnavailableHandler: CaptureContentUnavailableHandler
   private let errorHandler: CaptureErrorHandler
   private let imageContext = CIContext(options: [.cacheIntermediates: false])
   private var sequenceNumber: UInt64 = 0
-  private var lastFrame: CapturedPowerPointFrame?
+  private var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
 
   init(
     windowID: CGWindowID,
     frameHandler: @escaping CaptureFrameHandler,
+    contentUnavailableHandler: @escaping CaptureContentUnavailableHandler,
     errorHandler: @escaping CaptureErrorHandler
   ) {
     self.windowID = windowID
     self.frameHandler = frameHandler
+    self.contentUnavailableHandler = contentUnavailableHandler
     self.errorHandler = errorHandler
   }
 
@@ -525,14 +658,31 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
     of outputType: SCStreamOutputType
   ) {
-    guard outputType == .screen, sampleBuffer.isValid else { return }
+    guard outputType == .screen else { return }
+    precondition(sequenceNumber < UInt64.max, "Capture delivery sequence exhausted.")
+    sequenceNumber += 1
+    let deliverySequenceNumber = sequenceNumber
+    guard sampleBuffer.isValid else {
+      reportContentUnavailable(sequenceNumber: deliverySequenceNumber)
+      return
+    }
 
     switch frameDeliveryDecision(in: sampleBuffer) {
     case .idleRepeat:
-      emitRepeatedFrameIfAvailable(from: sampleBuffer)
+      emitRepeatedFrameIfAvailable(
+        from: sampleBuffer,
+        sequenceNumber: deliverySequenceNumber
+      )
     case .newFrame:
-      emitNewFrame(from: sampleBuffer)
+      emitNewFrame(
+        from: sampleBuffer,
+        sequenceNumber: deliverySequenceNumber
+      )
+    case .terminalFailure:
+      continuity.markContentUnavailable()
+      errorHandler(NSLocalizedString("error.captureWindowInactive", comment: ""))
     case .drop:
+      reportContentUnavailable(sequenceNumber: deliverySequenceNumber)
       return
     }
   }
@@ -545,9 +695,14 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     errorHandler(NSLocalizedString("error.captureWindowInactive", comment: ""))
   }
 
-  private func emitRepeatedFrameIfAvailable(from sampleBuffer: CMSampleBuffer) {
-    guard let lastFrame else { return }
-    sequenceNumber &+= 1
+  private func emitRepeatedFrameIfAvailable(
+    from sampleBuffer: CMSampleBuffer,
+    sequenceNumber: UInt64
+  ) {
+    guard let lastFrame = continuity.repeatablePayload else {
+      reportContentUnavailable(sequenceNumber: sequenceNumber)
+      return
+    }
     frameHandler(
       CapturedPowerPointFrameFactory.makeIdleRepeat(
         from: lastFrame,
@@ -558,33 +713,47 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     )
   }
 
-  private func emitNewFrame(from sampleBuffer: CMSampleBuffer) {
-    guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+  private func emitNewFrame(
+    from sampleBuffer: CMSampleBuffer,
+    sequenceNumber: UInt64
+  ) {
+    guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+      reportContentUnavailable(sequenceNumber: sequenceNumber)
+      return
+    }
     guard let fingerprint = FrameFingerprintSampler.makeFingerprint(from: pixelBuffer) else {
+      reportContentUnavailable(sequenceNumber: sequenceNumber)
       return
     }
 
     let inputImage = CIImage(cvPixelBuffer: pixelBuffer)
     guard let image = imageContext.createCGImage(inputImage, from: inputImage.extent) else {
+      reportContentUnavailable(sequenceNumber: sequenceNumber)
       return
     }
 
-    sequenceNumber &+= 1
+    let attachments = frameAttachments(in: sampleBuffer)
     let frame = CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
-      displayTime: frameDisplayTime(in: sampleBuffer),
+      displayTime: CaptureFrameDisplayTimeParser.parse(attachments?[.displayTime]),
       captureSurfaceGeometry: CaptureSurfaceGeometryParser.parse(
-        frameAttachments(in: sampleBuffer),
+        attachments,
         outputPixelWidth: image.width,
         outputPixelHeight: image.height
       ),
+      captureScreenGeometry: CaptureScreenGeometryParser.parse(attachments),
       image: image,
       fingerprint: fingerprint
     )
-    lastFrame = frame
+    continuity.acceptNewPayload(frame)
     frameHandler(frame)
+  }
+
+  private func reportContentUnavailable(sequenceNumber: UInt64) {
+    continuity.markContentUnavailable()
+    contentUnavailableHandler(sequenceNumber)
   }
 
   private func frameDeliveryDecision(
@@ -592,12 +761,6 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   ) -> CaptureFrameDeliveryDecision {
     CaptureFrameDeliveryDecisionResolver.resolve(
       statusValue: frameAttachments(in: sampleBuffer)?[.status]
-    )
-  }
-
-  private func frameDisplayTime(in sampleBuffer: CMSampleBuffer) -> UInt64? {
-    CaptureFrameDisplayTimeParser.parse(
-      frameAttachments(in: sampleBuffer)?[.displayTime]
     )
   }
 

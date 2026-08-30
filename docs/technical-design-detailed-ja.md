@@ -162,7 +162,7 @@ ScreenCaptureKitを使用し，ユーザーが明示的に選択したPowerPoint
 
 　現行試作では，ScreenCaptureKitが返す選択window全体のframeを，取得件数と利用者校正用previewにだけ使用する．公開macOS及びPowerPoint APIは，PowerPoint内部の正確なslide canvas矩形を公開しない．ScreenCaptureKitの`contentRect`は取得surfaceを示すが，PowerPoint内部のslide subviewを示すものではない．したがって，window全体をそのままスライド画像とみなしてはならない．
 
-　`SCFrameStatus`が欠落，不正形式又は未知値の場合はframeをdropする．`.complete`及び`.started`だけをnew delivery，`.idle`だけをrepeatとして扱う．`scaleFactor`はSDK文書の範囲である1以上4以下だけを受理する．
+　`.complete`及び`.started`だけをnew delivery，`.idle`だけをrepeatとして扱う．`SCFrameStatus`の欠落，不正形式，未知値，`.blank`及び`.suspended`，不正sample並びに画像・指紋変換失敗ではrepeat可能なpayloadを破棄し，Appへ同じ単調増加sequence上のcontent unavailable境界を通知する．Appは後続の`.new` frameまで視覚・板書経路を閉じる．`.stopped`は固定文言のterminal capture errorとして停止処理へ進む．`scaleFactor`はSDK文書の範囲である1以上4以下だけを受理する．
 
 入力：
 
@@ -405,9 +405,13 @@ MVPでは二次元グリッド上の最大空矩形を利用する．将来は�
 
 ### 8.1 透明オーバーレイ
 
-対面講義向け．PowerPointウィンドウの上へ透明パネルを置く．通常はクリック透過とし，ペンモード時だけ入力を受ける．
+　対面講義向け．PowerPointウィンドウの上へ透明パネルを置く．通常はクリック透過とし，ペンモード時だけ入力を受ける．
 
-　現行overlay試作は選択display全体を使用し，利用者が確認したスライド面のscreen座標とはまだ対応付けられていない．画像内の切出し座標からwindowのscreen座標，surface padding，scale及びdisplay変換を経てoverlay座標へ写像する機能は，次の独立実装単位とする．この対応が実装・live検証されるまで，スライド面上へ正確に描画できるとは主張しない．
+　現行実装は，利用者が確定したoutput pixel上のcanvas矩形を，確定時と完全一致するcapture operation，ScreenCaptureKit window ID，surface geometry及びoutput寸法と，現在frame固有のsequence及び`screenRect`へ固定する．canvas矩形を`contentRect`，`scaleFactor`及び`contentScale`を介してQuartz global座標へ対応付け，出力1 pixel以内の丸め差だけを許容する．対象矩形を完全に含む検証済みdisplayが正確に1件である場合だけ，そのdisplayのQuartz座標からAppKit座標へ変換する．証拠の欠落，不一致，古いframe，display境界の横断又は包含displayの曖昧さでは，概略位置や画面全体へfallbackせず非表示にする．
+
+　production overlayは，意味的なslide identityと現在の視覚的根拠が有効であることに加え，固定したPowerPoint PID及び完全一致bundle identifierのapplicationがfrontmostであり，正確なwindow IDを持つon-screenかつlayer 0のCore Graphics windowが1件だけ存在し，そのboundsとcurrent `screenRect`の各辺が2 point以内で一致し，front-to-back順でその手前に正の面積で重なるon-screen windowがない場合だけ表示対象となる．利用者による明示的な非表示は後続frameで自動解除せず，content unavailable，視覚変化候補又は根拠の無効化でも直ちに隠す．取得frameが新たに届かない場合にも古い可視判定を保持し続けないよう，production eligibilityにはcapture cadenceから独立して失効するleaseを設ける．
+
+　選択display全体を使うpanelはdemo専用であり，production経路の座標fallbackには用いない．上記の座標変換，eligibility及び非表示境界は，合成geometry，window-list fixture及び制御可能なApp統合testによる実装証拠である．実PowerPointにおける見た目の座標一致，`screenRect`の向きと単位，実window listのz-order，複数display，window移動・resize，full-screen，発表者表示，click-through及びpen入力非干渉は未検証である．
 
 ### 8.2 合成出力ウィンドウ
 
@@ -555,6 +559,7 @@ LectureBoard Sessions/
 - 利用者によるスライド面のdrag確定，取消し及び再選択
 - capture再開，window不一致，source pixel寸法変更及びScreenCaptureKit surface geometry変更による確定無効化
 - ScreenCaptureKit surface padding，`contentRect`，display scale及びoverlay座標変換
+- production overlayのfrontmost application，正確なCore Graphics window，bounds一致，occlusion，手動非表示，content unavailable及びlease失効によるfail-closedな表示停止
 
 ### 15.3 教育評価
 
@@ -583,7 +588,7 @@ LectureBoard Sessions/
 
 1. 安全なPowerPoint対象窓特定及び連続取得
 2. 安定した視覚・内容更新，利用者確認式のスライドキャンバス分離及び独立したスライド同一性
-3. 確認済みスライド面へのoverlay座標対応，OCR，図形，占有領域及び確認済み既存インク
+3. 実装済みの確認済みスライド面へのoverlay座標対応をlive検証し，OCR，図形，占有領域及び確認済み既存インクを統合する
 4. `.pptx`，発表者ノート及び確定発話を用いる根拠付き文脈判断
 5. 人間の手書きを優先する安定板書及びセッション保存
 6. 制御講義によるα検証，代表資料によるβ検証及び機能凍結後のRC検証

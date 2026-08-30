@@ -38,6 +38,9 @@ All notable changes to this project will be documented in this file.
 - Independent App and Apple-provider transcription generation guards, provider stop and stale-callback rejection at semantic slide/canvas/capture boundaries, and explicit user resumption after each safety stop
 - Demo-scene cleanup at capture start and demo suppression during active capture or capture-provider shutdown
 - Metadata-only runtime schema 6 slide-canvas state with schema-1-through-schema-5 decoding compatibility
+- Fail-closed production-overlay mapping from the confirmed output-pixel canvas through the exact current ScreenCaptureKit surface and `screenRect` into one uniquely containing AppKit display, bound to the capture operation, exact window, output dimensions, and current frame sequence, with no full-display or approximate fallback
+- Production-overlay eligibility checks for the frozen PowerPoint process and bundle being frontmost, one matching on-screen layer-zero Core Graphics window, window-bound agreement within two points, and no earlier intersecting on-screen window, plus a persistent manual-hide latch, visual/content-unavailable hiding, and an independently expiring eligibility lease
+- A separate full-display demo-overlay path that is never used as a production-coordinate fallback
 
 ### Planned
 
@@ -46,7 +49,7 @@ All notable changes to this project will be documented in this file.
 - Exact-window fresh-frame acquisition and live timeout calibration for a static slide after an identity boundary
 - Runtime calibration of Vision recognition and occupied regions with real presentations
 - Live PowerPoint calibration of manual canvas localization, UI exclusion, ScreenCaptureKit surface padding and `contentRect` mapping, slideshow modes, resizing, and display arrangements
-- Exact confirmed-canvas alignment for the currently full-screen overlay
+- Live PowerPoint validation of the implemented confirmed-canvas overlay alignment, frontmost-window and occlusion policy, lease expiry, window movement and resizing, multi-display conversion, z-order, click-through behavior, and pen-input non-interference
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription
 - Contextual AI-provider adapters

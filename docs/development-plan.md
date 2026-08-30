@@ -14,7 +14,8 @@ The current scaffold establishes a testable core, native application shell, perm
 
 - Continuous ScreenCaptureKit stream
 - Stable-frame and slide-change detection
-- Coordinate mapping between captured content and overlay
+- Deterministic fail-closed mapping from a user-confirmed captured canvas to one exact AppKit overlay rectangle is implemented; live PowerPoint alignment, window movement and resizing, multi-display conversion, z-order, and click-through behavior remain unverified
+- Production-overlay eligibility is fail-closed across exact PowerPoint identity, foreground ownership, Core Graphics window bounds and occlusion, manual suppression, visual-content availability, and an independently expiring lease; the full-display panel is demo-only and is not a production fallback
 - Vision text boxes and occupied-space mask
 - Detection of added PowerPoint ink
 
@@ -41,6 +42,7 @@ The current scaffold establishes a testable core, native application shell, perm
 - Full-classroom pilots with consent and fallback procedures
 - Reliability, usefulness, cognitive-load, and privacy evaluation
 - Explicit separation of current-build evidence from historical-build evidence
+- Live validation of the implemented confirmed-canvas overlay mapping and eligibility boundary before any alignment, click-through, or pen-input claim
 - Alpha packaging that is clearly marked as unfinished
 
 **Gate:** the observable lecture path works end to end under controlled conditions. Alpha is not project completion.
