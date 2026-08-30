@@ -11,6 +11,7 @@ struct RuntimeVerificationSnapshotTests {
       screenRecordingPermission: .authorized,
       captureState: .capturing,
       visionState: .completed,
+      slideCanvasState: .confirmed,
       frameCount: 120,
       newFrameCount: 4,
       repeatedFrameCount: 116,
@@ -43,6 +44,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["slideIdentityFrameSyncState"] as? String == "timedOut")
     #expect(object["slideIdentitySampleCount"] as? Int == 8)
     #expect(object["slideIdentityContinuityBreakCount"] as? Int == 1)
+    #expect(object["slideCanvasState"] as? String == "confirmed")
     #expect(object["slideID"] == nil)
     #expect(object["slideIndex"] == nil)
     #expect(object["presentationSessionToken"] == nil)
@@ -55,6 +57,7 @@ struct RuntimeVerificationSnapshotTests {
       screenRecordingPermission: .unknown,
       captureState: .idle,
       visionState: .idle,
+      slideCanvasState: .invalidated,
       frameCount: -1,
       newFrameCount: -2,
       repeatedFrameCount: -3,
@@ -83,6 +86,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.slideIdentityFrameSyncState == .waiting)
     #expect(snapshot.slideIdentitySampleCount == 0)
     #expect(snapshot.slideIdentityContinuityBreakCount == 0)
+    #expect(snapshot.slideCanvasState == .invalidated)
     #expect(snapshot.contentRevisionCount == 0)
     #expect(snapshot.recognizedTextCount == 0)
     #expect(snapshot.detectedRectangleCount == 0)
@@ -98,6 +102,23 @@ struct RuntimeVerificationSnapshotTests {
 
     #expect(low.latestDifferenceFromStableFrame == 0)
     #expect(high.latestDifferenceFromStableFrame == 1)
+  }
+
+  @Test func slideCanvasStateRawValuesAreStableMetadata() throws {
+    let expected: [(RuntimeSlideCanvasState, String)] = [
+      (.unavailable, "unavailable"),
+      (.waitingForFrame, "waitingForFrame"),
+      (.needsConfirmation, "needsConfirmation"),
+      (.selecting, "selecting"),
+      (.confirmed, "confirmed"),
+      (.invalidated, "invalidated"),
+    ]
+
+    for (state, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(state)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(try JSONDecoder().decode(RuntimeSlideCanvasState.self, from: encoded) == state)
+    }
   }
 
   private func snapshot(difference: Double) -> RuntimeVerificationSnapshot {

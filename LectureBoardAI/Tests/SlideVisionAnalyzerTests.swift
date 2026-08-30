@@ -70,11 +70,12 @@ struct SlideVisionAnalyzerTests {
     }
   }
 
-  private func makeFrame(image: CGImage) -> CapturedPowerPointFrame {
-    CapturedPowerPointFrame(
+  private func makeFrame(image: CGImage) -> CapturedSlideCanvasFrame {
+    CapturedSlideCanvasFrame(
       windowID: 42,
       sequenceNumber: 1,
       capturedAt: .distantPast,
+      displayTime: nil,
       deliveryKind: .new,
       image: image,
       fingerprint: FrameFingerprint(

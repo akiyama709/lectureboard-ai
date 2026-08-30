@@ -29,6 +29,15 @@ All notable changes to this project will be documented in this file.
 - A no-side-effect default identity provider that performs no Automation permission request or Apple Event
 - A token-bound post-identity frame gate with explicit waiting, synchronized, and fail-closed timeout states, plus stale-timeout rejection and recovery by a strictly newer ScreenCaptureKit frame
 - Metadata-only runtime schema 5 frame-sync and identity state with schema-1-through-schema-4 decoding compatibility
+- A user-confirmed slide-canvas boundary for the exact captured-window preview, bound to capture operation, exact window ID, source pixel dimensions, and validated ScreenCaptureKit surface geometry, with fail-closed invalidation on restart, mismatch, missing geometry, or geometry change
+- Current-sample attachment geometry for idle deliveries, geometry provenance retained only when it exactly matches the last visual payload geometry, fail-closed invalidation before visual processing on changed, missing, or invalid current geometry or missing last geometry, and last-frame inheritance limited to fixed stream surface dimensions when an idle sample has no image buffer
+- Fail-closed ScreenCaptureKit frame-status parsing that drops missing, malformed, and unknown values, treats only complete/started as new and idle as repeat, and validates scale factor against the SDK-documented inclusive range from 1 through 4
+- Canvas-only stable/content fingerprints, Vision requests, raster candidates, occupied regions, and board-placement input; capture delivery remains observable while the visual pipeline is closed before confirmation
+- Immediate stale-analysis invalidation for coarse/dense visual candidates and missing or invalid dense fingerprints, with analysis suppressed for coarse confirmation without a valid dense fingerprint and proposals gated until current-frame analysis completes after baseline recovery
+- Minimum canvas validation requiring at least 32 by 24 source pixels and 1,024 square pixels, current-board-context invalidation across semantic slide, canvas, and capture boundaries, capture-end visual/scene cleanup, and fail-closed board proposals when occupied-region analysis is empty
+- Independent App and Apple-provider transcription generation guards, provider stop and stale-callback rejection at semantic slide/canvas/capture boundaries, and explicit user resumption after each safety stop
+- Demo-scene cleanup at capture start and demo suppression during active capture or capture-provider shutdown
+- Metadata-only runtime schema 6 slide-canvas state with schema-1-through-schema-5 decoding compatibility
 
 ### Planned
 
@@ -36,6 +45,8 @@ All notable changes to this project will be documented in this file.
 - An exact-window-bound production PowerPoint slide-identity provider and live validation before actual slide transitions are claimed
 - Exact-window fresh-frame acquisition and live timeout calibration for a static slide after an identity boundary
 - Runtime calibration of Vision recognition and occupied regions with real presentations
+- Live PowerPoint calibration of manual canvas localization, UI exclusion, ScreenCaptureKit surface padding and `contentRect` mapping, slideshow modes, resizing, and display arrangements
+- Exact confirmed-canvas alignment for the currently full-screen overlay
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription
 - Contextual AI-provider adapters

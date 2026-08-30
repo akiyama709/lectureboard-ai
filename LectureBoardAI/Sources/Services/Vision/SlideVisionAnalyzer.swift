@@ -3,7 +3,7 @@ import LectureBoardCore
 import Vision
 
 protocol SlideVisualAnalyzing: Sendable {
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis
 }
 
 enum SlideVisionAnalyzerError: LocalizedError {
@@ -29,7 +29,7 @@ actor SlideVisionAnalyzer: SlideVisualAnalyzing {
     self.rasterOccupancyDetector = rasterOccupancyDetector
   }
 
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
     try Task.checkCancellation()
     guard let raster = CGImageRasterizer.makeRGBRaster(from: frame.image) else {
       throw SlideVisionAnalyzerError.rasterizationFailed

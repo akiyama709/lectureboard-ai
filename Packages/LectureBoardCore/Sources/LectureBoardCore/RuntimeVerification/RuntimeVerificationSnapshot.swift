@@ -22,6 +22,16 @@ public enum RuntimeVisionState: String, Codable, Equatable, Sendable {
   case failed
 }
 
+/// Metadata-only state for the explicit slide-canvas confirmation boundary.
+public enum RuntimeSlideCanvasState: String, Codable, Equatable, Sendable {
+  case unavailable
+  case waitingForFrame
+  case needsConfirmation
+  case selecting
+  case confirmed
+  case invalidated
+}
+
 /// A metadata-only observation. It deliberately carries no frame image or recognized slide text.
 public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let timestamp: Date
@@ -29,6 +39,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let screenRecordingPermission: ScreenRecordingPermissionState
   public let captureState: RuntimeCaptureState
   public let visionState: RuntimeVisionState
+  public let slideCanvasState: RuntimeSlideCanvasState
   public let frameCount: Int
   public let newFrameCount: Int
   public let repeatedFrameCount: Int
@@ -52,6 +63,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     screenRecordingPermission: ScreenRecordingPermissionState,
     captureState: RuntimeCaptureState,
     visionState: RuntimeVisionState,
+    slideCanvasState: RuntimeSlideCanvasState = .unavailable,
     frameCount: Int,
     newFrameCount: Int,
     repeatedFrameCount: Int,
@@ -77,6 +89,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.screenRecordingPermission = screenRecordingPermission
     self.captureState = captureState
     self.visionState = visionState
+    self.slideCanvasState = slideCanvasState
     self.frameCount = max(frameCount, 0)
     self.newFrameCount = max(newFrameCount, 0)
     self.repeatedFrameCount = max(repeatedFrameCount, 0)
@@ -105,6 +118,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case screenRecordingPermission
     case captureState
     case visionState
+    case slideCanvasState
     case frameCount
     case newFrameCount
     case repeatedFrameCount
@@ -134,6 +148,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
       ),
       captureState: try container.decode(RuntimeCaptureState.self, forKey: .captureState),
       visionState: try container.decode(RuntimeVisionState.self, forKey: .visionState),
+      slideCanvasState: try container.decodeIfPresent(
+        RuntimeSlideCanvasState.self,
+        forKey: .slideCanvasState
+      ) ?? .unavailable,
       frameCount: try container.decode(Int.self, forKey: .frameCount),
       newFrameCount: try container.decode(Int.self, forKey: .newFrameCount),
       repeatedFrameCount: try container.decode(Int.self, forKey: .repeatedFrameCount),

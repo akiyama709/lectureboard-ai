@@ -10,6 +10,151 @@ enum CapturedFrameDeliveryKind: Equatable, Sendable {
   case idleRepeat
 }
 
+enum CaptureFrameDeliveryDecision: Equatable, Sendable {
+  case newFrame
+  case idleRepeat
+  case drop
+}
+
+enum CaptureFrameDeliveryDecisionResolver {
+  static func resolve(statusValue: Any?) -> CaptureFrameDeliveryDecision {
+    guard
+      let statusValue,
+      !isBoolean(statusValue),
+      let rawValue = statusValue as? Int,
+      let status = SCFrameStatus(rawValue: rawValue)
+    else {
+      return .drop
+    }
+
+    switch status {
+    case .complete, .started:
+      return .newFrame
+    case .idle:
+      return .idleRepeat
+    case .blank, .suspended, .stopped:
+      return .drop
+    @unknown default:
+      return .drop
+    }
+  }
+
+  private static func isBoolean(_ value: Any) -> Bool {
+    guard let number = value as? NSNumber else { return false }
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
+  }
+}
+
+/// ScreenCaptureKit geometry that identifies how window content was placed in one
+/// fixed-size stream output surface.
+struct CaptureSurfaceGeometry: Equatable, Sendable {
+  let contentOriginX: Double
+  let contentOriginY: Double
+  let contentWidth: Double
+  let contentHeight: Double
+  let scaleFactor: Double
+  let contentScale: Double
+  let outputPixelWidth: Int
+  let outputPixelHeight: Int
+
+  init?(
+    contentRect: CGRect,
+    scaleFactor: Double,
+    contentScale: Double,
+    outputPixelWidth: Int,
+    outputPixelHeight: Int
+  ) {
+    let values = [
+      Double(contentRect.origin.x),
+      Double(contentRect.origin.y),
+      Double(contentRect.width),
+      Double(contentRect.height),
+      scaleFactor,
+      contentScale,
+    ]
+    guard
+      values.allSatisfy(\.isFinite),
+      contentRect.origin.x >= 0,
+      contentRect.origin.y >= 0,
+      contentRect.width > 0,
+      contentRect.height > 0,
+      scaleFactor >= 1,
+      scaleFactor <= 4,
+      contentScale > 0,
+      outputPixelWidth > 0,
+      outputPixelHeight > 0
+    else {
+      return nil
+    }
+
+    contentOriginX = Double(contentRect.origin.x)
+    contentOriginY = Double(contentRect.origin.y)
+    contentWidth = Double(contentRect.width)
+    contentHeight = Double(contentRect.height)
+    self.scaleFactor = scaleFactor
+    self.contentScale = contentScale
+    self.outputPixelWidth = outputPixelWidth
+    self.outputPixelHeight = outputPixelHeight
+  }
+
+  var contentRect: CGRect {
+    CGRect(
+      x: contentOriginX,
+      y: contentOriginY,
+      width: contentWidth,
+      height: contentHeight
+    )
+  }
+}
+
+enum CaptureSurfaceGeometryParser {
+  static func parse(
+    _ attachments: [SCStreamFrameInfo: Any]?,
+    outputPixelWidth: Int,
+    outputPixelHeight: Int
+  ) -> CaptureSurfaceGeometry? {
+    guard
+      let attachments,
+      let contentRect = parseRect(attachments[.contentRect]),
+      let scaleFactor = parsePositiveDouble(attachments[.scaleFactor]),
+      let contentScale = parsePositiveDouble(attachments[.contentScale])
+    else {
+      return nil
+    }
+
+    return CaptureSurfaceGeometry(
+      contentRect: contentRect,
+      scaleFactor: scaleFactor,
+      contentScale: contentScale,
+      outputPixelWidth: outputPixelWidth,
+      outputPixelHeight: outputPixelHeight
+    )
+  }
+
+  private static func parseRect(_ value: Any?) -> CGRect? {
+    if let rect = value as? CGRect {
+      return rect
+    }
+    if let value = value as? NSValue {
+      return value.rectValue
+    }
+    return nil
+  }
+
+  private static func parsePositiveDouble(_ value: Any?) -> Double? {
+    guard let value else { return nil }
+    if let number = value as? NSNumber {
+      guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+      let parsed = number.doubleValue
+      return parsed.isFinite && parsed > 0 ? parsed : nil
+    }
+    if let parsed = value as? Double {
+      return parsed.isFinite && parsed > 0 ? parsed : nil
+    }
+    return nil
+  }
+}
+
 struct CapturedPowerPointFrame: @unchecked Sendable {
   let windowID: CGWindowID
   let sequenceNumber: UInt64
@@ -17,6 +162,7 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
   /// ScreenCaptureKit's mach absolute time for the displayed source frame.
   let displayTime: UInt64?
   let deliveryKind: CapturedFrameDeliveryKind
+  let captureSurfaceGeometry: CaptureSurfaceGeometry?
   let image: CGImage
   let fingerprint: FrameFingerprint
   let contentFingerprint: ContentFingerprint?
@@ -27,6 +173,7 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
     capturedAt: Date,
     displayTime: UInt64? = nil,
     deliveryKind: CapturedFrameDeliveryKind,
+    captureSurfaceGeometry: CaptureSurfaceGeometry? = nil,
     image: CGImage,
     fingerprint: FrameFingerprint,
     contentFingerprint: ContentFingerprint?
@@ -36,6 +183,7 @@ struct CapturedPowerPointFrame: @unchecked Sendable {
     self.capturedAt = capturedAt
     self.displayTime = displayTime
     self.deliveryKind = deliveryKind
+    self.captureSurfaceGeometry = captureSurfaceGeometry
     self.image = image
     self.fingerprint = fingerprint
     self.contentFingerprint = contentFingerprint
@@ -48,6 +196,7 @@ enum CapturedPowerPointFrameFactory {
     sequenceNumber: UInt64,
     capturedAt: Date,
     displayTime: UInt64? = nil,
+    captureSurfaceGeometry: CaptureSurfaceGeometry? = nil,
     image: CGImage,
     fingerprint: FrameFingerprint
   ) -> CapturedPowerPointFrame {
@@ -57,6 +206,7 @@ enum CapturedPowerPointFrameFactory {
       capturedAt: capturedAt,
       displayTime: displayTime,
       deliveryKind: .new,
+      captureSurfaceGeometry: captureSurfaceGeometry,
       image: image,
       fingerprint: fingerprint,
       contentFingerprint: CGImageRasterizer.makeContentFingerprint(from: image)
@@ -66,14 +216,36 @@ enum CapturedPowerPointFrameFactory {
   static func makeIdleRepeat(
     from lastFrame: CapturedPowerPointFrame,
     sequenceNumber: UInt64,
-    capturedAt: Date
+    capturedAt: Date,
+    currentAttachments: [SCStreamFrameInfo: Any]?
   ) -> CapturedPowerPointFrame {
-    CapturedPowerPointFrame(
+    // The stream surface size is fixed for this capture. An idle sample may omit
+    // its image buffer, but its geometry must still come from its own attachments.
+    let parsedCurrentSurfaceGeometry = CaptureSurfaceGeometryParser.parse(
+      currentAttachments,
+      outputPixelWidth: lastFrame.image.width,
+      outputPixelHeight: lastFrame.image.height
+    )
+    let repeatedSurfaceGeometry: CaptureSurfaceGeometry?
+    if let lastSurfaceGeometry = lastFrame.captureSurfaceGeometry,
+      let parsedCurrentSurfaceGeometry,
+      parsedCurrentSurfaceGeometry == lastSurfaceGeometry
+    {
+      repeatedSurfaceGeometry = parsedCurrentSurfaceGeometry
+    } else {
+      repeatedSurfaceGeometry = nil
+    }
+
+    // Idle means no new visual content: reuse only the prior visual payload and
+    // display time. Geometry remains valid only when current attachments attest
+    // that the reused payload still has exactly the same surface placement.
+    return CapturedPowerPointFrame(
       windowID: lastFrame.windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: capturedAt,
       displayTime: lastFrame.displayTime,
       deliveryKind: .idleRepeat,
+      captureSurfaceGeometry: repeatedSurfaceGeometry,
       image: lastFrame.image,
       fingerprint: lastFrame.fingerprint,
       contentFingerprint: lastFrame.contentFingerprint
@@ -355,14 +527,12 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   ) {
     guard outputType == .screen, sampleBuffer.isValid else { return }
 
-    switch frameStatus(in: sampleBuffer) {
-    case .blank, .suspended, .stopped:
-      return
-    case .idle:
-      emitRepeatedFrameIfAvailable()
-    case .complete, .started, nil:
+    switch frameDeliveryDecision(in: sampleBuffer) {
+    case .idleRepeat:
+      emitRepeatedFrameIfAvailable(from: sampleBuffer)
+    case .newFrame:
       emitNewFrame(from: sampleBuffer)
-    @unknown default:
+    case .drop:
       return
     }
   }
@@ -375,14 +545,15 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     errorHandler(NSLocalizedString("error.captureWindowInactive", comment: ""))
   }
 
-  private func emitRepeatedFrameIfAvailable() {
+  private func emitRepeatedFrameIfAvailable(from sampleBuffer: CMSampleBuffer) {
     guard let lastFrame else { return }
     sequenceNumber &+= 1
     frameHandler(
       CapturedPowerPointFrameFactory.makeIdleRepeat(
         from: lastFrame,
         sequenceNumber: sequenceNumber,
-        capturedAt: Date()
+        capturedAt: Date(),
+        currentAttachments: frameAttachments(in: sampleBuffer)
       )
     )
   }
@@ -404,6 +575,11 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
       displayTime: frameDisplayTime(in: sampleBuffer),
+      captureSurfaceGeometry: CaptureSurfaceGeometryParser.parse(
+        frameAttachments(in: sampleBuffer),
+        outputPixelWidth: image.width,
+        outputPixelHeight: image.height
+      ),
       image: image,
       fingerprint: fingerprint
     )
@@ -411,20 +587,23 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     frameHandler(frame)
   }
 
-  private func frameStatus(in sampleBuffer: CMSampleBuffer) -> SCFrameStatus? {
-    guard
-      let attachments = CMSampleBufferGetSampleAttachmentsArray(
-        sampleBuffer,
-        createIfNecessary: false
-      ) as? [[SCStreamFrameInfo: Any]],
-      let rawValue = attachments.first?[.status] as? Int
-    else {
-      return nil
-    }
-    return SCFrameStatus(rawValue: rawValue)
+  private func frameDeliveryDecision(
+    in sampleBuffer: CMSampleBuffer
+  ) -> CaptureFrameDeliveryDecision {
+    CaptureFrameDeliveryDecisionResolver.resolve(
+      statusValue: frameAttachments(in: sampleBuffer)?[.status]
+    )
   }
 
   private func frameDisplayTime(in sampleBuffer: CMSampleBuffer) -> UInt64? {
+    CaptureFrameDisplayTimeParser.parse(
+      frameAttachments(in: sampleBuffer)?[.displayTime]
+    )
+  }
+
+  private func frameAttachments(
+    in sampleBuffer: CMSampleBuffer
+  ) -> [SCStreamFrameInfo: Any]? {
     guard
       let attachments = CMSampleBufferGetSampleAttachmentsArray(
         sampleBuffer,
@@ -433,7 +612,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     else {
       return nil
     }
-    return CaptureFrameDisplayTimeParser.parse(attachments.first?[.displayTime])
+    return attachments.first
   }
 }
 

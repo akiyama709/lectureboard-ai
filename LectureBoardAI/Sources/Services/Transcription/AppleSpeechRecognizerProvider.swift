@@ -11,14 +11,20 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
   private var recognitionTask: SFSpeechRecognitionTask?
   private var startedAt: Date?
   private var tapInstalled = false
+  private var operationGate = TranscriptionOperationGate()
 
   func start(
     language: LanguageTag,
     onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
   ) async throws {
     stop()
+    let operationID = operationGate.begin()
 
-    guard await requestAuthorization() else {
+    guard let authorized = await requestAuthorization(for: operationID) else {
+      throw CancellationError()
+    }
+    guard authorized else {
+      stop(ifCurrent: operationID)
       throw TranscriptionError.authorizationDenied
     }
 
@@ -28,6 +34,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
       ),
       recognizer.isAvailable
     else {
+      stop(ifCurrent: operationID)
       throw TranscriptionError.recognizerUnavailable
     }
 
@@ -40,6 +47,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     let inputNode = audioEngine.inputNode
     let format = inputNode.outputFormat(forBus: 0)
     guard format.sampleRate > 0 else {
+      stop(ifCurrent: operationID)
       throw TranscriptionError.noAudioInput
     }
 
@@ -56,7 +64,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
       [weak self] result, error in
       let sourceMachTime = mach_absolute_time()
       Task { @MainActor [weak self] in
-        guard let self else { return }
+        guard let self, self.operationGate.accepts(operationID) else { return }
 
         if let result {
           let elapsed =
@@ -83,7 +91,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
         }
 
         if error != nil {
-          self.stop()
+          self.stop(ifCurrent: operationID)
         }
       }
     }
@@ -92,12 +100,22 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     do {
       try audioEngine.start()
     } catch {
-      stop()
+      stop(ifCurrent: operationID)
       throw TranscriptionError.noAudioInput
     }
   }
 
   func stop() {
+    operationGate.invalidate()
+    stopResources()
+  }
+
+  private func stop(ifCurrent operationID: TranscriptionOperationID) {
+    guard operationGate.invalidate(ifCurrent: operationID) else { return }
+    stopResources()
+  }
+
+  private func stopResources() {
     if audioEngine.isRunning {
       audioEngine.stop()
     }
@@ -112,8 +130,11 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     startedAt = nil
   }
 
-  private func requestAuthorization() async -> Bool {
+  private func requestAuthorization(
+    for operationID: TranscriptionOperationID
+  ) async -> Bool? {
     let microphone = await AVCaptureDevice.requestAccess(for: .audio)
+    guard operationGate.accepts(operationID) else { return nil }
     guard microphone else { return false }
 
     let speech: Bool = await withCheckedContinuation { continuation in
@@ -121,6 +142,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
         continuation.resume(returning: status == .authorized)
       }
     }
+    guard operationGate.accepts(operationID) else { return nil }
     return speech
   }
 

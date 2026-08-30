@@ -1,6 +1,6 @@
 # LectureBoard AI macOS版 技術設計書 ver.1.3
 
-更新日：2026年8月29日
+更新日：2026年8月30日
 
 ## 1．文書の目的
 
@@ -152,11 +152,17 @@ macOSアプリ本体である．
 - 設定
 - 講義後の確認と書出し
 
+　現行試作はcapture開始時にdemo sceneを消去し，capture中又はcapture provider停止処理中にはdemo生成を許可しない．これはdemo出力をcapture根拠付き板書と混同しないための安全境界であり，live描画の検証結果ではない．
+
 ### 5.3 CaptureAdapter
 
 ScreenCaptureKitを使用し，ユーザーが明示的に選択したPowerPointスライドショーウィンドウだけを取得する．
 
 初版では，デスクトップ全体を常時取得しない．通知や別ウィンドウの意図しない共有を避けるためである．
+
+　現行試作では，ScreenCaptureKitが返す選択window全体のframeを，取得件数と利用者校正用previewにだけ使用する．公開macOS及びPowerPoint APIは，PowerPoint内部の正確なslide canvas矩形を公開しない．ScreenCaptureKitの`contentRect`は取得surfaceを示すが，PowerPoint内部のslide subviewを示すものではない．したがって，window全体をそのままスライド画像とみなしてはならない．
+
+　`SCFrameStatus`が欠落，不正形式又は未知値の場合はframeをdropする．`.complete`及び`.started`だけをnew delivery，`.idle`だけをrepeatとして扱う．`scaleFactor`はSDK文書の範囲である1以上4以下だけを受理する．
 
 入力：
 
@@ -174,6 +180,14 @@ ScreenCaptureKitを使用し，ユーザーが明示的に選択したPowerPoint
 
 Visionと画像解析を組み合わせて，現在スライドの占有領域を生成する．
 
+　現行試作は，正確な取得operationから得たwindow previewを固定し，利用者が表示中のスライド面だけをdragで囲んで明示的に確定する．切出しはsource上で幅32 pixel，高さ24 pixel及び面積1,024平方pixelを全て満たさなければならない．確定結果はcapture operation，正確なScreenCaptureKit window ID，source pixel寸法及び検証済みScreenCaptureKit surface geometryへ固定する．capture再開，window不一致，pixel寸法不一致，surface geometry欠落，又は`contentRect`，scale factor若しくはcontent scaleの変更時には，確定結果，安定判定，内容更新，解析結果及び板書sceneを無効化する．idle repeatのvisual payloadにgeometry provenanceを付与するのは，current sample attachmentのgeometryが直前のvisual payload geometryと完全一致する場合だけである．current geometryの変更・欠落・不正，又は直前geometryの欠落時には，geometryなしのrepeatとしてdelivery件数だけを記録し，視覚処理前にcanvasを無効化する．image bufferがないidle sampleでは，固定stream surface寸法だけを直前frameから継承する．title，window列挙順，概略座標，aspect ratio又は画像heuristicによる自動確定は行わない．実ScreenCaptureKitのidle attachment挙動は未検証である．
+
+　スライド面が未確定の間もcapture delivery件数は記録するが，安定frame判定，160×90 RGB内容指紋，Vision，raster候補，占有領域及び板書配置は開始しない．確定後は，top-left正規化矩形をsource pixelへ外向きに丸めて範囲内へ収め，各frameを切り出す．安定・内容指紋，Vision入力及び長辺640 pixel以下のRGB rasterは，全てこの切出し画像から生成する．
+
+　粗い視覚差分又はdense内容更新が候補状態へ入った時点で旧解析を無効化する．dense fingerprintの欠落又は不正も旧解析を直ちに無効化する．valid dense fingerprintのないcoarse confirmed frameでは解析を開始せず，baselineへ戻った後もcurrent frameの再解析が完了するまで板書提案を閉じる．
+
+　意味的なslide，canvas又はcapture境界では現在の板書文脈を更新し，境界以前の発話及び板書候補を新しい文脈で再提案しない．Vision解析が完了しても占有領域が空の場合は，未検証の全面空白として扱わず，発話からの板書配置をfail-closedで停止する．
+
 初期処理：
 
 1. スライドショー映像を低解像度へ縮小する．
@@ -184,6 +198,8 @@ Visionと画像解析を組み合わせて，現在スライドの占有領域�
 6. 講師の手書き領域と既存AI板書領域を加える．
 
 スライドの背景が白とは限らないため，単純な白画素判定には依存しない．局所背景の一様性と既存オブジェクト境界を用いる．
+
+　上記の選択，pixel変換，切出し，無効化及びfail-closedなpipeline gateは，Coreとnativeの合成画像fixtureで検証する．実PowerPoint上のスライド面特定精度，操作UI除外，ScreenCaptureKit surface paddingと`contentRect`の対応，window/full-screen/発表者表示等のmode，resize，display scale及び代表的deckは，別途live検証するまで確認済みとしない．
 
 ### 5.5 SpeechProvider
 
@@ -205,6 +221,8 @@ protocol SpeechProvider {
 - 明示的に許可されたクラウド音声認識
 
 初版の標準はローカル優先とする．ただし，日本語・英語混在認識の品質は，実際の講義音声を使って比較評価する．
+
+　現行試作はApp側とApple provider側の二重generation guardを用いる．意味的なslide，canvas又はcapture境界でproviderを停止し，旧callback及び旧segmentを拒否する．安全側として利用者が明示的に再開するまで文字起こしを閉じたままとする．これは制御可能なproviderによる回帰testであり，実microphone入力は未検証である．
 
 ### 5.6 LectureContextBuffer
 
@@ -389,6 +407,8 @@ MVPでは二次元グリッド上の最大空矩形を利用する．将来は�
 
 対面講義向け．PowerPointウィンドウの上へ透明パネルを置く．通常はクリック透過とし，ペンモード時だけ入力を受ける．
 
+　現行overlay試作は選択display全体を使用し，利用者が確認したスライド面のscreen座標とはまだ対応付けられていない．画像内の切出し座標からwindowのscreen座標，surface padding，scale及びdisplay変換を経てoverlay座標へ写像する機能は，次の独立実装単位とする．この対応が実装・live検証されるまで，スライド面上へ正確に描画できるとは主張しない．
+
 ### 8.2 合成出力ウィンドウ
 
 オンライン講義の標準．
@@ -495,7 +515,11 @@ LectureBoard Sessions/
 
 ### PowerPoint取得が止まる
 
-最後のフレームを固定し，明確な状態表示を講師画面だけに出す．自動再接続を試す．
+　現行fail-closed試作は，最新安定frame，解析及び板書sceneを消去し，状態表示だけを講師画面へ出す．自動再接続及び安全な最終frame固定は，将来，stale contentを再表示しないprovenanceを設計してから実装する．
+
+### スライド面が未確定又は無効化された
+
+　取得件数だけを継続し，安定判定，内容更新，Vision，raster解析及び板書配置を停止する．利用者が現在の正確な取得window previewでスライド面を再確認するまで，過去の矩形又は解析結果を再利用しない．
 
 ### AIプロバイダが停止する
 
@@ -528,6 +552,9 @@ LectureBoard Sessions/
 - Zoom，Teams，Google Meet共有
 - 外部ディスプレイ
 - フルスクリーンとウィンドウ表示
+- 利用者によるスライド面のdrag確定，取消し及び再選択
+- capture再開，window不一致，source pixel寸法変更及びScreenCaptureKit surface geometry変更による確定無効化
+- ScreenCaptureKit surface padding，`contentRect`，display scale及びoverlay座標変換
 
 ### 15.3 教育評価
 
@@ -555,8 +582,8 @@ LectureBoard Sessions/
 　実装順序及び完成条件の正本は[`ROADMAP.md`](../ROADMAP.md)とし，日本語版は[`roadmap-ja.md`](roadmap-ja.md)とする．本設計書の個別機能は，次の依存順序に従う．
 
 1. 安全なPowerPoint対象窓特定及び連続取得
-2. 安定した視覚・内容更新，スライドキャンバス分離及び独立したスライド同一性
-3. OCR，図形，占有領域及び確認済み既存インク
+2. 安定した視覚・内容更新，利用者確認式のスライドキャンバス分離及び独立したスライド同一性
+3. 確認済みスライド面へのoverlay座標対応，OCR，図形，占有領域及び確認済み既存インク
 4. `.pptx`，発表者ノート及び確定発話を用いる根拠付き文脈判断
 5. 人間の手書きを優先する安定板書及びセッション保存
 6. 制御講義によるα検証，代表資料によるβ検証及び機能凍結後のRC検証

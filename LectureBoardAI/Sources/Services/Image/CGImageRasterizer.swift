@@ -4,6 +4,8 @@ import LectureBoardCore
 /// Converts native capture images into deterministic Core values at the app boundary.
 enum CGImageRasterizer {
   static let defaultMaximumLongEdge = 640
+  static let defaultFrameFingerprintColumns = 32
+  static let defaultFrameFingerprintRows = 18
   static let defaultFingerprintColumns = 160
   static let defaultFingerprintRows = 90
   /// Keeps the two temporary pixel buffers below about seven megabytes total.
@@ -75,6 +77,41 @@ enum CGImageRasterizer {
       sampleColumns: sampleColumns,
       sampleRows: sampleRows,
       cells: cells
+    )
+    return fingerprint.isValid ? fingerprint : nil
+  }
+
+  /// Produces the coarse luminance fingerprint used by the stable-frame detector.
+  static func makeFrameFingerprint(
+    from image: CGImage,
+    sampleColumns: Int = defaultFrameFingerprintColumns,
+    sampleRows: Int = defaultFrameFingerprintRows
+  ) -> FrameFingerprint? {
+    guard
+      sampleColumns > 0,
+      sampleRows > 0,
+      let rgbBytes = renderRGB(
+        image,
+        width: sampleColumns,
+        height: sampleRows
+      )
+    else {
+      return nil
+    }
+
+    var luminance: [UInt8] = []
+    luminance.reserveCapacity(rgbBytes.count / 3)
+    for offset in stride(from: 0, to: rgbBytes.count, by: 3) {
+      let red = Int(rgbBytes[offset])
+      let green = Int(rgbBytes[offset + 1])
+      let blue = Int(rgbBytes[offset + 2])
+      luminance.append(UInt8((54 * red + 183 * green + 19 * blue) >> 8))
+    }
+
+    let fingerprint = FrameFingerprint(
+      sampleColumns: sampleColumns,
+      sampleRows: sampleRows,
+      luminance: luminance
     )
     return fingerprint.isValid ? fingerprint : nil
   }

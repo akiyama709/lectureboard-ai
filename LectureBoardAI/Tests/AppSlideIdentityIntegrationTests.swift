@@ -8,6 +8,25 @@ import Testing
 
 @MainActor
 struct AppSlideIdentityIntegrationTests {
+  @Test func transcriptionOperationGateRejectsEverySupersededOperation() {
+    var gate = TranscriptionOperationGate()
+    let first = gate.begin()
+    #expect(gate.accepts(first))
+
+    gate.invalidate()
+    #expect(!gate.accepts(first))
+
+    let second = gate.begin()
+    #expect(!gate.accepts(first))
+    #expect(gate.accepts(second))
+    let rejectedStaleInvalidation = gate.invalidate(ifCurrent: first)
+    #expect(!rejectedStaleInvalidation)
+    #expect(gate.accepts(second))
+    let acceptedCurrentInvalidation = gate.invalidate(ifCurrent: second)
+    #expect(acceptedCurrentInvalidation)
+    #expect(!gate.hasActiveOperation)
+  }
+
   @Test func establishedBaselineRebasesWithoutCountingAChange() async throws {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
@@ -89,6 +108,403 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func confirmedTransitionDoesNotReplayAcceptedTranscriptFromThePreviousSlide() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(capture: capture, provider: provider, analyzer: analyzer)
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let secondSlide = try sample(slideID: 202, slideIndex: 2)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+    let firstSlideDefinition = definitionSegment()
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: image,
+        coarseFingerprint: fingerprints.coarse,
+        contentFingerprint: fingerprints.content
+      )
+    )
+    for sequenceNumber in 2...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    model.receive(firstSlideDefinition)
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await provider.emit(sequenceNumber: 3, signal: .available(secondSlide))
+    await provider.emit(sequenceNumber: 4, signal: .available(secondSlide))
+    try await waitUntil { model.slideChangeCount == 1 }
+    #expect(model.boardScene.slideNumber == 2)
+    #expect(model.boardScene.elements.isEmpty)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        image: image,
+        coarseFingerprint: fingerprints.coarse,
+        contentFingerprint: fingerprints.content
+      )
+    )
+    for sequenceNumber in 5...6 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+
+    model.receive(
+      TranscriptSegment(
+        text: "This is a brief aside.",
+        startTime: 7,
+        endTime: 8,
+        language: .englishUS,
+        confidence: 0.95,
+        emphasis: 0
+      )
+    )
+    #expect(model.boardScene.elements.isEmpty)
+
+    model.receive(
+      TranscriptSegment(
+        text: "Resilience means retaining function while conditions change.",
+        startTime: 9,
+        endTime: 14,
+        language: .englishUS,
+        confidence: 0.95,
+        emphasis: 0.8
+      )
+    )
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func delayedSpeechTaskCannotCrossAConfirmedSemanticSlideBoundary() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let identityProvider = ControllableSlideIdentityProvider()
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(
+      capture: capture,
+      provider: identityProvider,
+      analyzer: analyzer,
+      transcriptionProvider: transcriptionProvider
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let secondSlide = try sample(slideID: 202, slideIndex: 2)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await identityProvider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await identityProvider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 1...3
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+
+    await model.startTranscription()
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(model.status == .listening)
+
+    await identityProvider.emit(sequenceNumber: 3, signal: .available(secondSlide))
+    await identityProvider.emit(sequenceNumber: 4, signal: .available(secondSlide))
+    try await waitUntil { model.slideChangeCount == 1 }
+    #expect(transcriptionProvider.stopCount == 1)
+    #expect(model.status == .ready)
+    #expect(model.liveTranscript.isEmpty)
+
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 4...6
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: definitionSegment(),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+    #expect(model.boardScene.elements.isEmpty)
+
+    await model.startTranscription()
+    #expect(transcriptionProvider.startCount == 2)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: definitionSegment(),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+    #expect(model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: definitionSegment(),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == definitionSegment().text)
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func stoppedSpeechTaskCannotEnterARestartedTranscription() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    model.stopTranscription()
+    await model.startTranscription()
+    #expect(transcriptionProvider.startCount == 2)
+    #expect(model.status == .listening)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "stale operation"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "current operation"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "current operation")
+
+    model.stopTranscription()
+  }
+
+  @Test func captureLifecycleInvalidatesEachActiveTranscriptionOperation() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    await model.startWindowCapture()
+    #expect(transcriptionProvider.stopCount == 1)
+    #expect(model.status == .ready)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "before capture"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+
+    await model.startTranscription()
+    await capture.emitError("Controlled capture error")
+    try await waitUntil {
+      if case .error = model.captureStatus { return true }
+      return false
+    }
+    #expect(transcriptionProvider.stopCount == 2)
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "before capture error"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+
+    await model.stopWindowCapture()
+    await model.startWindowCapture()
+    await model.startTranscription()
+    await model.stopWindowCapture()
+    #expect(transcriptionProvider.stopCount == 3)
+    transcriptionProvider.emit(
+      startIndex: 2,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "before capture stop"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+  }
+
+  @Test func everyManualCanvasBoundaryRequiresATranscriptionRestart() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider,
+      slideCanvasConfirmationMode: .userConfirmed
+    )
+    let image = try #require(makeImage(width: 80, height: 40))
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 0, y: 0, width: 80, height: 40),
+        scaleFactor: 2,
+        contentScale: 1,
+        outputPixelWidth: 80,
+        outputPixelHeight: 40
+      )
+    )
+    let changedGeometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 1, y: 0, width: 79, height: 40),
+        scaleFactor: 2,
+        contentScale: 1,
+        outputPixelWidth: 80,
+        outputPixelHeight: 40
+      )
+    )
+    let fullFrameRegion = try #require(
+      SlideCanvasRegion(
+        NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+      )
+    )
+
+    await model.startWindowCapture()
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: image,
+        coarseFingerprint: frameFingerprints().coarse,
+        contentFingerprint: frameFingerprints().content,
+        captureSurfaceGeometry: geometry
+      )
+    )
+    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+
+    await model.startTranscription()
+    model.beginSlideCanvasSelection()
+    #expect(transcriptionProvider.stopCount == 1)
+
+    await model.startTranscription()
+    #expect(model.confirmSlideCanvasSelection(fullFrameRegion))
+    #expect(transcriptionProvider.stopCount == 2)
+
+    await model.startTranscription()
+    model.beginSlideCanvasSelection()
+    #expect(transcriptionProvider.stopCount == 3)
+
+    await model.startTranscription()
+    model.cancelSlideCanvasSelection()
+    #expect(transcriptionProvider.stopCount == 4)
+
+    model.beginSlideCanvasSelection()
+    #expect(model.confirmSlideCanvasSelection(fullFrameRegion))
+    await model.startTranscription()
+    await capture.emit(
+      frame(
+        sequenceNumber: 2,
+        image: image,
+        coarseFingerprint: frameFingerprints().coarse,
+        contentFingerprint: frameFingerprints().content,
+        captureSurfaceGeometry: changedGeometry
+      )
+    )
+    try await waitUntil { model.slideCanvasStatus == .invalidated }
+    #expect(transcriptionProvider.stopCount == 5)
+
+    transcriptionProvider.emit(
+      startIndex: 4,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "before geometry invalidation"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func emptyOccupiedAnalysisKeepsTranscriptBoardProposalsClosed() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let model = makeModel(capture: capture, provider: provider)
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: image,
+        coarseFingerprint: fingerprints.coarse,
+        contentFingerprint: fingerprints.content
+      )
+    )
+    for sequenceNumber in 2...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    #expect(model.latestSlideAnalysis?.occupiedRegions.isEmpty == true)
+
+    model.receive(definitionSegment())
+    #expect(model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
   @Test func rejectsDuplicateOutOfOrderAndWrongTargetObservations() async throws {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
@@ -163,7 +579,9 @@ struct AppSlideIdentityIntegrationTests {
   @Test func candidateIdentityQuarantinesAnalysisAndBoardUpdatesUntilConfirmed() async throws {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
-    let analyzer = CountingSlideIdentityAnalyzer()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
     let model = makeModel(capture: capture, provider: provider, analyzer: analyzer)
     let firstSlide = try sample(slideID: 101, slideIndex: 1)
     let secondSlide = try sample(slideID: 202, slideIndex: 2)
@@ -570,7 +988,9 @@ struct AppSlideIdentityIntegrationTests {
   @Test func postBoundaryTimeoutStaysFailClosedAndRecoversOnANewerFrame() async throws {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
-    let analyzer = CountingSlideIdentityAnalyzer()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
     let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
     let model = makeModel(
       capture: capture,
@@ -647,7 +1067,13 @@ struct AppSlideIdentityIntegrationTests {
   @Test func transcriptProducedWhileWaitingStaysRejectedAfterFrameSynchronization() async throws {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
-    let model = makeModel(capture: capture, provider: provider)
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      analyzer: ImmediateSlideIdentityAnalyzer(
+        occupiedRegions: boardProposalOccupiedRegions()
+      )
+    )
     let firstSlide = try sample(slideID: 101, slideIndex: 1)
     let image = try #require(makeImage())
     let fingerprints = frameFingerprints()
@@ -675,6 +1101,19 @@ struct AppSlideIdentityIntegrationTests {
       )
     )
     #expect(model.boardScene.elements.isEmpty)
+
+    for sequenceNumber in 2...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
 
     model.receive(definitionSegment())
     #expect(!model.boardScene.elements.isEmpty)
@@ -843,6 +1282,9 @@ struct AppSlideIdentityIntegrationTests {
     capture: any PowerPointWindowCapturing,
     provider: any PowerPointSlideIdentityProviding,
     analyzer: any SlideVisualAnalyzing = ImmediateSlideIdentityAnalyzer(),
+    transcriptionProvider: any TranscriptionProvider = ControllableTranscriptionProvider(),
+    slideCanvasConfirmationMode: SlideCanvasConfirmationMode =
+      .testOnlyUseFullCapturedFrame,
     timeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
       TaskSlideIdentityFrameTimeoutWaiter()
   ) -> AppModel {
@@ -852,8 +1294,10 @@ struct AppSlideIdentityIntegrationTests {
       ),
       windowCapture: capture,
       scanner: EmptySlideIdentityWindowScanner(),
+      transcriptionProvider: transcriptionProvider,
       slideIdentityProvider: provider,
       slideVisionAnalyzer: analyzer,
+      slideCanvasConfirmationMode: slideCanvasConfirmationMode,
       slideIdentityFrameTimeout: .seconds(2),
       slideIdentityFrameTimeoutWaiter: timeoutWaiter
     )
@@ -881,13 +1325,13 @@ struct AppSlideIdentityIntegrationTests {
     )
   }
 
-  private func makeImage() -> CGImage? {
+  private func makeImage(width: Int = 2, height: Int = 2) -> CGImage? {
     CGContext(
       data: nil,
-      width: 2,
-      height: 2,
+      width: width,
+      height: height,
       bitsPerComponent: 8,
-      bytesPerRow: 8,
+      bytesPerRow: width * 4,
       space: CGColorSpaceCreateDeviceRGB(),
       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )?.makeImage()
@@ -926,13 +1370,49 @@ struct AppSlideIdentityIntegrationTests {
     )
   }
 
+  private func partialSegment(text: String) -> TranscriptSegment {
+    TranscriptSegment(
+      text: text,
+      startTime: 0,
+      endTime: 1,
+      language: .englishUS,
+      confidence: 0.95,
+      isFinal: false,
+      emphasis: 0.5
+    )
+  }
+
+  private func emitStableFrames(
+    capture: SlideIdentityFrameCapture,
+    image: CGImage,
+    fingerprints: (coarse: FrameFingerprint, content: ContentFingerprint),
+    sequenceNumbers: ClosedRange<Int>
+  ) async {
+    for sequenceNumber in sequenceNumbers {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: sequenceNumber == sequenceNumbers.lowerBound ? .new : .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+  }
+
+  private func boardProposalOccupiedRegions() -> [NormalizedRect] {
+    [NormalizedRect(x: 0.05, y: 0.05, width: 0.2, height: 0.15)]
+  }
+
   private func frame(
     sequenceNumber: UInt64,
     deliveryKind: CapturedFrameDeliveryKind = .new,
     displayTime: UInt64? = nil,
     image: CGImage,
     coarseFingerprint: FrameFingerprint,
-    contentFingerprint: ContentFingerprint
+    contentFingerprint: ContentFingerprint,
+    captureSurfaceGeometry: CaptureSurfaceGeometry? = nil
   ) -> CapturedPowerPointFrame {
     CapturedPowerPointFrame(
       windowID: 42,
@@ -940,6 +1420,7 @@ struct AppSlideIdentityIntegrationTests {
       capturedAt: Date().addingTimeInterval(TimeInterval(sequenceNumber)),
       displayTime: displayTime ?? mach_absolute_time() + sequenceNumber,
       deliveryKind: deliveryKind,
+      captureSurfaceGeometry: captureSurfaceGeometry,
       image: image,
       fingerprint: coarseFingerprint,
       contentFingerprint: contentFingerprint
@@ -973,6 +1454,30 @@ struct AppSlideIdentityIntegrationTests {
         continuation.resume()
       }
     }
+  }
+}
+
+@MainActor
+private final class ControllableTranscriptionProvider: TranscriptionProvider {
+  private var handlers: [@MainActor (TranscriptionObservation) -> Void] = []
+  private(set) var stopCount = 0
+
+  var startCount: Int { handlers.count }
+
+  func start(
+    language: LanguageTag,
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
+  ) async throws {
+    handlers.append(onObservation)
+  }
+
+  func stop() {
+    stopCount += 1
+  }
+
+  func emit(startIndex: Int, observation: TranscriptionObservation) {
+    guard handlers.indices.contains(startIndex) else { return }
+    handlers[startIndex](observation)
   }
 }
 
@@ -1098,17 +1603,27 @@ private struct FailingSlideIdentityFrameCapture: PowerPointWindowCapturing {
 }
 
 private struct ImmediateSlideIdentityAnalyzer: SlideVisualAnalyzing {
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
-    SlideVisualAnalysis()
+  var occupiedRegions: [NormalizedRect] = []
+
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
+    SlideVisualAnalysis(occupiedRegions: occupiedRegions)
   }
 }
 
 private actor CountingSlideIdentityAnalyzer: SlideVisualAnalyzing {
   private(set) var analysisCount = 0
+  private let occupiedRegions: [NormalizedRect]
 
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
+  init(occupiedRegions: [NormalizedRect] = []) {
+    self.occupiedRegions = occupiedRegions
+  }
+
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
     analysisCount += 1
-    return SlideVisualAnalysis(title: "Current analysis")
+    return SlideVisualAnalysis(
+      title: "Current analysis",
+      occupiedRegions: occupiedRegions
+    )
   }
 }
 
@@ -1122,7 +1637,7 @@ private actor SuspendedSlideIdentityAnalyzer: SlideVisualAnalyzing {
   private var invocations: Set<UInt64> = []
   private var continuations: [UInt64: CheckedContinuation<SlideVisualAnalysis, any Error>] = [:]
 
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
     invocations.insert(frame.sequenceNumber)
     return try await withCheckedThrowingContinuation { continuation in
       continuations[frame.sequenceNumber] = continuation

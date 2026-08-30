@@ -20,6 +20,27 @@ struct RuntimeVerificationSnapshotProjectorTests {
     #expect(RuntimeVerificationSnapshotProjector.visionState(for: .error("failed")) == .failed)
   }
 
+  @Test func mapsEverySlideCanvasStateWithoutCollapsingConfirmationBoundaries() {
+    #expect(
+      RuntimeVerificationSnapshotProjector.slideCanvasState(for: .unavailable)
+        == .unavailable
+    )
+    #expect(
+      RuntimeVerificationSnapshotProjector.slideCanvasState(for: .waitingForFrame)
+        == .waitingForFrame
+    )
+    #expect(
+      RuntimeVerificationSnapshotProjector.slideCanvasState(for: .needsConfirmation)
+        == .needsConfirmation
+    )
+    #expect(RuntimeVerificationSnapshotProjector.slideCanvasState(for: .selecting) == .selecting)
+    #expect(RuntimeVerificationSnapshotProjector.slideCanvasState(for: .confirmed) == .confirmed)
+    #expect(
+      RuntimeVerificationSnapshotProjector.slideCanvasState(for: .invalidated)
+        == .invalidated
+    )
+  }
+
   @Test func elapsedMillisecondsAreMonotonicAndClampedAtZero() {
     #expect(
       RuntimeVerificationSnapshotProjector.elapsedMilliseconds(
@@ -46,6 +67,7 @@ struct RuntimeVerificationSnapshotProjectorTests {
     )
 
     #expect(snapshot.slideIdentityFrameSyncState == .notRequired)
+    #expect(snapshot.slideCanvasState == .unavailable)
     #expect(snapshot.contentRevisionCount == model.contentRevisionCount)
     #expect(snapshot.strokeCandidateRegionCount == 0)
   }

@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import LectureBoardCore
+import ScreenCaptureKit
 import Testing
 
 @testable import LectureBoard_AI
@@ -82,12 +83,22 @@ struct CGImageRasterizerTests {
     )
     let capturedAt = Date(timeIntervalSince1970: 123)
     let displayTime: UInt64 = 12_345
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+        scaleFactor: 2,
+        contentScale: 0.75,
+        outputPixelWidth: 320,
+        outputPixelHeight: 180
+      )
+    )
 
     let frame = CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: 42,
       sequenceNumber: 7,
       capturedAt: capturedAt,
       displayTime: displayTime,
+      captureSurfaceGeometry: geometry,
       image: image,
       fingerprint: coarseFingerprint
     )
@@ -97,6 +108,7 @@ struct CGImageRasterizerTests {
     #expect(frame.capturedAt == capturedAt)
     #expect(frame.displayTime == displayTime)
     #expect(frame.deliveryKind == .new)
+    #expect(frame.captureSurfaceGeometry == geometry)
     #expect(frame.fingerprint == coarseFingerprint)
     let contentFingerprint = try #require(frame.contentFingerprint)
     #expect(contentFingerprint.sampleColumns == 160)
@@ -104,26 +116,322 @@ struct CGImageRasterizerTests {
     #expect(contentFingerprint.cells.count == 160 * 90)
     #expect(contentFingerprint.isValid)
 
-    let repeatedAt = Date(timeIntervalSince1970: 124)
-    let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
-      from: frame,
-      sequenceNumber: 8,
-      capturedAt: repeatedAt
-    )
-    #expect(repeated.windowID == frame.windowID)
-    #expect(repeated.sequenceNumber == 8)
-    #expect(repeated.capturedAt == repeatedAt)
-    #expect(repeated.displayTime == displayTime)
-    #expect(repeated.deliveryKind == .idleRepeat)
-    #expect(repeated.image === frame.image)
-    #expect(repeated.fingerprint == coarseFingerprint)
-    #expect(repeated.contentFingerprint == contentFingerprint)
     #expect(CaptureFrameDisplayTimeParser.parse(UInt64(123)) == 123)
     #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: 456)) == 456)
     #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: -1)) == nil)
     #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: 1.5)) == nil)
     #expect(CaptureFrameDisplayTimeParser.parse(UInt64(0)) == nil)
     #expect(CaptureFrameDisplayTimeParser.parse("123") == nil)
+  }
+
+  @Test func frameDeliveryDecisionAcceptsOnlyDocumentedActionableStatuses() {
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: SCFrameStatus.complete.rawValue
+      ) == .newFrame
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: NSNumber(value: SCFrameStatus.complete.rawValue)
+      ) == .newFrame
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: SCFrameStatus.started.rawValue
+      ) == .newFrame
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: SCFrameStatus.idle.rawValue
+      ) == .idleRepeat
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: SCFrameStatus.blank.rawValue
+      ) == .drop
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: SCFrameStatus.suspended.rawValue
+      ) == .drop
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: SCFrameStatus.stopped.rawValue
+      ) == .drop
+    )
+  }
+
+  @Test func frameDeliveryDecisionFailsClosedForUntrustedStatusValues() {
+    #expect(CaptureFrameDeliveryDecisionResolver.resolve(statusValue: nil) == .drop)
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(statusValue: Int.max) == .drop
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(statusValue: "complete") == .drop
+    )
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: Double(SCFrameStatus.complete.rawValue)
+      ) == .drop
+    )
+    #expect(CaptureFrameDeliveryDecisionResolver.resolve(statusValue: true) == .drop)
+    #expect(
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: NSNumber(value: true)
+      ) == .drop
+    )
+  }
+
+  @Test func idleRepeatUsesCurrentMatchingGeometryAndReusesVisualPayload() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+    let repeatedAt = Date(timeIntervalSince1970: 124)
+    let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 8,
+      capturedAt: repeatedAt,
+      currentAttachments: makeSurfaceGeometryAttachments(
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+      )
+    )
+
+    #expect(repeated.windowID == frame.windowID)
+    #expect(repeated.sequenceNumber == 8)
+    #expect(repeated.capturedAt == repeatedAt)
+    #expect(repeated.displayTime == frame.displayTime)
+    #expect(repeated.deliveryKind == .idleRepeat)
+    #expect(repeated.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(repeated.image === frame.image)
+    #expect(repeated.fingerprint == frame.fingerprint)
+    #expect(repeated.contentFingerprint == frame.contentFingerprint)
+  }
+
+  @Test func idleRepeatDoesNotAttachChangedGeometryToReusedVisualPayload() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 0, y: 0, width: 320, height: 180)
+    )
+    let changedRect = CGRect(x: 8, y: 5, width: 304, height: 170)
+    let expectedGeometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: changedRect,
+        scaleFactor: 2,
+        contentScale: 0.75,
+        outputPixelWidth: 320,
+        outputPixelHeight: 180
+      )
+    )
+
+    let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 8,
+      capturedAt: Date(timeIntervalSince1970: 124),
+      currentAttachments: makeSurfaceGeometryAttachments(contentRect: changedRect)
+    )
+
+    #expect(expectedGeometry != frame.captureSurfaceGeometry)
+    #expect(repeated.image === frame.image)
+    #expect(repeated.captureSurfaceGeometry == nil)
+  }
+
+  @Test func idleRepeatDoesNotReuseGeometryWhenCurrentGeometryIsMissing() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+
+    let missingAttachments = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 8,
+      capturedAt: Date(timeIntervalSince1970: 124),
+      currentAttachments: nil
+    )
+
+    #expect(frame.captureSurfaceGeometry != nil)
+    #expect(missingAttachments.image === frame.image)
+    #expect(missingAttachments.captureSurfaceGeometry == nil)
+  }
+
+  @Test func idleRepeatDoesNotAdoptGeometryWhenPriorGeometryWasMissing() throws {
+    let frame = try makeFactoryTestFrame(geometryRect: nil)
+    let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: frame,
+      sequenceNumber: 8,
+      capturedAt: Date(timeIntervalSince1970: 124),
+      currentAttachments: makeSurfaceGeometryAttachments(
+        contentRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+      )
+    )
+
+    #expect(frame.captureSurfaceGeometry == nil)
+    #expect(repeated.image === frame.image)
+    #expect(repeated.captureSurfaceGeometry == nil)
+  }
+
+  @Test func parsesCompleteScreenCaptureKitSurfaceGeometry() throws {
+    let rect = CGRect(x: 12.5, y: 6.25, width: 960, height: 540)
+    let bridgedAttachments: [SCStreamFrameInfo: Any] = [
+      .contentRect: NSValue(rect: rect),
+      .scaleFactor: NSNumber(value: 2.0),
+      .contentScale: NSNumber(value: 0.8),
+    ]
+
+    let bridged = try #require(
+      CaptureSurfaceGeometryParser.parse(
+        bridgedAttachments,
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      )
+    )
+
+    #expect(bridged.contentRect == rect)
+    #expect(bridged.scaleFactor == 2)
+    #expect(bridged.contentScale == 0.8)
+    #expect(bridged.outputPixelWidth == 1_920)
+    #expect(bridged.outputPixelHeight == 1_080)
+
+    let directAttachments: [SCStreamFrameInfo: Any] = [
+      .contentRect: rect,
+      .scaleFactor: Double(2),
+      .contentScale: Double(0.8),
+    ]
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        directAttachments,
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == bridged
+    )
+  }
+
+  @Test func rejectsMissingOrInvalidScreenCaptureKitSurfaceGeometry() {
+    let rect = CGRect(x: 0, y: 0, width: 960, height: 540)
+    let valid: [SCStreamFrameInfo: Any] = [
+      .contentRect: rect,
+      .scaleFactor: NSNumber(value: 2.0),
+      .contentScale: NSNumber(value: 1.0),
+    ]
+
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        nil,
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        [.contentRect: rect, .scaleFactor: 2.0],
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        [
+          .contentRect: CGRect(x: -.infinity, y: 0, width: 960, height: 540),
+          .scaleFactor: 2.0,
+          .contentScale: 1.0,
+        ],
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        [
+          .contentRect: rect,
+          .scaleFactor: NSNumber(value: true),
+          .contentScale: 1.0,
+        ],
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        [
+          .contentRect: rect,
+          .scaleFactor: 2.0,
+          .contentScale: 0.0,
+        ],
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        valid,
+        outputPixelWidth: 0,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
+  }
+
+  @Test func acceptsDocumentedScreenCaptureKitScaleFactorBounds() {
+    let rect = CGRect(x: 0, y: 0, width: 960, height: 540)
+
+    for scaleFactor in [Double(1), Double(4)] {
+      #expect(
+        CaptureSurfaceGeometry(
+          contentRect: rect,
+          scaleFactor: scaleFactor,
+          contentScale: 1,
+          outputPixelWidth: 1_920,
+          outputPixelHeight: 1_080
+        ) != nil
+      )
+      #expect(
+        CaptureSurfaceGeometryParser.parse(
+          [
+            .contentRect: rect,
+            .scaleFactor: NSNumber(value: scaleFactor),
+            .contentScale: NSNumber(value: 1),
+          ],
+          outputPixelWidth: 1_920,
+          outputPixelHeight: 1_080
+        ) != nil
+      )
+    }
+  }
+
+  @Test func rejectsUndocumentedScreenCaptureKitScaleFactors() {
+    let rect = CGRect(x: 0, y: 0, width: 960, height: 540)
+
+    for scaleFactor in [Double(0), Double(0.5), Double(4.001), .infinity, .nan] {
+      #expect(
+        CaptureSurfaceGeometry(
+          contentRect: rect,
+          scaleFactor: scaleFactor,
+          contentScale: 1,
+          outputPixelWidth: 1_920,
+          outputPixelHeight: 1_080
+        ) == nil
+      )
+      #expect(
+        CaptureSurfaceGeometryParser.parse(
+          [
+            .contentRect: rect,
+            .scaleFactor: NSNumber(value: scaleFactor),
+            .contentScale: NSNumber(value: 1),
+          ],
+          outputPixelWidth: 1_920,
+          outputPixelHeight: 1_080
+        ) == nil
+      )
+    }
+
+    #expect(
+      CaptureSurfaceGeometryParser.parse(
+        [
+          .contentRect: rect,
+          .scaleFactor: NSNumber(value: true),
+          .contentScale: NSNumber(value: 1),
+        ],
+        outputPixelWidth: 1_920,
+        outputPixelHeight: 1_080
+      ) == nil
+    )
   }
 
   @Test func compositesTransparentAndSemitransparentPixelsOverWhite() throws {
@@ -233,6 +541,49 @@ struct CGImageRasterizerTests {
     )
     #expect(bounded.width == 640)
     #expect(bounded.height == 640)
+  }
+
+  private func makeFactoryTestFrame(
+    geometryRect: CGRect?
+  ) throws -> CapturedPowerPointFrame {
+    let image = try #require(makeSolidImage(width: 320, height: 180))
+    let geometry: CaptureSurfaceGeometry?
+    if let geometryRect {
+      geometry = try #require(
+        CaptureSurfaceGeometry(
+          contentRect: geometryRect,
+          scaleFactor: 2,
+          contentScale: 0.75,
+          outputPixelWidth: 320,
+          outputPixelHeight: 180
+        )
+      )
+    } else {
+      geometry = nil
+    }
+    return CapturedPowerPointFrameFactory.makeNewFrame(
+      windowID: 42,
+      sequenceNumber: 7,
+      capturedAt: Date(timeIntervalSince1970: 123),
+      displayTime: 12_345,
+      captureSurfaceGeometry: geometry,
+      image: image,
+      fingerprint: FrameFingerprint(
+        sampleColumns: 32,
+        sampleRows: 18,
+        luminance: Array(repeating: 42, count: 32 * 18)
+      )
+    )
+  }
+
+  private func makeSurfaceGeometryAttachments(
+    contentRect: CGRect
+  ) -> [SCStreamFrameInfo: Any] {
+    [
+      .contentRect: contentRect,
+      .scaleFactor: Double(2),
+      .contentScale: Double(0.75),
+    ]
   }
 
   private func makeSolidImage(width: Int, height: Int) -> CGImage? {

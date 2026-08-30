@@ -34,7 +34,7 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
 
 /// A metadata-only runtime verification record that excludes captured content and window titles.
 public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
-  public static let currentSchemaVersion = 5
+  public static let currentSchemaVersion = 6
 
   public let schemaVersion: Int
   public let startedAt: Date

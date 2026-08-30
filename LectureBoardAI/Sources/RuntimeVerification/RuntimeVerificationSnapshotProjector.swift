@@ -15,6 +15,7 @@ enum RuntimeVerificationSnapshotProjector {
       screenRecordingPermission: screenRecordingPermission,
       captureState: captureState(for: model.captureStatus),
       visionState: visionState(for: model.slideAnalysisStatus),
+      slideCanvasState: slideCanvasState(for: model.slideCanvasStatus),
       frameCount: model.capturedFrameCount,
       newFrameCount: model.newCapturedFrameCount,
       repeatedFrameCount: model.repeatedCapturedFrameCount,
@@ -57,6 +58,23 @@ enum RuntimeVerificationSnapshotProjector {
       return .completed
     case .error:
       return .failed
+    }
+  }
+
+  static func slideCanvasState(for status: SlideCanvasStatus) -> RuntimeSlideCanvasState {
+    switch status {
+    case .unavailable:
+      return .unavailable
+    case .waitingForFrame:
+      return .waitingForFrame
+    case .needsConfirmation:
+      return .needsConfirmation
+    case .selecting:
+      return .selecting
+    case .confirmed:
+      return .confirmed
+    case .invalidated:
+      return .invalidated
     }
   }
 

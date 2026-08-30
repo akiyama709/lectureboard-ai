@@ -30,6 +30,16 @@ struct TaskSlideIdentityFrameTimeoutWaiter: SlideIdentityFrameTimeoutWaiting {
   }
 }
 
+private struct BoardCandidateContext {
+  var transcriptSegments: [TranscriptSegment] = []
+  var intents: [BoardIntent] = []
+
+  mutating func reset() {
+    transcriptSegments.removeAll(keepingCapacity: true)
+    intents.removeAll(keepingCapacity: true)
+  }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -76,17 +86,24 @@ final class AppModel: ObservableObject {
   @Published private(set) var slideIdentitySampleCount = 0
   @Published private(set) var slideIdentityContinuityBreakCount = 0
   @Published private(set) var contentRevisionCount = 0
+  @Published private(set) var slideCanvasStatus = SlideCanvasStatus.unavailable
+  @Published private(set) var latestCapturedWindowFrame: CGImage?
+  @Published private(set) var slideCanvasCalibrationFrame: CGImage?
+  @Published private(set) var confirmedSlideCanvasRegion: SlideCanvasRegion?
+  @Published private(set) var slideCanvasCalibrationRevision = 0
   @Published private(set) var latestStableFrame: CGImage?
   @Published private(set) var slideAnalysisStatus: SlideAnalysisStatus = .idle
   @Published private(set) var latestSlideAnalysis: SlideVisualAnalysis?
+  @Published private var inFlightCaptureStopCount = 0
 
   let permissionService: PermissionService
   private let scanner: any PowerPointWindowScanning
   private let overlayController = OverlayWindowController()
-  private let speechProvider = AppleSpeechRecognizerProvider()
+  private let speechProvider: any TranscriptionProvider
   private let windowCapture: any PowerPointWindowCapturing
   private let slideIdentityProvider: any PowerPointSlideIdentityProviding
   private let slideVisionAnalyzer: any SlideVisualAnalyzing
+  private let slideCanvasConfirmationMode: SlideCanvasConfirmationMode
   private let slideIdentityFrameTimeout: Duration
   private let slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting
   private let boardEngine = ContextualBoardEngine()
@@ -109,17 +126,25 @@ final class AppModel: ObservableObject {
   private var latestSlideIdentityFrameSynchronizationMachTime: UInt64?
   private var slideIdentityFrameTimeoutTask: Task<Void, Never>?
   private var analysisGeneration = 0
+  private var slideCanvasGeneration = 0
+  private var confirmedSlideCanvasSelection: ConfirmedSlideCanvasSelection?
+  private var slideCanvasCalibrationSource: SlideCanvasCalibrationSource?
+  private var latestEligibleWindowFrame: CapturedPowerPointFrame?
   private var slideAnalysisTask: Task<Void, Never>?
-  private var transcriptSegments: [TranscriptSegment] = []
-  private var boardIntents: [BoardIntent] = []
+  private var slideAnalysisNeedsRefresh = true
+  private var boardCandidateContext = BoardCandidateContext()
+  private var transcriptionOperationGate = TranscriptionOperationGate()
+  private var overlayDemoSceneIsLoaded = false
 
   init(
     permissionService: PermissionService = PermissionService(),
     windowCapture: any PowerPointWindowCapturing = PowerPointWindowCapture(),
     scanner: any PowerPointWindowScanning = PowerPointWindowScanner(),
+    transcriptionProvider: any TranscriptionProvider = AppleSpeechRecognizerProvider(),
     slideIdentityProvider: any PowerPointSlideIdentityProviding =
       UnavailablePowerPointSlideIdentityProvider(),
     slideVisionAnalyzer: any SlideVisualAnalyzing = SlideVisionAnalyzer(),
+    slideCanvasConfirmationMode: SlideCanvasConfirmationMode = .userConfirmed,
     slideIdentityFrameTimeout: Duration = .seconds(2),
     slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
       TaskSlideIdentityFrameTimeoutWaiter()
@@ -127,8 +152,10 @@ final class AppModel: ObservableObject {
     self.permissionService = permissionService
     self.windowCapture = windowCapture
     self.scanner = scanner
+    self.speechProvider = transcriptionProvider
     self.slideIdentityProvider = slideIdentityProvider
     self.slideVisionAnalyzer = slideVisionAnalyzer
+    self.slideCanvasConfirmationMode = slideCanvasConfirmationMode
     self.slideIdentityFrameTimeout = max(slideIdentityFrameTimeout, .zero)
     self.slideIdentityFrameTimeoutWaiter = slideIdentityFrameTimeoutWaiter
   }
@@ -139,6 +166,99 @@ final class AppModel: ObservableObject {
       windowID: selectedPowerPointWindowID,
       in: powerPointWindows
     )
+  }
+
+  var slideCanvasPreviewFrame: CGImage? {
+    slideCanvasCalibrationFrame ?? latestCapturedWindowFrame
+  }
+
+  var canShowOverlayDemo: Bool {
+    captureStatus == .stopped && inFlightCaptureStopCount == 0
+  }
+
+  func beginSlideCanvasSelection() {
+    guard
+      let activeCaptureSessionID,
+      let activeCaptureWindowID,
+      let latestEligibleWindowFrame,
+      latestEligibleWindowFrame.windowID == activeCaptureWindowID,
+      let captureSurfaceGeometry = latestEligibleWindowFrame.captureSurfaceGeometry,
+      let source = SlideCanvasCalibrationSource(
+        captureOperationID: activeCaptureSessionID,
+        windowID: activeCaptureWindowID,
+        sequenceNumber: latestEligibleWindowFrame.sequenceNumber,
+        captureSurfaceGeometry: captureSurfaceGeometry,
+        image: latestEligibleWindowFrame.image
+      )
+    else {
+      return
+    }
+
+    invalidateTranscriptionContext()
+    clearConfirmedSlideCanvas(resetVisualPipeline: true)
+    slideCanvasCalibrationSource = source
+    slideCanvasCalibrationFrame = source.image
+    slideCanvasCalibrationRevision &+= 1
+    slideCanvasStatus = .selecting
+  }
+
+  @discardableResult
+  func confirmSlideCanvasSelection(_ region: SlideCanvasRegion) -> Bool {
+    guard
+      slideCanvasStatus == .selecting,
+      let activeCaptureSessionID,
+      let activeCaptureWindowID,
+      let source = slideCanvasCalibrationSource,
+      source.captureOperationID == activeCaptureSessionID,
+      source.windowID == activeCaptureWindowID,
+      SlideCanvasSelectionPolicy.accepts(
+        region,
+        sourcePixelWidth: source.pixelWidth,
+        sourcePixelHeight: source.pixelHeight
+      ),
+      let selection = ConfirmedSlideCanvasSelection(
+        captureOperationID: activeCaptureSessionID,
+        windowID: activeCaptureWindowID,
+        captureSurfaceGeometry: source.captureSurfaceGeometry,
+        region: region
+      )
+    else {
+      return false
+    }
+
+    invalidateTranscriptionContext()
+    slideCanvasGeneration &+= 1
+    confirmedSlideCanvasSelection = selection
+    confirmedSlideCanvasRegion = region
+    slideCanvasCalibrationSource = nil
+    slideCanvasCalibrationFrame = nil
+    slideCanvasCalibrationRevision &+= 1
+    slideCanvasStatus = .confirmed
+    resetCanvasVisualPipeline()
+
+    if let latestEligibleWindowFrame {
+      guard
+        let canvasFrame = SlideCanvasFramePreparer.makeFrame(
+          from: latestEligibleWindowFrame,
+          captureOperationID: activeCaptureSessionID,
+          selection: selection
+        )
+      else {
+        invalidateConfirmedSlideCanvas()
+        return false
+      }
+      processVisualFrame(canvasFrame, sessionID: activeCaptureSessionID)
+    }
+    return true
+  }
+
+  func cancelSlideCanvasSelection() {
+    guard slideCanvasStatus == .selecting else { return }
+    invalidateTranscriptionContext()
+    slideCanvasCalibrationSource = nil
+    slideCanvasCalibrationFrame = nil
+    slideCanvasCalibrationRevision &+= 1
+    slideCanvasStatus = latestCapturedWindowFrame == nil ? .waitingForFrame : .needsConfirmation
   }
 
   @discardableResult
@@ -228,6 +348,7 @@ final class AppModel: ObservableObject {
     slideChangeCount = 0
     contentRevisionCount = 0
     latestStableFrame = nil
+    prepareSlideCanvasForNewCapture()
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
@@ -259,10 +380,10 @@ final class AppModel: ObservableObject {
         stableFrameDetector.reset()
         stableContentChangeDetector.reset()
         lastAcceptedCaptureSequenceNumber = nil
+        invalidateSlideCanvasAfterCaptureEnd()
         resetSlideAnalysis()
         captureStatus = .stopped
-        await windowCapture.stop(operationID: stopOperationID)
-        await slideIdentityProvider.stop(operationID: stopOperationID)
+        await stopCaptureProviders(operationID: stopOperationID)
         return
       }
       captureStatus = .capturing
@@ -286,10 +407,10 @@ final class AppModel: ObservableObject {
       stableFrameDetector.reset()
       stableContentChangeDetector.reset()
       lastAcceptedCaptureSequenceNumber = nil
+      invalidateSlideCanvasAfterCaptureEnd()
       resetSlideAnalysis()
       let stopOperationID = nextCaptureOperationID()
-      await windowCapture.stop(operationID: stopOperationID)
-      await slideIdentityProvider.stop(operationID: stopOperationID)
+      await stopCaptureProviders(operationID: stopOperationID)
     }
   }
 
@@ -316,16 +437,18 @@ final class AppModel: ObservableObject {
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
+    invalidateSlideCanvasAfterCaptureEnd()
     resetSlideAnalysis()
     captureStatus = .stopped
-    await windowCapture.stop(operationID: operationID)
-    await slideIdentityProvider.stop(operationID: operationID)
+    await stopCaptureProviders(operationID: operationID)
     return operationID
   }
 
   func showOverlayDemo() {
+    guard canShowOverlayDemo else { return }
     boardScene = DemoBoardSceneFactory.make(language: selectedLanguage)
     overlayController.show(scene: boardScene, style: digitalInkStyle)
+    overlayDemoSceneIsLoaded = true
     status = .overlayVisible
   }
 
@@ -335,20 +458,31 @@ final class AppModel: ObservableObject {
   }
 
   func startTranscription() async {
+    invalidateTranscriptionContext()
+    let operationID = transcriptionOperationGate.begin()
+    liveTranscript = ""
     do {
       try await speechProvider.start(language: selectedLanguage) { [weak self] observation in
         guard let self else { return }
-        self.receive(observation)
+        self.receive(observation, transcriptionOperationID: operationID)
+      }
+      guard transcriptionOperationGate.accepts(operationID) else {
+        if !transcriptionOperationGate.hasActiveOperation {
+          speechProvider.stop()
+        }
+        return
       }
       status = .listening
     } catch {
+      guard transcriptionOperationGate.invalidate(ifCurrent: operationID) else { return }
+      speechProvider.stop()
+      liveTranscript = ""
       status = .error(error.localizedDescription)
     }
   }
 
   func stopTranscription() {
-    speechProvider.stop()
-    status = .ready
+    invalidateTranscriptionContext(forceReadyStatus: true)
   }
 
   func receive(_ segment: TranscriptSegment) {
@@ -361,9 +495,28 @@ final class AppModel: ObservableObject {
   }
 
   func receive(_ observation: TranscriptionObservation) {
+    receiveAcceptedTranscriptionObservation(observation)
+  }
+
+  private func receive(
+    _ observation: TranscriptionObservation,
+    transcriptionOperationID: TranscriptionOperationID
+  ) {
+    guard transcriptionOperationGate.accepts(transcriptionOperationID) else { return }
+    receiveAcceptedTranscriptionObservation(observation)
+  }
+
+  private func receiveAcceptedTranscriptionObservation(
+    _ observation: TranscriptionObservation
+  ) {
     let segment = observation.segment
     liveTranscript = segment.text
     guard segment.isFinal else { return }
+    guard
+      slideCanvasStatus == .confirmed,
+      slideAnalysisStatus == .ready,
+      !slideAnalysisNeedsRefresh
+    else { return }
     guard !isSlideIdentityQuarantined, !slideIdentityFrameGate.requiresFreshFrame else {
       return
     }
@@ -378,35 +531,36 @@ final class AppModel: ObservableObject {
       )
     else { return }
 
-    transcriptSegments.append(segment)
+    guard
+      let slideAnalysis = latestSlideAnalysis,
+      !slideAnalysis.occupiedRegions.isEmpty
+    else {
+      return
+    }
+
+    boardCandidateContext.transcriptSegments.append(segment)
     let fallbackTitle =
       selectedLanguage.rawValue.hasPrefix("ja") ? "現在のスライド" : "Current slide"
-    let analysisTitle = latestSlideAnalysis?.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    let title =
-      if let analysisTitle, !analysisTitle.isEmpty {
-        analysisTitle
-      } else {
-        fallbackTitle
-      }
+    let analysisTitle = slideAnalysis.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let title = analysisTitle.isEmpty ? fallbackTitle : analysisTitle
     let slide = SlideContext(
       slideNumber: boardScene.slideNumber,
       title: title,
-      textBlocks: latestSlideAnalysis?.textBlocks ?? [],
+      textBlocks: slideAnalysis.textBlocks,
       speakerNotes: "",
-      occupiedRegions: latestSlideAnalysis?.occupiedRegions
-        ?? [NormalizedRect(x: 0.03, y: 0.05, width: 0.62, height: 0.90)],
+      occupiedRegions: slideAnalysis.occupiedRegions,
       dwellTime: 40,
       languages: [selectedLanguage]
     )
 
     let proposals = boardEngine.propose(
       slide: slide,
-      recentSegments: Array(transcriptSegments.suffix(8)),
-      existingIntents: boardIntents
+      recentSegments: Array(boardCandidateContext.transcriptSegments.suffix(8)),
+      existingIntents: boardCandidateContext.intents
     )
     guard !proposals.isEmpty else { return }
 
-    boardIntents.append(contentsOf: proposals)
+    boardCandidateContext.intents.append(contentsOf: proposals)
     boardScene = sceneComposer.append(
       intents: proposals,
       to: boardScene,
@@ -447,11 +601,147 @@ final class AppModel: ObservableObject {
       slideIdentityFrameTimeoutTask?.cancel()
       slideIdentityFrameTimeoutTask = nil
     }
-    processVisualFrame(frame, sessionID: sessionID)
+    latestEligibleWindowFrame = frame
+    observeWindowFrameForSlideCanvas(frame, sessionID: sessionID)
+    guard
+      let confirmedSlideCanvasSelection,
+      let canvasFrame = SlideCanvasFramePreparer.makeFrame(
+        from: frame,
+        captureOperationID: sessionID,
+        selection: confirmedSlideCanvasSelection
+      )
+    else {
+      if confirmedSlideCanvasSelection != nil {
+        invalidateConfirmedSlideCanvas()
+      }
+      return
+    }
+    processVisualFrame(canvasFrame, sessionID: sessionID)
+  }
+
+  private func observeWindowFrameForSlideCanvas(
+    _ frame: CapturedPowerPointFrame,
+    sessionID: CaptureOperationID
+  ) {
+    latestCapturedWindowFrame = frame.image
+
+    guard confirmedSlideCanvasSelection == nil else { return }
+    switch slideCanvasConfirmationMode {
+    case .userConfirmed:
+      guard
+        let captureSurfaceGeometry = frame.captureSurfaceGeometry,
+        captureSurfaceGeometry.outputPixelWidth == frame.image.width,
+        captureSurfaceGeometry.outputPixelHeight == frame.image.height
+      else {
+        invalidateConfirmedSlideCanvas()
+        return
+      }
+      if slideCanvasStatus == .selecting {
+        guard
+          let source = slideCanvasCalibrationSource,
+          source.captureOperationID == sessionID,
+          source.windowID == frame.windowID,
+          source.captureSurfaceGeometry == captureSurfaceGeometry
+        else {
+          invalidateConfirmedSlideCanvas()
+          return
+        }
+      } else if slideCanvasStatus == .waitingForFrame
+        || slideCanvasStatus == .unavailable
+        || slideCanvasStatus == .invalidated
+      {
+        slideCanvasStatus = .needsConfirmation
+      }
+    case .testOnlyUseFullCapturedFrame:
+      guard
+        let fullFrameRegion = SlideCanvasRegion(
+          NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+        ),
+        let selection = ConfirmedSlideCanvasSelection.testOnlyFullFrame(
+          captureOperationID: sessionID,
+          windowID: frame.windowID,
+          sourcePixelWidth: frame.image.width,
+          sourcePixelHeight: frame.image.height
+        )
+      else {
+        slideCanvasStatus = .invalidated
+        return
+      }
+      slideCanvasGeneration &+= 1
+      confirmedSlideCanvasSelection = selection
+      confirmedSlideCanvasRegion = fullFrameRegion
+      slideCanvasStatus = .confirmed
+      resetCanvasVisualPipeline()
+    }
+  }
+
+  private func prepareSlideCanvasForNewCapture() {
+    invalidateTranscriptionContext()
+    resetBoardCandidateContext()
+    clearOverlayDemoForCaptureStart()
+    slideCanvasGeneration &+= 1
+    confirmedSlideCanvasSelection = nil
+    confirmedSlideCanvasRegion = nil
+    slideCanvasCalibrationSource = nil
+    slideCanvasCalibrationFrame = nil
+    latestCapturedWindowFrame = nil
+    latestEligibleWindowFrame = nil
+    slideCanvasCalibrationRevision &+= 1
+    slideCanvasStatus = .waitingForFrame
+  }
+
+  private func invalidateSlideCanvasAfterCaptureEnd() {
+    invalidateTranscriptionContext()
+    resetBoardCandidateContext()
+    overlayDemoSceneIsLoaded = false
+    slideCanvasGeneration &+= 1
+    confirmedSlideCanvasSelection = nil
+    confirmedSlideCanvasRegion = nil
+    slideCanvasCalibrationSource = nil
+    slideCanvasCalibrationFrame = nil
+    latestCapturedWindowFrame = nil
+    latestEligibleWindowFrame = nil
+    latestStableFrame = nil
+    slideCanvasCalibrationRevision &+= 1
+    slideCanvasStatus = .unavailable
+    boardScene = BoardScene(slideNumber: boardScene.slideNumber)
+    overlayController.update(scene: boardScene, style: digitalInkStyle)
+  }
+
+  private func clearConfirmedSlideCanvas(resetVisualPipeline: Bool) {
+    invalidateTranscriptionContext()
+    slideCanvasGeneration &+= 1
+    confirmedSlideCanvasSelection = nil
+    confirmedSlideCanvasRegion = nil
+    if resetVisualPipeline {
+      resetCanvasVisualPipeline()
+    }
+  }
+
+  private func invalidateConfirmedSlideCanvas() {
+    clearConfirmedSlideCanvas(resetVisualPipeline: true)
+    slideCanvasCalibrationSource = nil
+    slideCanvasCalibrationFrame = nil
+    slideCanvasCalibrationRevision &+= 1
+    slideCanvasStatus = activeCaptureSessionID == nil ? .unavailable : .invalidated
+  }
+
+  private func resetCanvasVisualPipeline() {
+    invalidateTranscriptionContext()
+    stableFrameDetector.reset()
+    stableContentChangeDetector.reset()
+    latestDifferenceFromStableFrame = nil
+    stableFrameCount = 0
+    contentRevisionCount = 0
+    latestStableFrame = nil
+    resetSlideAnalysis()
+    resetBoardCandidateContext()
+    boardScene = BoardScene(slideNumber: boardScene.slideNumber)
+    overlayController.update(scene: boardScene, style: digitalInkStyle)
   }
 
   private func processVisualFrame(
-    _ frame: CapturedPowerPointFrame,
+    _ frame: CapturedSlideCanvasFrame,
     sessionID: CaptureOperationID
   ) {
     let observation = stableFrameDetector.ingest(frame.fingerprint)
@@ -463,27 +753,20 @@ final class AppModel: ObservableObject {
       if observation.differenceFromStableFrame != nil {
         contentRevisionCount += 1
       }
-      if let contentFingerprint = frame.contentFingerprint {
-        stableContentChangeDetector.rebase(to: contentFingerprint)
-      } else {
-        stableContentChangeDetector.reset()
-      }
+      guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
     case .significantVisualChange:
-      if let contentFingerprint = frame.contentFingerprint {
-        stableContentChangeDetector.rebase(to: contentFingerprint)
-      } else {
-        stableContentChangeDetector.reset()
-      }
       stableFrameCount += 1
       contentRevisionCount += 1
+      guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
     case .unchanged:
       receiveContentFingerprintIfAvailable(frame, captureSessionID: sessionID)
     case .invalid, .collecting, .transitioning:
       stableContentChangeDetector.discardPendingChange()
+      invalidateSlideAnalysisForVisualFreshness()
     }
   }
 
@@ -501,19 +784,21 @@ final class AppModel: ObservableObject {
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
+    invalidateSlideCanvasAfterCaptureEnd()
     resetSlideAnalysis()
     captureStatus = .error(message)
-    await windowCapture.stop(operationID: stopOperationID)
-    await slideIdentityProvider.stop(operationID: stopOperationID)
+    await stopCaptureProviders(operationID: stopOperationID)
   }
 
   private func startSlideAnalysis(
-    _ frame: CapturedPowerPointFrame,
+    _ frame: CapturedSlideCanvasFrame,
     captureSessionID: CaptureOperationID
   ) {
+    slideAnalysisNeedsRefresh = true
     analysisGeneration += 1
     let requestGeneration = analysisGeneration
     let requestSlideIdentityGeneration = slideIdentityGeneration
+    let requestSlideCanvasGeneration = slideCanvasGeneration
     slideAnalysisStatus = .analyzing
     latestSlideAnalysis = nil
     let analyzer = slideVisionAnalyzer
@@ -529,7 +814,8 @@ final class AppModel: ObservableObject {
           frame: frame,
           captureSessionID: captureSessionID,
           requestGeneration: requestGeneration,
-          requestSlideIdentityGeneration: requestSlideIdentityGeneration
+          requestSlideIdentityGeneration: requestSlideIdentityGeneration,
+          requestSlideCanvasGeneration: requestSlideCanvasGeneration
         )
       } catch is CancellationError {
         guard let self else { return }
@@ -537,7 +823,8 @@ final class AppModel: ObservableObject {
           frame: frame,
           captureSessionID: captureSessionID,
           requestGeneration: requestGeneration,
-          requestSlideIdentityGeneration: requestSlideIdentityGeneration
+          requestSlideIdentityGeneration: requestSlideIdentityGeneration,
+          requestSlideCanvasGeneration: requestSlideCanvasGeneration
         )
       } catch {
         guard let self else { return }
@@ -546,57 +833,95 @@ final class AppModel: ObservableObject {
           frame: frame,
           captureSessionID: captureSessionID,
           requestGeneration: requestGeneration,
-          requestSlideIdentityGeneration: requestSlideIdentityGeneration
+          requestSlideIdentityGeneration: requestSlideIdentityGeneration,
+          requestSlideCanvasGeneration: requestSlideCanvasGeneration
         )
       }
     }
   }
 
   private func receiveContentFingerprintIfAvailable(
-    _ frame: CapturedPowerPointFrame,
+    _ frame: CapturedSlideCanvasFrame,
     captureSessionID: CaptureOperationID
   ) {
     guard let contentFingerprint = frame.contentFingerprint else {
       stableContentChangeDetector.discardPendingChange()
+      invalidateSlideAnalysisForVisualFreshness()
       return
     }
     let observation = stableContentChangeDetector.ingest(contentFingerprint)
-    guard observation.state == .contentChanged else { return }
+    switch observation.state {
+    case .baselineEstablished:
+      latestStableFrame = frame.image
+      startSlideAnalysis(frame, captureSessionID: captureSessionID)
+    case .contentChanged:
+      contentRevisionCount += 1
+      latestStableFrame = frame.image
+      startSlideAnalysis(frame, captureSessionID: captureSessionID)
+    case .unchanged:
+      guard slideAnalysisNeedsRefresh, slideAnalysisStatus != .analyzing else { return }
+      latestStableFrame = frame.image
+      startSlideAnalysis(frame, captureSessionID: captureSessionID)
+    case .invalid, .collectingBaseline, .contentChangePending:
+      invalidateSlideAnalysisForVisualFreshness()
+    }
+  }
 
-    contentRevisionCount += 1
-    latestStableFrame = frame.image
-    startSlideAnalysis(frame, captureSessionID: captureSessionID)
+  private func rebaseDenseFingerprintForConfirmedCoarseFrame(
+    _ contentFingerprint: ContentFingerprint?
+  ) -> Bool {
+    guard
+      let contentFingerprint,
+      stableContentChangeDetector.rebase(to: contentFingerprint)
+    else {
+      stableContentChangeDetector.reset()
+      invalidateSlideAnalysisForVisualFreshness()
+      return false
+    }
+    return true
+  }
+
+  private func stopCaptureProviders(operationID: CaptureOperationID) async {
+    inFlightCaptureStopCount += 1
+    await windowCapture.stop(operationID: operationID)
+    await slideIdentityProvider.stop(operationID: operationID)
+    inFlightCaptureStopCount -= 1
   }
 
   private func receive(
     _ analysis: SlideVisualAnalysis,
-    frame: CapturedPowerPointFrame,
+    frame: CapturedSlideCanvasFrame,
     captureSessionID: CaptureOperationID,
     requestGeneration: Int,
-    requestSlideIdentityGeneration: Int
+    requestSlideIdentityGeneration: Int,
+    requestSlideCanvasGeneration: Int
   ) {
     guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
       requestSlideIdentityGeneration == slideIdentityGeneration,
+      requestSlideCanvasGeneration == slideCanvasGeneration,
       frame.windowID == selectedPowerPointWindowID
     else {
       return
     }
     latestSlideAnalysis = analysis
     slideAnalysisStatus = .ready
+    slideAnalysisNeedsRefresh = false
     slideAnalysisTask = nil
   }
 
   private func handleSlideAnalysisError(
     _ message: String,
-    frame: CapturedPowerPointFrame,
+    frame: CapturedSlideCanvasFrame,
     captureSessionID: CaptureOperationID,
     requestGeneration: Int,
-    requestSlideIdentityGeneration: Int
+    requestSlideIdentityGeneration: Int,
+    requestSlideCanvasGeneration: Int
   ) {
     guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
       requestSlideIdentityGeneration == slideIdentityGeneration,
+      requestSlideCanvasGeneration == slideCanvasGeneration,
       frame.windowID == selectedPowerPointWindowID
     else {
       return
@@ -606,14 +931,16 @@ final class AppModel: ObservableObject {
   }
 
   private func handleSlideAnalysisCancellation(
-    frame: CapturedPowerPointFrame,
+    frame: CapturedSlideCanvasFrame,
     captureSessionID: CaptureOperationID,
     requestGeneration: Int,
-    requestSlideIdentityGeneration: Int
+    requestSlideIdentityGeneration: Int,
+    requestSlideCanvasGeneration: Int
   ) {
     guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
       requestSlideIdentityGeneration == slideIdentityGeneration,
+      requestSlideCanvasGeneration == slideCanvasGeneration,
       frame.windowID == selectedPowerPointWindowID
     else {
       return
@@ -623,11 +950,34 @@ final class AppModel: ObservableObject {
   }
 
   private func resetSlideAnalysis() {
+    slideAnalysisNeedsRefresh = true
     analysisGeneration += 1
     slideAnalysisTask?.cancel()
     slideAnalysisTask = nil
     latestSlideAnalysis = nil
     slideAnalysisStatus = .idle
+  }
+
+  private func invalidateSlideAnalysisForVisualFreshness() {
+    guard
+      !slideAnalysisNeedsRefresh
+        || slideAnalysisTask != nil
+        || latestSlideAnalysis != nil
+        || slideAnalysisStatus != .idle
+    else {
+      return
+    }
+    resetSlideAnalysis()
+  }
+
+  private func clearOverlayDemoForCaptureStart() {
+    guard overlayDemoSceneIsLoaded else { return }
+    overlayDemoSceneIsLoaded = false
+    boardScene = BoardScene(slideNumber: boardScene.slideNumber)
+    overlayController.update(scene: boardScene, style: digitalInkStyle)
+    if status == .overlayVisible {
+      status = .ready
+    }
   }
 
   private func receive(
@@ -702,7 +1052,9 @@ final class AppModel: ObservableObject {
   }
 
   private func resetVisualStateForSlideIdentityBoundary() {
+    invalidateTranscriptionContext()
     slideIdentityGeneration += 1
+    latestEligibleWindowFrame = nil
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     latestDifferenceFromStableFrame = nil
@@ -715,7 +1067,7 @@ final class AppModel: ObservableObject {
     latestSlideIdentityBoundaryMachTime = acceptedMachTime
     resetVisualStateForSlideIdentityBoundary()
     beginSlideIdentityFrameWait(after: acceptedMachTime)
-    boardIntents.removeAll()
+    resetBoardCandidateContext()
     boardScene = BoardScene(slideNumber: sample.slideIndex)
     overlayController.update(scene: boardScene, style: digitalInkStyle)
   }
@@ -723,6 +1075,10 @@ final class AppModel: ObservableObject {
   private func updateBoardSlideNumber(to slideNumber: Int) {
     boardScene.slideNumber = slideNumber
     overlayController.update(scene: boardScene, style: digitalInkStyle)
+  }
+
+  private func resetBoardCandidateContext() {
+    boardCandidateContext.reset()
   }
 
   private func abandonSlideIdentityCandidate(acceptedMachTime: UInt64) {
@@ -733,6 +1089,7 @@ final class AppModel: ObservableObject {
   }
 
   private func invalidateSlideIdentityAfterCaptureEnd(state: SlideIdentityState) {
+    invalidateTranscriptionContext()
     slideIdentityGeneration += 1
     lastAcceptedSlideIdentitySequenceNumber = nil
     slideIdentityTracker.reset()
@@ -791,5 +1148,17 @@ final class AppModel: ObservableObject {
 
   private func isLatestCaptureOperation(_ operationID: CaptureOperationID) -> Bool {
     operationID.rawValue == nextCaptureOperationRawValue
+  }
+
+  private func invalidateTranscriptionContext(forceReadyStatus: Bool = false) {
+    let hadActiveOperation = transcriptionOperationGate.hasActiveOperation
+    transcriptionOperationGate.invalidate()
+    if hadActiveOperation {
+      speechProvider.stop()
+    }
+    liveTranscript = ""
+    if forceReadyStatus || status == .listening {
+      status = .ready
+    }
   }
 }

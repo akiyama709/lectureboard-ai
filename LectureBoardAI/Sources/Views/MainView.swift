@@ -176,6 +176,7 @@ struct MainView: View {
         slideAnalysisStatusLabel
         slideIdentityStatusLabel
         slideIdentityFrameSyncStatusLabel
+        slideCanvasStatusLabel
 
         HStack(spacing: 24) {
           LabeledContent(
@@ -216,6 +217,23 @@ struct MainView: View {
 
         if let title = model.latestSlideAnalysis?.title, !title.isEmpty {
           LabeledContent("analysis.titleCandidate", value: title)
+        }
+
+        if let image = model.slideCanvasPreviewFrame {
+          SlideCanvasSelectionPreview(
+            image: image,
+            status: model.slideCanvasStatus,
+            confirmedRegion: model.confirmedSlideCanvasRegion,
+            onBeginSelection: model.beginSlideCanvasSelection,
+            onConfirmSelection: { region in
+              _ = model.confirmSlideCanvasSelection(region)
+            },
+            onCancelSelection: model.cancelSlideCanvasSelection
+          )
+          .id(model.slideCanvasCalibrationRevision)
+        } else {
+          Text("capture.slideCanvas.noWindowFrame")
+            .foregroundStyle(.secondary)
         }
 
         if let image = model.latestStableFrame {
@@ -313,6 +331,30 @@ struct MainView: View {
     }
   }
 
+  @ViewBuilder
+  private var slideCanvasStatusLabel: some View {
+    switch model.slideCanvasStatus {
+    case .unavailable:
+      Label("capture.slideCanvas.unavailable", systemImage: "rectangle.dashed")
+        .foregroundStyle(.secondary)
+    case .waitingForFrame:
+      Label("capture.slideCanvas.waitingForFrame", systemImage: "hourglass")
+        .foregroundStyle(.secondary)
+    case .needsConfirmation:
+      Label("capture.slideCanvas.needsConfirmation", systemImage: "viewfinder.rectangular")
+        .foregroundStyle(.orange)
+    case .selecting:
+      Label("capture.slideCanvas.selecting", systemImage: "viewfinder.rectangular")
+        .foregroundStyle(.orange)
+    case .confirmed:
+      Label("capture.slideCanvas.confirmed", systemImage: "checkmark.rectangle")
+        .foregroundStyle(.green)
+    case .invalidated:
+      Label("capture.slideCanvas.invalidated", systemImage: "exclamationmark.rectangle")
+        .foregroundStyle(.orange)
+    }
+  }
+
   private var languageAndStyle: some View {
     HStack(alignment: .top, spacing: 18) {
       GroupBox("setup.language") {
@@ -342,6 +384,7 @@ struct MainView: View {
   private var controls: some View {
     HStack(spacing: 12) {
       Button("setup.overlay") { model.showOverlayDemo() }
+        .disabled(!model.canShowOverlayDemo)
       Button("setup.stop") { model.hideOverlay() }
       Divider().frame(height: 24)
       Button("setup.transcription") {
@@ -358,6 +401,105 @@ struct MainView: View {
         .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
         .textSelection(.enabled)
         .padding(.vertical, 8)
+    }
+  }
+}
+
+private struct SlideCanvasSelectionPreview: View {
+  let image: CGImage
+  let status: SlideCanvasStatus
+  let confirmedRegion: SlideCanvasRegion?
+  let onBeginSelection: () -> Void
+  let onConfirmSelection: (SlideCanvasRegion) -> Void
+  let onCancelSelection: () -> Void
+
+  @State private var draftRegion: SlideCanvasRegion?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("capture.slideCanvas.windowPreview")
+        .font(.headline)
+
+      ZStack(alignment: .topLeading) {
+        Image(decorative: image, scale: 1)
+          .resizable()
+          .scaledToFit()
+
+        GeometryReader { proxy in
+          if let region = visibleRegion?.normalizedRect {
+            Rectangle()
+              .fill(.blue.opacity(0.10))
+              .stroke(.blue, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+              .frame(
+                width: region.width * proxy.size.width,
+                height: region.height * proxy.size.height
+              )
+              .position(
+                x: (region.x + region.width / 2) * proxy.size.width,
+                y: (region.y + region.height / 2) * proxy.size.height
+              )
+          }
+
+          Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+              DragGesture(minimumDistance: 2)
+                .onChanged { value in
+                  guard status == .selecting else { return }
+                  draftRegion = SlideCanvasDragSelection.region(
+                    from: value.startLocation,
+                    to: value.location,
+                    in: proxy.size
+                  )
+                }
+            )
+        }
+      }
+      .aspectRatio(CGFloat(image.width) / CGFloat(max(image.height, 1)), contentMode: .fit)
+      .frame(maxWidth: .infinity, maxHeight: 240)
+      .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+
+      controls
+    }
+  }
+
+  private var visibleRegion: SlideCanvasRegion? {
+    status == .selecting ? draftRegion : confirmedRegion
+  }
+
+  @ViewBuilder
+  private var controls: some View {
+    switch status {
+    case .needsConfirmation, .invalidated:
+      HStack(spacing: 10) {
+        Text("capture.slideCanvas.instructions")
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button("capture.slideCanvas.begin", action: onBeginSelection)
+      }
+    case .selecting:
+      HStack(spacing: 10) {
+        Text("capture.slideCanvas.dragInstructions")
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button("capture.slideCanvas.cancel", action: onCancelSelection)
+        Button("capture.slideCanvas.confirm") {
+          guard let draftRegion else { return }
+          onConfirmSelection(draftRegion)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(draftRegion == nil)
+      }
+    case .confirmed:
+      HStack(spacing: 10) {
+        Text("capture.slideCanvas.confirmedInstructions")
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button("capture.slideCanvas.reselect", action: onBeginSelection)
+      }
+    case .unavailable, .waitingForFrame:
+      EmptyView()
     }
   }
 }

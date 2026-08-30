@@ -33,46 +33,53 @@ Implemented:
 - Fail-closed capture identity binding across the ScreenCaptureKit window identifier, owning process identifier, and exact PowerPoint bundle identifier from selection through capture start.
 - Deterministic coarse luminance fingerprints and stable-frame or significant-visual-change classification. Image difference alone is not treated as slide identity.
 - Persistent visual-content updates from dense 160-by-90 RGB fingerprints.
+- A fail-closed slide-canvas boundary for the visual pipeline. Public macOS and PowerPoint APIs do not expose the exact internal slide-canvas rectangle, so the user drags and explicitly confirms the visible slide area on a frozen preview of the exact captured window. The confirmation is bound to the capture operation, exact window ID, source pixel dimensions, and validated ScreenCaptureKit surface geometry; capture restart, window mismatch, size mismatch, missing geometry, or geometry change invalidates it.
+- Idle deliveries re-read geometry from the current ScreenCaptureKit sample attachments and mark the repeated visual payload as geometry-valid only when the current geometry exactly matches that payload's geometry. Changed, missing, or invalid current geometry, or missing last-payload geometry, leaves the repeat without geometry and invalidates the canvas fail closed before visual processing. If the idle sample has no image buffer, only the fixed stream surface dimensions are inherited from the last frame. Live ScreenCaptureKit idle-attachment behavior remains unverified.
+- ScreenCaptureKit delivery status is parsed fail closed: missing, malformed, and unknown `SCFrameStatus` values are dropped; only `.complete` and `.started` are new deliveries, and only `.idle` is a repeat. Surface scale factor must be within the SDK-documented inclusive range from 1 through 4.
+- Stable-frame and dense content fingerprints, Vision requests, raster candidates, occupied regions, and board-placement input are produced only from the confirmed cropped canvas. Without confirmation, capture-delivery metrics continue but the visual and board-placement pipeline remains closed.
+- A coarse or dense visual-change candidate immediately invalidates prior analysis. Missing or invalid dense fingerprints also invalidate prior analysis; a confirmed coarse frame without a valid dense fingerprint does not start analysis. After a detector returns to baseline, proposals remain closed until analysis of the current frame completes.
+- A current-board-context boundary that prevents transcript segments accumulated before a semantic slide, canvas, or capture boundary from being proposed again afterward. Canvas confirmation requires at least 32 by 24 source pixels and 1,024 square pixels, and transcript-driven board proposals remain closed when visual analysis has no occupied regions. Capture end clears the latest stable frame, analysis, and board scene.
 - Compiled Vision text and rectangle analysis triggered by confirmed stable visual frames or content updates.
 - A native RGB raster path, limited to a 640-pixel long edge, and deterministic `strokeCandidateRegions` that remain distinct from confirmed PowerPoint ink.
 - Deterministic normalized occupied-region filtering, padding, and merging across text, rectangles, and stroke candidates.
 - Capture-monitor analysis counts and occupied-region preview overlays.
 - A deterministic slide-identity tracker that confirms a baseline or transition only after two consecutive matching samples, discards continuity across unavailable gaps, and does not count presentation-session changes as slide changes.
 - An app-side identity-provider boundary with target, session, and sequence rejection; candidate-frame exclusion from visual analysis after delivery metrics are recorded; old scene and analysis invalidation at baseline or transition boundaries; and analysis resumption only for a `.new` frame whose ScreenCaptureKit `displayTime` is strictly later than the app's local mach-absolute acceptance time for the confirming observation.
-- A local speech-result boundary that rejects final transcript results emitted before an identity boundary, before the local acceptance time of the post-boundary frame, or while the app is still waiting for that frame.
+- App-side and Apple-provider generation guards reject stale transcription callbacks. A semantic slide, canvas, or capture boundary stops transcription, invalidates prior callbacks and segments, and leaves transcription closed until the user explicitly resumes it. The identity-frame timestamp boundary remains an additional guard. Live microphone behavior remains unverified.
 - A deterministic post-identity frame gate with observable waiting, synchronized, and timed-out states. Timeout remains fail-closed, stale timeout completions are rejected by boundary token, and a later strictly newer ScreenCaptureKit frame can recover the gate.
 - A safe default identity provider that requests no Automation permission, sends no Apple Event, and emits one unavailable observation per accepted capture start.
-- Metadata-only runtime reports at schema version 5, including slide-identity state, post-identity frame-sync state, sample count, continuity-break count, content-revision count, and stroke-candidate count. Schema 1 through schema 4 remain decodable as historical formats with safe defaults for absent metadata.
+- Metadata-only runtime reports at schema version 6, adding only slide-canvas state to the schema-5 identity, frame-sync, and analysis counters. Schema 1 through schema 5 remain decodable as historical formats with safe defaults for absent metadata.
 - Click-through transparent overlay prototype.
 - Japanese or English Apple Speech prototype.
 - Platform-neutral `LectureBoardCore` package.
 - Contextual importance scoring and board-intent classification.
 - Vector board-scene models and simple empty-region placement.
-- Core unit tests and open-source repository documentation. The current source passes 98 Core tests and 110 native app tests on the development Mac.
+- Demo board content is cleared at capture start and cannot be generated while capture is active or while capture-provider shutdown is in progress.
+- Core unit tests and open-source repository documentation. The current source passes 107 Core tests in 15 suites and 156 native app tests in 21 suites on the development Mac.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
 - A later schema-2 but pre-semantic-correction build completed a separate 40-second exact-window run with 373 frames, 6 stable snapshots, the same 5 legacy heuristic change classifications, and 2 content revisions. The report SHA-256 is `704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`. This is build-specific historical evidence for capture and metadata production; it must not be presented as verification of the current source or of slide identity.
-- No live dynamic or mouse-ink result has yet been recorded for the current schema-5 build. A read-only PowerPoint probe observed Automation preflight status `0`, one slide-show window, and two Core Graphics windows, but PowerPoint's inherited `window.id` was `nil`; the semantic result therefore could not be bound to the exact captured window ID. No weaker name-, order-, or geometry-based fallback was adopted.
+- No live dynamic, mouse-ink, or user-confirmed slide-canvas result has yet been recorded for the current schema-6 build. A read-only PowerPoint probe observed Automation preflight status `0`, one slide-show window, and two Core Graphics windows, but PowerPoint's inherited `window.id` was `nil`; the semantic result therefore could not be bound to the exact captured window ID. No weaker name-, order-, or geometry-based fallback was adopted.
 - Neither historical run establishes standalone LaunchServices authorization, recognition or coordinate accuracy, slide-canvas isolation, representative-deck coverage, or lecture-length reliability.
 
 Not yet implemented or verified:
 
 - Independent LaunchServices runtime validation of continuous PowerPoint frame capture.
-- Live dynamic and same-slide mouse-ink validation with the current schema-5 build.
+- Live dynamic and same-slide mouse-ink validation with the current schema-6 build.
 - A production PowerPoint slide-identity provider that can bind semantic slide information to the exact captured window. The deterministic tracker and fail-closed app integration are implemented, but actual PowerPoint transitions remain unverified and the safe default provider supplies no identities.
 - Automatic fresh-frame resynchronization when a static slide yields only idle repeats after an identity boundary. Explicit fail-closed timeout state is implemented and tested, but its live behavior with a production identity provider remains unverified.
 - Representative-deck, animation, reselection, and long-duration calibration of stable visual/content-update detection.
 - OCR correctness and coordinate-accuracy calibration of Vision text, rectangle, and occupied-region analysis.
-- Slide-canvas cropping and exclusion of PowerPoint controls or other window UI from analysis.
+- Live accuracy of the user-confirmed slide-canvas rectangle and PowerPoint-UI exclusion across slideshow modes, display arrangements, representative decks, and window resizing. ScreenCaptureKit surface padding and `contentRect` mapping also remain unverified.
 - Robust object, empty-space, and existing-ink analysis beyond detected text, rectangles, and raster stroke candidates.
 - Existing PowerPoint ink detection.
 - Real speaker-note and `.pptx` parsing.
 - Reliable Japanese–English code switching.
 - Production-grade contextual model adapters.
 - Session export to JSON, SVG, PDF, and Markdown.
-- Runtime validation of microphone transcription, the click-through overlay, and AI board rendering during a lecture.
+- Runtime validation of microphone transcription, the click-through overlay, and AI board rendering during a lecture. The overlay still uses the selected display rather than the confirmed slide-canvas coordinates.
 - Developer ID distribution signing, hardened runtime, and notarization.
 
 ## Immediate next milestone
@@ -83,7 +90,7 @@ Implement and validate the observable lecture path in this order:
 2. Produce stable visual snapshots and persistent content-update events.
 3. Implement an exact-window-bound production PowerPoint slide-identity provider and validate actual transitions before making runtime claims.
 4. Run Vision text, geometry, and raster candidate analysis on stable visual frames.
-5. Crop to the slide canvas and build a normalized occupied-region map, including verified existing presenter ink.
+5. Validate the user-confirmed slide-canvas crop on live PowerPoint modes, align the overlay to that exact canvas, and extend the normalized occupied-region map to verified existing presenter ink.
 6. Feed real `SlideContext` data and final transcript segments into `ContextualBoardEngine`.
 7. Render stable text, boxes, arrows, and causal chains without overlap.
 8. Persist a minimal lecture session as JSON and SVG.

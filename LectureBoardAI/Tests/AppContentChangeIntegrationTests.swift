@@ -518,6 +518,220 @@ struct AppContentChangeIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func coarseCandidateClosesProposalsUntilReturnedBaselineIsReanalyzed() async throws {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = ControllableSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+
+    try await establishReadyAnalysis(
+      model: model,
+      capture: capture,
+      analyzer: analyzer,
+      image: image,
+      coarseFingerprint: coarseBaseline,
+      contentFingerprint: denseBaseline
+    )
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        image: image,
+        coarseFingerprint: coarseFingerprint(luminance: 107),
+        contentFingerprint: denseBaseline
+      )
+    )
+    try await waitUntil { model.capturedFrameCount == 4 }
+    #expect(model.slideAnalysisStatus == .idle)
+    #expect(model.latestSlideAnalysis == nil)
+
+    model.receive(proposalDefinition("Candidate means content that is not yet stable."))
+    #expect(model.boardScene.elements.isEmpty)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 5,
+        image: image,
+        coarseFingerprint: coarseBaseline,
+        contentFingerprint: denseBaseline
+      )
+    )
+    try await analyzer.waitForInvocation(sequenceNumber: 5)
+    #expect(model.slideAnalysisStatus == .analyzing)
+    model.receive(proposalDefinition("Recovery means returning to the old baseline."))
+    #expect(model.boardScene.elements.isEmpty)
+
+    try await analyzer.succeed(
+      sequenceNumber: 5,
+      title: "revalidated baseline",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    model.receive(proposalDefinition("Freshness means using the reanalyzed current frame."))
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func denseCandidateAndConfirmedChangeKeepProposalsClosedUntilNewAnalysisCompletes()
+    async throws
+  {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = ControllableSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+    let denseRevision = changingCells(in: denseBaseline, indices: Array(0..<30))
+
+    try await establishReadyAnalysis(
+      model: model,
+      capture: capture,
+      analyzer: analyzer,
+      image: image,
+      coarseFingerprint: coarseBaseline,
+      contentFingerprint: denseBaseline
+    )
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        image: image,
+        coarseFingerprint: coarseBaseline,
+        contentFingerprint: denseRevision
+      )
+    )
+    try await waitUntil { model.capturedFrameCount == 4 }
+    #expect(model.slideAnalysisStatus == .idle)
+    #expect(model.latestSlideAnalysis == nil)
+    model.receive(proposalDefinition("Pending ink means occupancy is not yet current."))
+    #expect(model.boardScene.elements.isEmpty)
+
+    for sequenceNumber in 5...6 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseRevision
+        )
+      )
+    }
+    try await analyzer.waitForInvocation(sequenceNumber: 6)
+    #expect(model.contentRevisionCount == 1)
+    #expect(model.slideAnalysisStatus == .analyzing)
+    model.receive(proposalDefinition("Confirmed ink means analysis is still required."))
+    #expect(model.boardScene.elements.isEmpty)
+
+    try await analyzer.succeed(
+      sequenceNumber: 6,
+      title: "new dense revision",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    model.receive(proposalDefinition("Current occupancy means proposals may resume."))
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func missingAndInvalidDenseFingerprintsCloseProposalsUntilAValidFrameIsReanalyzed()
+    async throws
+  {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = ControllableSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+    let wrongSizedDenseFingerprint = ContentFingerprint(
+      sampleColumns: 80,
+      sampleRows: 45,
+      cells: Array(
+        repeating: RGBContentCell(red: 255, green: 255, blue: 255),
+        count: 80 * 45
+      )
+    )
+
+    try await establishReadyAnalysis(
+      model: model,
+      capture: capture,
+      analyzer: analyzer,
+      image: image,
+      coarseFingerprint: coarseBaseline,
+      contentFingerprint: denseBaseline
+    )
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        image: image,
+        coarseFingerprint: coarseBaseline,
+        contentFingerprint: nil
+      )
+    )
+    try await waitUntil { model.capturedFrameCount == 4 }
+    #expect(model.slideAnalysisStatus == .idle)
+    model.receive(proposalDefinition("Missing evidence means proposals remain closed."))
+    #expect(model.boardScene.elements.isEmpty)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 5,
+        image: image,
+        coarseFingerprint: coarseBaseline,
+        contentFingerprint: wrongSizedDenseFingerprint
+      )
+    )
+    try await waitUntil { model.capturedFrameCount == 5 }
+    #expect(model.slideAnalysisStatus == .idle)
+    model.receive(proposalDefinition("Invalid evidence means proposals remain closed."))
+    #expect(model.boardScene.elements.isEmpty)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 6,
+        image: image,
+        coarseFingerprint: coarseBaseline,
+        contentFingerprint: denseBaseline
+      )
+    )
+    try await analyzer.waitForInvocation(sequenceNumber: 6)
+    #expect(model.slideAnalysisStatus == .analyzing)
+    try await analyzer.succeed(
+      sequenceNumber: 6,
+      title: "valid dense baseline",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    model.receive(proposalDefinition("Validated evidence means proposals may resume."))
+    #expect(!model.boardScene.elements.isEmpty)
+
+    model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+    let elementCountBeforeMissingConfirmedFrame = model.boardScene.elements.count
+    let changedCoarseFingerprint = coarseFingerprint(luminance: 107)
+    for sequenceNumber in 7...9 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: changedCoarseFingerprint,
+          contentFingerprint: nil
+        )
+      )
+    }
+    try await waitUntil { model.capturedFrameCount == 9 }
+    #expect(!(await analyzer.hasInvocation(sequenceNumber: 9)))
+    #expect(model.slideAnalysisStatus == .idle)
+    #expect(model.latestSlideAnalysis == nil)
+    model.receive(proposalDefinition("Missing dense evidence closes confirmed coarse frames."))
+    #expect(model.boardScene.elements.count == elementCountBeforeMissingConfirmedFrame)
+
+    await model.stopWindowCapture()
+  }
+
   @Test func currentAnalyzerCancellationSettlesButReplacedCancellationDoesNot() async throws {
     let capture = FrameEmittingWindowCapture()
     let analyzer = ControllableSlideVisualAnalyzer()
@@ -664,7 +878,8 @@ struct AppContentChangeIntegrationTests {
       permissionService: permissionService,
       windowCapture: capture,
       scanner: ContentIntegrationWindowScanner(),
-      slideVisionAnalyzer: analyzer
+      slideVisionAnalyzer: analyzer,
+      slideCanvasConfirmationMode: .testOnlyUseFullCapturedFrame
     )
     model.powerPointWindows = [
       PowerPointWindowDescriptor(
@@ -680,11 +895,39 @@ struct AppContentChangeIntegrationTests {
     return model
   }
 
+  private func establishReadyAnalysis(
+    model: AppModel,
+    capture: FrameEmittingWindowCapture,
+    analyzer: ControllableSlideVisualAnalyzer,
+    image: CGImage,
+    coarseFingerprint: FrameFingerprint,
+    contentFingerprint: ContentFingerprint
+  ) async throws {
+    await model.startWindowCapture()
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseFingerprint,
+          contentFingerprint: contentFingerprint
+        )
+      )
+    }
+    try await analyzer.waitForInvocation(sequenceNumber: 3)
+    try await analyzer.succeed(
+      sequenceNumber: 3,
+      title: "baseline",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+  }
+
   private func frame(
     sequenceNumber: UInt64,
     image: CGImage,
     coarseFingerprint: FrameFingerprint,
-    contentFingerprint: ContentFingerprint
+    contentFingerprint: ContentFingerprint?
   ) -> CapturedPowerPointFrame {
     CapturedPowerPointFrame(
       windowID: 42,
@@ -728,6 +971,21 @@ struct AppContentChangeIntegrationTests {
       sampleColumns: fingerprint.sampleColumns,
       sampleRows: fingerprint.sampleRows,
       cells: cells
+    )
+  }
+
+  private func boardProposalOccupiedRegions() -> [NormalizedRect] {
+    [NormalizedRect(x: 0.05, y: 0.05, width: 0.2, height: 0.15)]
+  }
+
+  private func proposalDefinition(_ text: String) -> TranscriptSegment {
+    TranscriptSegment(
+      text: text,
+      startTime: 0,
+      endTime: 5,
+      language: .englishUS,
+      confidence: 0.95,
+      emphasis: 0.9
     )
   }
 
@@ -799,7 +1057,7 @@ private actor FrameEmittingWindowCapture: PowerPointWindowCapturing {
 private actor RecordingSlideVisualAnalyzer: SlideVisualAnalyzing {
   private var analysisCount = 0
 
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
     analysisCount += 1
     return SlideVisualAnalysis(
       strokeCandidateRegions: [
@@ -833,7 +1091,7 @@ private actor ControllableSlideVisualAnalyzer: SlideVisualAnalyzing {
   private var invokedSequenceNumbers: Set<UInt64> = []
   private var continuations: [UInt64: CheckedContinuation<SlideVisualAnalysis, any Error>] = [:]
 
-  func analyze(_ frame: CapturedPowerPointFrame) async throws -> SlideVisualAnalysis {
+  func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
     invokedSequenceNumbers.insert(frame.sequenceNumber)
     return try await withCheckedThrowingContinuation { continuation in
       continuations[frame.sequenceNumber] = continuation
@@ -848,11 +1106,24 @@ private actor ControllableSlideVisualAnalyzer: SlideVisualAnalyzing {
     throw ControllableSlideVisualAnalyzerError.timedOutWaitingForInvocation(sequenceNumber)
   }
 
-  func succeed(sequenceNumber: UInt64, title: String) throws {
+  func hasInvocation(sequenceNumber: UInt64) -> Bool {
+    invokedSequenceNumbers.contains(sequenceNumber)
+  }
+
+  func succeed(
+    sequenceNumber: UInt64,
+    title: String,
+    occupiedRegions: [NormalizedRect] = []
+  ) throws {
     guard let continuation = continuations.removeValue(forKey: sequenceNumber) else {
       throw ControllableSlideVisualAnalyzerError.missingInvocation(sequenceNumber)
     }
-    continuation.resume(returning: SlideVisualAnalysis(title: title))
+    continuation.resume(
+      returning: SlideVisualAnalysis(
+        title: title,
+        occupiedRegions: occupiedRegions
+      )
+    )
   }
 
   func failWithCancellation(sequenceNumber: UInt64) throws {

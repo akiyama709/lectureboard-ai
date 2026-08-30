@@ -22,6 +22,13 @@ struct LocalizationResourceTests {
           "Fresh post-identity frame accepted",
         "capture.slideIdentityFrameSync.timedOut":
           "Fresh-frame wait timed out; analysis remains paused",
+        "capture.slideCanvas.needsConfirmation":
+          "Slide area has not been confirmed; visual analysis is paused",
+        "capture.slideCanvas.confirmed":
+          "User-confirmed slide area is active",
+        "capture.slideCanvas.invalidated":
+          "Window geometry changed; confirm the slide area again",
+        "capture.slideCanvas.confirm": "Confirm slide area",
       ],
       "ja": [
         "app.title": "LectureBoard AI",
@@ -39,6 +46,13 @@ struct LocalizationResourceTests {
           "識別境界後の新しいフレームを受理しました",
         "capture.slideIdentityFrameSync.timedOut":
           "新しいフレームの待機が時間切れになり，解析を停止しています",
+        "capture.slideCanvas.needsConfirmation":
+          "スライド面が未確認のため，視覚解析を停止しています",
+        "capture.slideCanvas.confirmed":
+          "利用者が確認したスライド面を使用しています",
+        "capture.slideCanvas.invalidated":
+          "ウィンドウ寸法が変わったため，スライド面を再確認してください",
+        "capture.slideCanvas.confirm": "スライド面を確定",
       ],
     ]
 
