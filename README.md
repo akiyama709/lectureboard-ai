@@ -4,7 +4,7 @@
 
 LectureBoard AI is an open-source research and development project for university lectures and online teaching. It is intended to listen to a lecturer, observe the current slide, estimate what is educationally important from context, and render a restrained digital-ink annotation layer. The lecturer should not need to say commands such as “write this on the board.”
 
-> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, selected-window capture, stable visual/content-update paths, Vision and raster-candidate analysis, transparent-overlay prototype, and tests are included. The current source passes 90 Core tests and 103 native app tests on the development Mac. It now contains a deterministic slide-identity tracker and a fail-closed app integration boundary, but no production PowerPoint slide-identity provider. For each accepted capture start, the default provider performs no Automation permission request or Apple Event and reports identity as unavailable once. Consequently, actual PowerPoint slide transitions and current schema-4 dynamic or mouse-ink behavior remain unverified.
+> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, selected-window capture, stable visual/content-update paths, Vision and raster-candidate analysis, transparent-overlay prototype, and tests are included. The current source passes 98 Core tests and 110 native app tests on the development Mac. It now contains a deterministic slide-identity tracker, a fail-closed app integration boundary, and an explicit post-identity frame timeout that never admits stale or idle frames. It still has no production PowerPoint slide-identity provider. For each accepted capture start, the default provider performs no Automation permission request or Apple Event and reports identity as unavailable once. Consequently, actual PowerPoint slide transitions and current schema-5 dynamic or mouse-ink behavior remain unverified.
 
 > Completion means publication of the public `v1.0.0` GitHub Release with a verified, signed, notarized, installable macOS artifact. The existing public repository and any alpha, beta, or release-candidate builds are intermediate milestones. See [`ROADMAP.md`](ROADMAP.md) for the validation gates.
 
@@ -42,8 +42,9 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Capture-monitor counts and an occupied-region preview overlay
 - A deterministic independent slide-identity tracker that requires two consecutive matching samples, discards continuity across interruptions, and does not infer transitions across presentation sessions
 - An app-side identity-provider boundary that rejects wrong-target, wrong-session, and out-of-order observations; excludes candidate-period frames from visual analysis after delivery metrics are recorded; clears old analysis and board scenes at confirmed boundaries; and resumes analysis only for a `.new` frame whose ScreenCaptureKit `displayTime` is strictly later than the app's local mach-absolute acceptance time for the confirming observation
-- A local speech-result boundary that rejects final transcript results emitted before an identity boundary or while the app is still waiting for that post-boundary frame
-- A metadata-only schema-4 runtime-verification path with identity state, sample count, continuity-break count, content-revision count, and stroke-candidate count; historical schema-1 through schema-3 reports remain decodable without identity metadata
+- A local speech-result boundary that rejects final transcript results emitted before an identity boundary, before the app locally accepts the post-boundary frame, or while the app is still waiting for that frame
+- A token-bound post-identity frame gate that exposes waiting, synchronized, and timed-out states; timeout remains fail-closed, and a later strictly newer `.new` frame can recover the gate
+- A metadata-only schema-5 runtime-verification path with identity state, post-identity frame-sync state, sample count, continuity-break count, content-revision count, and stroke-candidate count; historical schema-1 through schema-4 reports remain decodable with safe defaults for absent metadata
 - A click-through transparent overlay window prototype
 - A selectable Japanese or English Apple Speech recognizer prototype
 - A pure-Swift `LectureBoardCore` package containing:
@@ -61,7 +62,7 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Reliable recognition of Japanese and English within the same utterance
 - Parsing every PowerPoint object and speaker note
 - Acquiring actual PowerPoint slide identity through a production provider and validating it against live transitions
-- Fresh-frame resynchronization or explicit timeout/state handling when a static slide produces only idle repeats after an identity boundary
+- Automatic exact-window fresh-frame acquisition when a static slide produces only idle repeats after an identity boundary; explicit fail-closed timeout state is implemented and tested, but remains live-unverified with a production identity provider
 - Reliable visual/content-update behavior across representative transitions and animations
 - Independent LaunchServices startup, window reselection, and lecture-length reliability of continuous PowerPoint capture
 - OCR correctness and coordinate accuracy of Vision text, rectangle, and occupancy analysis across representative decks
@@ -114,9 +115,9 @@ Direct executable runs under the Codex-authorized environment and an independent
 
 Two controlled dynamic reports remain as build-specific historical evidence. A schema-1 build recorded 372 frames and 5 image-difference events in the legacy `slideChangeCount` field. A later schema-2 but pre-semantic-correction build recorded 373 frames, the same 5 legacy heuristic events, and 2 content revisions; that report has SHA-256 `704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`. Neither report verifies slide identity or the current semantic build, and neither should be interpreted as five independently identified slide transitions.
 
-Schema 3 established the corrected meaning in which image differences are content revisions rather than slide identity, but no successful live dynamic or mouse-ink report was recorded for a schema-3 build. Schema 4 is the current format and adds identity state and counters as metadata only; it does not itself provide live PowerPoint identity evidence.
+Schema 3 established the corrected meaning in which image differences are content revisions rather than slide identity, but no successful live dynamic or mouse-ink report was recorded for a schema-3 build. Schema 4 added identity state and counters as metadata only. Schema 5 is the current format and adds the post-identity frame-sync state. Neither schema change itself provides live PowerPoint identity evidence.
 
-A later read-only PowerPoint probe observed Automation preflight status `0`, one PowerPoint slide-show window, and two Core Graphics windows. PowerPoint's inherited `window.id` was `nil`, so the probe could not bind the semantic slide result to the exact captured window ID. No weaker name-, order-, or geometry-based fallback was adopted. The production identity adapter therefore remains unimplemented, and actual PowerPoint slide identity, current schema-4 dynamic behavior, and same-slide mouse ink remain unverified.
+A later read-only PowerPoint probe observed Automation preflight status `0`, one PowerPoint slide-show window, and two Core Graphics windows. PowerPoint's inherited `window.id` was `nil`, so the probe could not bind the semantic slide result to the exact captured window ID. No weaker name-, order-, or geometry-based fallback was adopted. The production identity adapter therefore remains unimplemented, and actual PowerPoint slide identity, current schema-5 dynamic behavior, and same-slide mouse ink remain unverified.
 
 ## Continue development locally with ChatGPT Codex
 
@@ -160,7 +161,7 @@ Microsoft PowerPoint and other product names are trademarks of their respective 
 
 　講師が「ここを板書してください」などの命令を発することなく使える構成を目指します．現在のスライド，発表者ノート，直前までの発話，反復，対比，因果関係，定義，発話上の強調，既存板書などから，何を学生に残すべきかを文脈的に判断する設計です．
 
-　現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得，安定した視覚・内容更新の判定，Vision及びラスタ候補解析，透明オーバーレイの試作，テストを収録しています．現行ソースは，開発用Mac上でCore 90件及びネイティブApp 103件のテストに合格しています．選択から取得開始まで，ScreenCaptureKit窓ID，所有PID及びPowerPointの完全一致bundle identifierを固定し，不一致又は重複時には取得を開始しません．Coreには2回連続一致で基準又は切替を確定する独立スライド識別trackerがあり，Appには対象，session及び順序を検査して不一致を拒否するprovider境界があります．候補確認中のフレームは取得件数へ計上した後に視覚解析から除外し，基準確立又は切替時には以前の解析と板書sceneを破棄します．解析の再開には，識別観測をAppが受理したローカルmach絶対時刻よりScreenCaptureKitの`displayTime`が厳密に後である`.new`フレームを要求します．文字起こしについても，識別境界以前に生成された確定結果又は境界後の新規フレーム待機中に届いた確定結果を板書候補から除外します．ただし，実PowerPointから識別信号を得るproduction providerは未実装であり，静止スライドで新しい表示フレームが生じない場合の再同期又は明示的なtimeout状態も未設計です．既定providerは，受理した取得開始ごとに，Automation許可を要求せず，Apple Eventも送らず，識別不能を1回通知します．現行runtimeレポートはschema 4であり，識別状態，sample数及びcontinuity break数を内容非保持メタデータとして記録します．schema 1からschema 3までは履歴形式として読込可能ですが，識別情報は`unavailable`及び0として復号します．実PowerPointのスライド同一性，現行schema 4の動的スライド及びマウス手書きは未検証です．
+　現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得，安定した視覚・内容更新の判定，Vision及びラスタ候補解析，透明オーバーレイの試作，テストを収録しています．現行ソースは，開発用Mac上でCore 98件及びネイティブApp 110件のテストに合格しています．選択から取得開始まで，ScreenCaptureKit窓ID，所有PID及びPowerPointの完全一致bundle identifierを固定し，不一致又は重複時には取得を開始しません．Coreには2回連続一致で基準又は切替を確定する独立スライド識別trackerがあり，Appには対象，session及び順序を検査して不一致を拒否するprovider境界があります．候補確認中のフレームは取得件数へ計上した後に視覚解析から除外し，基準確立又は切替時には以前の解析と板書sceneを破棄します．解析の再開には，識別観測をAppが受理したローカルmach絶対時刻よりScreenCaptureKitの`displayTime`が厳密に後である`.new`フレームを要求します．文字起こしについても，識別境界以前，又は境界後フレームをAppが受理したローカル時刻以前に生成された確定結果を，MainActorでの処理順にかかわらず板書候補から除外します．識別境界後の状態は，待機中，同期済み又は時間切れとして明示され，時間切れになっても古いフレームやidle repeatを受理せず，後から条件を満たす`.new`フレームが届いた場合に限り回復します．ただし，実PowerPointから識別信号を得るproduction provider及び正確な窓を対象とする自動fresh-frame取得は未実装です．既定providerは，受理した取得開始ごとに，Automation許可を要求せず，Apple Eventも送らず，識別不能を1回通知します．現行runtimeレポートはschema 5であり，識別状態，frame同期状態，sample数及びcontinuity break数を内容非保持メタデータとして記録します．schema 1からschema 4までは履歴形式として読込可能であり，欠落する識別情報及びframe同期状態には安全な既定値を与えます．実PowerPointのスライド同一性，現行schema 5の動的スライド，frame待機の実行時挙動及びマウス手書きは未検証です．
 
 　本プロジェクトの完成は，検証済みで署名・notarization済みのインストール可能なmacOS配布物を伴う，公開`v1.0.0` GitHub Releaseの成立を意味します．既存の公開リポジトリ並びにα版，β版及びRelease Candidateは中間段階です．検証ゲートは[`ROADMAP.md`](ROADMAP.md)に示します．
 
@@ -185,7 +186,7 @@ Microsoft PowerPoint and other product names are trademarks of their respective 
 
 　過去のschema 1ビルドでは，40秒間に372フレームと画像差分イベント5件を旧`slideChangeCount`欄へ記録しました．その後のschema 2対応済み・意味修正前ビルドでは，別の40秒間に373フレーム，旧方式の画像差分イベント5件及び内容更新2件を記録しました．後者のレポートSHA-256は`704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`です．いずれも特定ビルドに限る履歴証拠であり，スライド同一性又は現行の意味修正後ビルドを検証した結果ではありません．5件を確認済みスライド切替と表現してはなりません．
 
-　その後の実PowerPointに対する読取り専用probeでは，Automation preflightが`0`，PowerPointのslide show windowが1件，Core Graphics windowが2件であることを確認しました．しかし，PowerPointから継承される`window.id`が`nil`であり，意味的なスライド情報を取得対象の正確なwindow IDへ照合できませんでした．名称，列挙順又は概略座標による弱いfallbackは採用していません．したがって，production identity adapter，実PowerPointのスライド同一性，現行schema 4の動的挙動及びマウス手書き挙動は未実装又は未検証です．
+　その後の実PowerPointに対する読取り専用probeでは，Automation preflightが`0`，PowerPointのslide show windowが1件，Core Graphics windowが2件であることを確認しました．しかし，PowerPointから継承される`window.id`が`nil`であり，意味的なスライド情報を取得対象の正確なwindow IDへ照合できませんでした．名称，列挙順又は概略座標による弱いfallbackは採用していません．したがって，production identity adapter，実PowerPointのスライド同一性，現行schema 5の動的挙動及びマウス手書き挙動は未実装又は未検証です．
 
 　現行実装は，160×90のRGB指紋による持続的な内容更新判定，長辺640ピクセル以下のRGBラスタ，及び`strokeCandidateRegions`を備えます．ただし，筆跡候補は既存PowerPointインクの確定分類ではありません．スライドキャンバスの切り出し，PowerPointの操作UI除外，OCR文字列，矩形・占有領域の座標精度，代表的な実用デッキ，アニメーション，長時間実行，ウィンドウ再選択，独立したLaunchServices起動は未検証です．マイクによる文字起こし，クリック透過オーバーレイ，AI板書の講義中表示についても，今回の検証では確認していません．
 

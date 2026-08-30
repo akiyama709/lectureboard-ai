@@ -27,13 +27,14 @@ All notable changes to this project will be documented in this file.
 - Deterministic independent slide-identity tracking with two-sample confirmation, interruption-safe baselines, and presentation-session separation
 - Fail-closed app integration for identity target, session, and sequence checks; candidate-frame exclusion from visual analysis; stale final-transcript rejection; boundary cleanup; and post-boundary new-frame gating
 - A no-side-effect default identity provider that performs no Automation permission request or Apple Event
-- Metadata-only runtime schema 4 identity state, sample count, and continuity-break count with schema-1-through-schema-3 decoding compatibility
+- A token-bound post-identity frame gate with explicit waiting, synchronized, and fail-closed timeout states, plus stale-timeout rejection and recovery by a strictly newer ScreenCaptureKit frame
+- Metadata-only runtime schema 5 frame-sync and identity state with schema-1-through-schema-4 decoding compatibility
 
 ### Planned
 
 - Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
 - An exact-window-bound production PowerPoint slide-identity provider and live validation before actual slide transitions are claimed
-- Fresh-frame resynchronization or an explicit timeout/state for a static slide after an identity boundary
+- Exact-window fresh-frame acquisition and live timeout calibration for a static slide after an identity boundary
 - Runtime calibration of Vision recognition and occupied regions with real presentations
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription

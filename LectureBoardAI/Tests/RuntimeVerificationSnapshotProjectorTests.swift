@@ -35,7 +35,7 @@ struct RuntimeVerificationSnapshotProjectorTests {
     )
   }
 
-  @Test func projectsDefaultContentRevisionAndStrokeCandidateMetadata() {
+  @Test func projectsDefaultFrameSyncContentRevisionAndStrokeCandidateMetadata() {
     let model = AppModel()
 
     let snapshot = RuntimeVerificationSnapshotProjector.makeSnapshot(
@@ -45,6 +45,7 @@ struct RuntimeVerificationSnapshotProjectorTests {
       screenRecordingPermission: .authorized
     )
 
+    #expect(snapshot.slideIdentityFrameSyncState == .notRequired)
     #expect(snapshot.contentRevisionCount == model.contentRevisionCount)
     #expect(snapshot.strokeCandidateRegionCount == 0)
   }

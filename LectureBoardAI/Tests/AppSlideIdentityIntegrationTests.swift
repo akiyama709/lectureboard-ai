@@ -82,6 +82,7 @@ struct AppSlideIdentityIntegrationTests {
     )
     #expect(snapshot.slideChangeCount == 1)
     #expect(snapshot.slideIdentityState == .identified)
+    #expect(snapshot.slideIdentityFrameSyncState == .waiting)
     #expect(snapshot.slideIdentitySampleCount == 4)
     #expect(snapshot.slideIdentityContinuityBreakCount == 0)
 
@@ -478,11 +479,6 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.capturedFrameCount == 4)
     #expect(model.stableFrameCount == 0)
     #expect(await analyzer.analysisCount == 0)
-    #expect(!SlideIdentityFrameBoundary.accepts(displayTime: nil, after: 100))
-    #expect(!SlideIdentityFrameBoundary.accepts(displayTime: 0, after: 100))
-    #expect(!SlideIdentityFrameBoundary.accepts(displayTime: 99, after: 100))
-    #expect(!SlideIdentityFrameBoundary.accepts(displayTime: 100, after: 100))
-    #expect(SlideIdentityFrameBoundary.accepts(displayTime: 101, after: 100))
 
     await capture.emit(
       frame(
@@ -571,10 +567,284 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func postBoundaryTimeoutStaysFailClosedAndRecoversOnANewerFrame() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let analyzer = CountingSlideIdentityAnalyzer()
+    let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      analyzer: analyzer,
+      timeoutWaiter: timeoutWaiter
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(1)
+
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+    model.receive(definitionSegment())
+    await drainMainActorQueue()
+
+    #expect(model.capturedFrameCount == 3)
+    #expect(model.stableFrameCount == 0)
+    #expect(model.slideAnalysisStatus == .idle)
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(await analyzer.analysisCount == 0)
+
+    await timeoutWaiter.resume(invocation: 0)
+    try await waitUntil { model.slideIdentityFrameSyncState == .timedOut }
+    #expect(model.slideIdentityState == .identified)
+    #expect(model.boardScene.elements.isEmpty)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        deliveryKind: .new,
+        image: image,
+        coarseFingerprint: fingerprints.coarse,
+        contentFingerprint: fingerprints.content
+      )
+    )
+    try await waitUntil { model.slideIdentityFrameSyncState == .synchronized }
+    for sequenceNumber in 5...6 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          deliveryKind: .idleRepeat,
+          image: image,
+          coarseFingerprint: fingerprints.coarse,
+          contentFingerprint: fingerprints.content
+        )
+      )
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    #expect(await analyzer.analysisCount == 1)
+
+    model.receive(definitionSegment())
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+  }
+
+  @Test func transcriptProducedWhileWaitingStaysRejectedAfterFrameSynchronization() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let model = makeModel(capture: capture, provider: provider)
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+
+    let waitingTranscriptMachTime = mach_absolute_time()
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: image,
+        coarseFingerprint: fingerprints.coarse,
+        contentFingerprint: fingerprints.content
+      )
+    )
+    try await waitUntil { model.slideIdentityFrameSyncState == .synchronized }
+
+    model.receive(
+      TranscriptionObservation(
+        segment: definitionSegment(),
+        sourceMachTime: waitingTranscriptMachTime
+      )
+    )
+    #expect(model.boardScene.elements.isEmpty)
+
+    model.receive(definitionSegment())
+    #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func staleBoundaryTimeoutCannotChangeANewerWait() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      timeoutWaiter: timeoutWaiter
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let secondSlide = try sample(slideID: 202, slideIndex: 2)
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(1)
+
+    await provider.emit(sequenceNumber: 3, signal: .available(secondSlide))
+    try await waitUntil { model.slideIdentityState == .establishing }
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+
+    await provider.emit(sequenceNumber: 4, signal: .available(secondSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(2)
+
+    await timeoutWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.slideIdentityFrameSyncState == .waiting)
+
+    await timeoutWaiter.resume(invocation: 1)
+    try await waitUntil { model.slideIdentityFrameSyncState == .timedOut }
+
+    await model.stopWindowCapture()
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+  }
+
+  @Test func acceptedFreshFrameCancelsItsPendingTimeout() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      timeoutWaiter: timeoutWaiter
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(1)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: image,
+        coarseFingerprint: fingerprints.coarse,
+        contentFingerprint: fingerprints.content
+      )
+    )
+    try await waitUntil { model.slideIdentityFrameSyncState == .synchronized }
+
+    await timeoutWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.slideIdentityFrameSyncState == .synchronized)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func stopInvalidatesAPendingFrameTimeout() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      timeoutWaiter: timeoutWaiter
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(1)
+
+    await model.stopWindowCapture()
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+
+    await timeoutWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+  }
+
+  @Test func captureErrorAndRestartInvalidateTheOldFrameTimeout() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      timeoutWaiter: timeoutWaiter
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(1)
+
+    await capture.emitError("Controlled capture error")
+    try await waitUntil {
+      if case .error = model.captureStatus { return true }
+      return false
+    }
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    try await timeoutWaiter.waitForInvocationCount(2)
+
+    await timeoutWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.slideIdentityFrameSyncState == .waiting)
+
+    await model.stopWindowCapture()
+    await timeoutWaiter.resume(invocation: 1)
+    await drainMainActorQueue()
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+  }
+
+  @Test func unavailableDefaultProviderNeverStartsAFrameWait() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
+    let model = makeModel(
+      capture: capture,
+      provider: UnavailablePowerPointSlideIdentityProvider(),
+      timeoutWaiter: timeoutWaiter
+    )
+
+    await model.startWindowCapture()
+    try await waitUntil { model.slideIdentitySampleCount == 1 }
+
+    #expect(model.slideIdentityState == .unavailable)
+    #expect(model.slideIdentityFrameSyncState == .notRequired)
+    #expect(await timeoutWaiter.invocationCount == 0)
+
+    await model.stopWindowCapture()
+  }
+
   private func makeModel(
     capture: any PowerPointWindowCapturing,
-    provider: ControllableSlideIdentityProvider,
-    analyzer: any SlideVisualAnalyzing = ImmediateSlideIdentityAnalyzer()
+    provider: any PowerPointSlideIdentityProviding,
+    analyzer: any SlideVisualAnalyzing = ImmediateSlideIdentityAnalyzer(),
+    timeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
+      TaskSlideIdentityFrameTimeoutWaiter()
   ) -> AppModel {
     let model = AppModel(
       permissionService: PermissionService(
@@ -583,7 +853,9 @@ struct AppSlideIdentityIntegrationTests {
       windowCapture: capture,
       scanner: EmptySlideIdentityWindowScanner(),
       slideIdentityProvider: provider,
-      slideVisionAnalyzer: analyzer
+      slideVisionAnalyzer: analyzer,
+      slideIdentityFrameTimeout: .seconds(2),
+      slideIdentityFrameTimeoutWaiter: timeoutWaiter
     )
     model.powerPointWindows = [
       PowerPointWindowDescriptor(
@@ -619,6 +891,39 @@ struct AppSlideIdentityIntegrationTests {
       space: CGColorSpaceCreateDeviceRGB(),
       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )?.makeImage()
+  }
+
+  private func frameFingerprints() -> (
+    coarse: FrameFingerprint,
+    content: ContentFingerprint
+  ) {
+    (
+      FrameFingerprint(
+        sampleColumns: 32,
+        sampleRows: 18,
+        luminance: Array(repeating: 100, count: 32 * 18)
+      ),
+      ContentFingerprint(
+        sampleColumns: 160,
+        sampleRows: 90,
+        cells: Array(
+          repeating: RGBContentCell(red: 255, green: 255, blue: 255),
+          count: 160 * 90
+        )
+      )
+    )
+  }
+
+  private func definitionSegment() -> TranscriptSegment {
+    TranscriptSegment(
+      text:
+        "Sustainability means meeting present needs without undermining future possibilities.",
+      startTime: 0,
+      endTime: 6,
+      language: .englishUS,
+      confidence: 0.95,
+      emphasis: 0.8
+    )
   }
 
   private func frame(
@@ -719,6 +1024,35 @@ private actor ControllableSlideIdentityProvider: PowerPointSlideIdentityProvidin
         signal: signal
       )
     )
+  }
+}
+
+private actor ControllableSlideIdentityFrameTimeoutWaiter:
+  SlideIdentityFrameTimeoutWaiting
+{
+  private var continuations: [Int: CheckedContinuation<Void, Never>] = [:]
+  private var nextInvocation = 0
+
+  var invocationCount: Int { nextInvocation }
+
+  func wait(for duration: Duration) async {
+    let invocation = nextInvocation
+    nextInvocation += 1
+    await withCheckedContinuation { continuation in
+      continuations[invocation] = continuation
+    }
+  }
+
+  func waitForInvocationCount(_ expectedCount: Int) async throws {
+    for _ in 0..<10_000 {
+      if nextInvocation >= expectedCount { return }
+      await Task.yield()
+    }
+    throw AppSlideIdentityIntegrationTestError.timedOut
+  }
+
+  func resume(invocation: Int) {
+    continuations.removeValue(forKey: invocation)?.resume()
   }
 }
 

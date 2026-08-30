@@ -470,12 +470,45 @@ The resulting runtime executable SHA-256 was `cecd662f24ffb4699ba8e3244d3adf7e62
 
 This final verification-record section was the only repository change after that complete run. After the section was staged, staged-diff integrity, README language boundaries, publication-source inclusion, release-definition fixtures and consistency, tracked-build-output exclusion, common-secret-pattern exclusion, and lecture-data-extension exclusion were repeated and passed. No Swift or shell implementation changed after the complete 14-stage run. The check still reports that manual institutional intellectual-property and privacy review is required.
 
+### Schema-5 fail-closed post-identity frame synchronization at 18:23–18:51 JST
+
+The required baseline was repeated before this implementation. In the restricted execution context, `make doctor` completed with zero failures and one warning because GitHub CLI authentication was not visible, while the first `make local-setup` stopped before tests because Swift and Clang could not write their user cache directories. The unchanged `make local-setup` then passed in the ordinary local macOS context at 18:23 JST: `make doctor` reported zero failures and zero warnings, GitHub CLI authentication as `akiyama709`, the then-current 90 Core tests in 13 suites passed, and XcodeGen regenerated the project. This was an execution-sandbox boundary rather than a source defect.
+
+A read-only public-API audit found no safe implementation path for the production PowerPoint slide-identity provider on the installed PowerPoint 16.112.2 and macOS 26.5 SDK. PowerPoint's scripting dictionary exposes an inherited window unique ID and a slide-show view leading to slide ID and index, but the earlier controlled probe returned `nil` for that inherited window ID. ScreenCaptureKit exposes the selected Core Graphics window ID but no PowerPoint slide semantics, and the public Accessibility SDK exposes no supported bridge from a foreign PowerPoint accessibility window to that exact ID. No title, bounds, order, frontmost-window, private-API, or approximate fallback was added, and the default provider still requests no Automation permission and sends no Apple Event. This audit did not create a runtime report or validate a live slide transition.
+
+Instead, the static-slide liveness boundary was made explicit without weakening freshness. Core now owns a deterministic `PostIdentityBoundaryFrameGate` with `notRequired`, `waiting`, `synchronized`, and `timedOut` states. A confirmed identity boundary starts a two-second wait and returns an opaque boundary token. Timeout changes observable state but keeps analysis and final-transcript board proposals closed; idle repeats, missing or zero display times, and equal or older display times remain rejected. A strictly newer `.new` ScreenCaptureKit frame can recover the gate after timeout. New identity candidates, capture stop, capture error, and restart cancel the wait, and stale timeout completions cannot affect a newer boundary or session. ADR 0008 records why idle acceptance was rejected and why `SCStream` restart and `SCScreenshotManager` remain separate, unverified future designs.
+
+An independent code audit then found a queued-callback race in the speech boundary: a final transcript generated during frame wait could have reached MainActor only after the frame synchronized and passed the earlier state-only check. The app now stores its local mach-absolute acceptance time for the qualifying post-boundary frame and requires the transcript callback timestamp to be strictly later than both the identity boundary and that frame-synchronization boundary. A controlled integration regression produces the transcript during the wait, delivers it after synchronization, and confirms rejection; a transcript produced after synchronization remains accepted. A second regression covers capture error, restart, resumption of the old timeout continuation, and rejection of that stale completion. The existing stop, newer-boundary, timeout, recovery, stale-frame, localization, and snapshot tests cover the remaining state transitions.
+
+Runtime metadata moved to schema 5 by adding only `slideIdentityFrameSyncState`. Schema 1 through schema 4 reports remain decodable; a missing frame-sync field defaults to `notRequired`, while the earlier absent identity fields retain their unavailable and zero defaults. Exact encoded-key tests continue to exclude slide IDs, presentation tokens or paths, images, recognized text, window titles, and coordinates.
+
+The ordinary local checkpoints after implementation passed all 98 Core tests in 14 suites and, after the race regressions, all 110 native app tests in 18 suites. The signing-disabled native arm64 compile-and-link build also succeeded. The first complete `make verify` attempt at 18:44 JST correctly stopped in stage 5 because the launch-smoke script still expected schema 4 while Core produced schema 5. The smoke expectation was changed to 5, and the existing runtime-launch preflight parity regression passed before the complete check was retried. A subsequent full checkpoint passed, but the independent speech-race audit changed the app afterward, so it is not treated as the final source verification.
+
+The final ordinary-context `make verify` run started at 18:50:19 JST on 2026-08-30 and completed before 18:51 JST against the staged schema-5 source. All 14 stages passed:
+
+- Swift format lint for native app and Core sources and tests
+- All 98 Core tests in 14 suites
+- All 110 native app tests in 18 suites with local ad hoc signing
+- The signing-disabled native arm64 compile-and-link build
+- The arm64 ad hoc runtime build, English and Japanese resources, absence of the debug-dylib dependency, and strict bundle-signature verification
+- Runtime schema-version parity preflight and launch smoke without requesting Screen Recording permission
+- Publication-source fixtures and live source-inclusion checks
+- The historical initial-publication fail-closed fixtures
+- README language boundaries, release-definition fixtures, and the live release-definition gate
+- Absence of tracked build output, common secret patterns, and lecture-data extensions
+
+The final runtime executable SHA-256 was `a0837c2908aeb1b502a5e70aff592279b4bc37a6fd4e3c2a35c3c0f45a82ffde`; its ad hoc CDHash was `50e9dea84eee50f98b8fc286823d188d7a52bda5`. `file` identified a Mach-O 64-bit arm64 executable, and `codesign --verify --deep --strict` passed for the complete bundle. This remains a local development artifact with hardened runtime disabled. It is not Developer ID distribution signed, notarized, beta, release-candidate, or `v1.0.0` evidence.
+
+No live PowerPoint slide, keyboard, mouse, microphone, or pen-tablet input was sent during this schema-5 work. No schema-5 live PowerPoint capture report or retained runtime report was created. The launch smoke created only a temporary metadata-only safe-failure report with zero snapshots and removed it after validation. The frame gate, timeout, stale-callback rejection, and schema serialization are verified by deterministic tests and native compilation, not by a production identity provider or live PowerPoint transition. No branch was pushed, no pull request or tag was created, and no GitHub Release was published.
+
+This schema-5 verification-record section was the only repository change after the complete 14-stage run. After it was staged, staged-diff integrity, publication-source fixtures and live inclusion, README language boundaries, historical initial-publication guard fixtures, release-definition fixtures and consistency, tracked-build-output exclusion, common-secret-pattern exclusion, and lecture-data-extension exclusion were repeated and passed. No Swift or shell implementation changed after the complete run.
+
 ## Still unverified on this Mac
 
-- Independent LaunchServices capture of a current schema-4 build and post-restart permission persistence
-- Live dynamic and mouse-ink behavior of the current schema-4 semantic build; no schema-4 dynamic or mouse-ink run was attempted and no schema-4 runtime report exists
+- Independent LaunchServices capture of a current schema-5 build and post-restart permission persistence
+- Live dynamic and mouse-ink behavior of the current schema-5 semantic build; no schema-5 dynamic or mouse-ink run was attempted and no schema-5 runtime report exists
 - A production PowerPoint slide-identity provider with exact ScreenCaptureKit-window binding; the read-only probe returned no exact scripting window ID, and historical image-difference builds do not verify slide transitions
-- Fresh-frame resynchronization or explicit timeout/state handling when a static slide yields only idle repeats after an identity boundary; the fail-closed timestamp gate is unit-tested, but this liveness path is not implemented or runtime-validated
+- Automatic exact-window fresh-frame acquisition and live waiting, timeout, and recovery behavior with a production identity provider; explicit fail-closed timeout state is implemented and deterministically tested, but automatic acquisition is not implemented and no live timeout run exists
 - PowerPoint window closure, reselection, PowerPoint restart, and display reconnection recovery
 - Representative Japanese, English, mixed-language, animated, and long-duration lecture decks
 - OCR text correctness, title selection, rectangle coordinates, occupied-region coordinates, and overlay alignment
@@ -490,4 +523,4 @@ These items must remain described as prototypes or unverified behavior until eac
 
 ## Local macOS handoff
 
-The repository includes `AGENTS.md`, `.codex/config.toml`, `make doctor`, `make local-setup`, native Core and app test targets, an ad hoc runtime build, a no-permission-request launch smoke test, and Japanese local-development and handoff documentation. Native compilation and the explicitly identified historical controlled runtime paths above are verified on this Mac; the current schema-4 dynamic, identity-provider, and mouse-ink gates remain listed separately.
+The repository includes `AGENTS.md`, `.codex/config.toml`, `make doctor`, `make local-setup`, native Core and app test targets, an ad hoc runtime build, a no-permission-request launch smoke test, and Japanese local-development and handoff documentation. Native compilation and the explicitly identified historical controlled runtime paths above are verified on this Mac; the current schema-5 dynamic, identity-provider, automatic fresh-frame-acquisition, and mouse-ink gates remain listed separately.

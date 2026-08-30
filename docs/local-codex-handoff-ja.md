@@ -31,19 +31,19 @@
 
 　リポジトリには，macOSアプリの骨格，透明オーバーレイの試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得実装，安定フレーム・視覚更新判定，160×90のRGB指紋による持続的内容更新判定，安定した視覚フレームを対象とするVision文字・矩形解析，長辺640ピクセル以下のRGBラスタと筆跡候補解析，正規化占有領域の構築，Apple Speechによる一言語文字起こし，文脈判断コア，ベクトル板書モデル，空白配置試作，単体テスト，英語・日本語を同一ファイルに収録したREADME，設計文書，GitHub Actions，公開前検査が含まれる．
 
-　2026年8月30日現在，中核Swiftパッケージの90テスト及びネイティブmacOSアプリの103テストがMac上で通過している．AppKit，ScreenCaptureKit，Vision，Speech，AVFoundationを含む`arm64`アプリは，Xcode 26.6によるコンパイル・リンク，アドホック署名及び署名整合性検査に成功した．取得開始・停止・エラー・一覧更新・選択変更，フレーム順序，視覚更新，解析取消し及び古い解析結果の排除は，制御可能なfakeとネイティブ画像fixtureによる回帰テストで固定している．選択したPowerPoint窓については，ScreenCaptureKit窓ID，所有PID及び完全一致bundle identifierを取得開始まで固定し，重複，再利用又は所有者変更時にfail-closedで停止する．Coreには，同じpresentation session token及びslide IDが2回連続したときだけ基準又は切替を確定し，中断をまたいだ切替を推定しないtrackerがある．Appは，provider観測の対象，capture session及び順序を検査する．候補確定中に届いたフレームは取得件数へ計上した後に視覚解析から除外する．基準確立又は切替時には以前の解析及び板書sceneを破棄し，Appが識別観測を受理したローカルmach絶対時刻よりScreenCaptureKitの`displayTime`が厳密に後である`.new`フレームが到着するまで解析を再開しない．Apple Speechの確定結果についても，識別境界以前のローカルcallback時刻を持つ結果又は境界後の新規フレーム待機中の結果を板書候補から除外する．
+　2026年8月30日現在，中核Swiftパッケージの98テスト及びネイティブmacOSアプリの110テストがMac上で通過している．AppKit，ScreenCaptureKit，Vision，Speech，AVFoundationを含む`arm64`アプリは，Xcode 26.6によるコンパイル・リンク，アドホック署名及び署名整合性検査に成功した．取得開始・停止・エラー・一覧更新・選択変更，フレーム順序，視覚更新，解析取消し及び古い解析結果の排除は，制御可能なfakeとネイティブ画像fixtureによる回帰テストで固定している．選択したPowerPoint窓については，ScreenCaptureKit窓ID，所有PID及び完全一致bundle identifierを取得開始まで固定し，重複，再利用又は所有者変更時にfail-closedで停止する．Coreには，同じpresentation session token及びslide IDが2回連続したときだけ基準又は切替を確定し，中断をまたいだ切替を推定しないtrackerがある．Appは，provider観測の対象，capture session及び順序を検査する．候補確定中に届いたフレームは取得件数へ計上した後に視覚解析から除外する．基準確立又は切替時には以前の解析及び板書sceneを破棄し，Appが識別観測を受理したローカルmach絶対時刻よりScreenCaptureKitの`displayTime`が厳密に後である`.new`フレームが到着するまで解析を再開しない．Apple Speechの確定結果についても，識別境界以前又は境界後フレームをAppが受理したローカル時刻以前に生成された結果を，MainActorでの処理順にかかわらず板書候補から除外する．識別境界後のframe gateは，`waiting`，`synchronized`及び`timedOut`を明示する．時間切れはgateを開かず，古い境界又は停止済みsessionの遅延timeoutはtokenで拒否し，後着の厳密に新しい`.new`フレームだけが時間切れ状態から回復できる．この挙動は決定論的テストで確認済みであるが，production identity providerを伴う実行時挙動は未検証である．
 
-　runtime検証レポートの現行形式はschema 4であり，識別状態，sample数，continuity break数，内容更新数及び筆跡候補領域数を，画像，認識文字列，座標，slide ID，資料path又はsession tokenを含まないメタデータとして記録する．schema 1からschema 3までは履歴形式として引き続き読込可能であり，schema 1からschema 3の識別状態及び追加計数は`unavailable`及び0として復号する．
+　runtime検証レポートの現行形式はschema 5であり，識別状態，識別境界後のframe同期状態，sample数，continuity break数，内容更新数及び筆跡候補領域数を，画像，認識文字列，座標，slide ID，資料path又はsession tokenを含まないメタデータとして記録する．schema 1からschema 4までは履歴形式として引き続き読込可能であり，欠落するframe同期状態は`notRequired`，欠落する識別状態及び追加計数は`unavailable`及び0として復号する．
 
 　実行時証拠は，ビルドごとに分離する．過去のschema 1ビルドをCodexの許可下で直接起動した40秒の動的検証では，372フレーム，安定スナップショット6件及び画像差分イベント5件を記録した．当時の実装は，この5件を旧`slideChangeCount`欄へ入れていたが，画像だけではスライド同一性を断定できないため，確認済みスライド切替と解釈してはならない．
 
 　その後のschema 2対応済み・意味修正前ビルドによる別の40秒の動的検証では，373フレーム，安定スナップショット6件，旧方式の画像差分イベント5件及び内容更新2件を記録した．レポート`runtime-dynamic-content-revision-2026-08-30.json`のSHA-256は`704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`である．これはcaptureとschema 2メタデータ生成に関する当該ビルド固有の履歴証拠であり，現行ソース又はスライド同一性の検証結果ではない．
 
-　意味修正後のschema 3では，Coreが粗い画像差分を`.significantVisualChange`と呼び，Appが安定した視覚・内容更新へ計上し，画像だけから`slideChangeCount`を増やさない意味を確立した．schema 3ビルドについて，動的スライド又はマウス手書きのライブ成功レポートは記録されていない．現行schema 4は，この意味を維持したまま独立スライド識別tracker，App側のfail-closedな統合境界及び内容非保持の識別メタデータを追加した形式である．
+　意味修正後のschema 3では，Coreが粗い画像差分を`.significantVisualChange`と呼び，Appが安定した視覚・内容更新へ計上し，画像だけから`slideChangeCount`を増やさない意味を確立した．schema 3ビルドについて，動的スライド又はマウス手書きのライブ成功レポートは記録されていない．schema 4は，この意味を維持したまま独立スライド識別tracker，App側のfail-closedな統合境界及び内容非保持の識別メタデータを追加した．現行schema 5は，識別境界後のframe同期状態を追加するが，それ自体は実PowerPointの識別又は自動fresh-frame取得を証明しない．
 
-　実PowerPointに対する読取り専用probeでは，Automation preflightが`0`，PowerPointのslide show windowが1件，Core Graphics windowが2件であることを確認した．しかし，PowerPointから継承される`window.id`は`nil`であり，意味的なslide IDを取得対象の正確なwindow IDへ照合できなかった．名称，列挙順又は概略座標による弱いfallbackは採用していない．既定identity providerは，受理した取得開始ごとに，Automation許可を要求せず，Apple Eventも送らず，`unavailable`を1回通知する．したがって，production adapter，実PowerPointのslide identity，現行schema 4の動的スライド及びマウス手書きは未実装又は未検証である．OCR文字列，座標，検出率，代表的資料，長時間運転及び実講義での有用性も未検証である．
+　実PowerPointに対する読取り専用probeでは，Automation preflightが`0`，PowerPointのslide show windowが1件，Core Graphics windowが2件であることを確認した．しかし，PowerPointから継承される`window.id`は`nil`であり，意味的なslide IDを取得対象の正確なwindow IDへ照合できなかった．名称，列挙順又は概略座標による弱いfallbackは採用していない．既定identity providerは，受理した取得開始ごとに，Automation許可を要求せず，Apple Eventも送らず，`unavailable`を1回通知する．したがって，production adapter，実PowerPointのslide identity，現行schema 5の動的スライド及びマウス手書きは未実装又は未検証である．OCR文字列，座標，検出率，代表的資料，長時間運転及び実講義での有用性も未検証である．
 
-　画面収録の許可は起動文脈ごとに区別する．過去のschema 1・競合修正後実行ファイルをCodexの許可下から直接起動した経路ではpreflightが`authorized`であったが，LaunchServicesを介した同時期の別起動では`unknown`となり，許可要求を行わず`screenRecordingUnavailable`で終了した．これらは現行schema 4ビルド又は独立起動の確認結果ではない．既定の`make build-runtime`はビルドごとに`cdhash`が変わり得るアドホック署名であり，同じアプリ名とbundle identifierでも再許可が必要になる場合がある．再起動後の状態及び現行ビルドの独立起動は，まだ確認済みではない．
+　画面収録の許可は起動文脈ごとに区別する．過去のschema 1・競合修正後実行ファイルをCodexの許可下から直接起動した経路ではpreflightが`authorized`であったが，LaunchServicesを介した同時期の別起動では`unknown`となり，許可要求を行わず`screenRecordingUnavailable`で終了した．これらは現行schema 5ビルド又は独立起動の確認結果ではない．既定の`make build-runtime`はビルドごとに`cdhash`が変わり得るアドホック署名であり，同じアプリ名とbundle identifierでも再許可が必要になる場合がある．再起動後の状態及び現行ビルドの独立起動は，まだ確認済みではない．
 
 ## 4．最初にローカルで行うこと
 
@@ -59,25 +59,26 @@ make test-runtime-launch-smoke
 
 　次の実機確認は，次の順で進める．
 
-1. 意味的なスライド情報を，選択済みの正確なScreenCaptureKit window IDへfail-closedで結び付けられるproduction identity providerを実装する．PowerPointの`window.id`が`nil`である間は，名称，列挙順又は概略座標を代替照合に用いない．
-2. production providerの対象拘束をテストで固定し，静止スライドでidle repeatだけが続く場合のfresh-frame再同期又は明示的なtimeout状態を実装する．その後，現行schema 4ビルドを用いた制御済み動的スライド操作で，baseline，切替，中断，session変更，frame quarantine，Appが識別観測を受理したローカルmach絶対時刻よりScreenCaptureKitの`displayTime`が厳密に後である`.new` frameの境界gate及びruntimeメタデータを検証する．
-3. 同一スライド上のマウス手書きと消去について，持続的内容更新及び`strokeCandidateRegions`の狭い動作を検証する．候補を既存インク確定と一般化しない．
-4. スライドキャンバスの切り出しとPowerPoint操作UIの除外を実装・検証する．
-5. 実PowerPointの独立スライド識別結果と画像由来の内容更新を別々に校正し，その後に初めて`slideChangeCount`の実機精度を評価する．
-6. まだ保存していない現行schema 4の検証対象アプリを固定保存先へ新たに用意した後，LaunchServicesから独立起動した場合の画面収録preflight及びMac再起動後の状態を確認する．
-7. PowerPointウィンドウの終了，再選択，PowerPoint再起動及びディスプレイ再接続からの復旧を確認する．
-8. 日本語，英語，日英混在，アニメーション及び長時間の代表的講義資料における視覚更新とスライド識別の精度を確認する．
-9. OCR文字列，タイトル候補，矩形，占有領域及び赤枠座標の正しさを確認する．
-10. 透明オーバーレイの位置，サイズ，クリック透過及びペンタブ入力を妨げないことを確認する．
-11. 日本語及び英語のマイク認識，複数ディスプレイ並びにオンライン共有を確認する．
+1. 意味的なスライド情報を，選択済みの正確なScreenCaptureKit window IDへfail-closedで結び付けられるproduction identity providerを実装する．PowerPointの`window.id`が`nil`である間は，名称，列挙順又は概略座標を代替照合に用いず，公開API又はPowerPoint更新で厳密な経路が成立するまで保留する．
+2. exact-window one-shot取得を検討する場合は，stream frameとは異なるprovenance及びcapture epochを設計し，画像へ架空の`displayTime`を付けない．実装後も，production providerを伴う静止スライドで検証するまで自動再同期を確認済みと表現しない．
+3. 現行schema 5ビルドを用いた制御済み動的スライド操作で，baseline，切替，中断，session変更，frame quarantine，frame同期の待機・時間切れ・回復及びruntimeメタデータを，将来のproduction provider完成後に検証する．
+4. 同一スライド上のマウス手書きと消去について，持続的内容更新及び`strokeCandidateRegions`の狭い動作を検証する．候補を既存インク確定と一般化しない．
+5. スライドキャンバスの切り出しとPowerPoint操作UIの除外を実装・検証する．
+6. 実PowerPointの独立スライド識別結果と画像由来の内容更新を別々に校正し，その後に初めて`slideChangeCount`の実機精度を評価する．
+7. まだ保存していない現行schema 5の検証対象アプリを固定保存先へ新たに用意した後，LaunchServicesから独立起動した場合の画面収録preflight及びMac再起動後の状態を確認する．
+8. PowerPointウィンドウの終了，再選択，PowerPoint再起動及びディスプレイ再接続からの復旧を確認する．
+9. 日本語，英語，日英混在，アニメーション及び長時間の代表的講義資料における視覚更新とスライド識別の精度を確認する．
+10. OCR文字列，タイトル候補，矩形，占有領域及び赤枠座標の正しさを確認する．
+11. 透明オーバーレイの位置，サイズ，クリック透過及びペンタブ入力を妨げないことを確認する．
+12. 日本語及び英語のマイク認識，複数ディスプレイ並びにオンライン共有を確認する．
 
 　確認結果は，成功・失敗を問わず`docs/build-verification.md`へ記録する．
 
 ## 5．次の実装単位
 
-　選択したPowerPointウィンドウの連続取得，粗い輝度指紋による安定視覚判定，160×90のRGB指紋による持続的内容更新，Visionによる文字・矩形解析，長辺640ピクセル以下のRGBラスタ，`strokeCandidateRegions`，正規化占有領域，独立スライド識別tracker及びApp側のfail-closedな統合境界は実装され，Core 90件・App 103件のテストに合格している．ただし，現在は選択ウィンドウ全体を解析しており，スライドキャンバスを切り出さず，PowerPointの操作UIを除外していない．筆跡候補は既存インクの確定分類でもなく，座標精度も未検証である．
+　選択したPowerPointウィンドウの連続取得，粗い輝度指紋による安定視覚判定，160×90のRGB指紋による持続的内容更新，Visionによる文字・矩形解析，長辺640ピクセル以下のRGBラスタ，`strokeCandidateRegions`，正規化占有領域，独立スライド識別tracker，App側のfail-closedな統合境界及び識別境界後の明示的timeout状態は実装され，Core 98件・App 110件のテストに合格している．ただし，現在は選択ウィンドウ全体を解析しており，スライドキャンバスを切り出さず，PowerPointの操作UIを除外していない．筆跡候補は既存インクの確定分類でもなく，座標精度も未検証である．
 
-　次は，実PowerPointの意味的なslide IDを選択済みの正確なwindow IDへ結び付けるproduction identity providerを実装する．`window.id`が`nil`であった実測結果を無視して弱いfallbackへ進んではならない．対象拘束をテストで固定した後，現行schema 4ビルドで動的スライドと同一スライド上の手書きを狭く再検証する．続いて，スライドキャンバスの分離及びUI除外を実装する．代表的な講義資料での検出率，認識内容，タイトル候補，矩形，占有領域及び赤枠座標の校正，LaunchServicesの許可境界，長時間運転と終了処理，既存インク検出及びより頑健な空白分析は，それぞれ別の検証項目として残す．
+　production identity providerは，実PowerPointの意味的なslide IDを選択済みの正確なwindow IDへ結び付けられる公開経路が成立してから実装する．`window.id`が`nil`であった実測結果を無視して弱いfallbackへ進んではならない．このブロッカーと独立に進められる次の実装単位は，スライドキャンバスの分離及びPowerPoint UI除外である．自動fresh-frame取得を先に扱う場合は，stream frameとは異なるprovenanceを設けたうえで，現行schema 5ビルドによる実行時検証を別に行う．代表的な講義資料での検出率，認識内容，タイトル候補，矩形，占有領域及び赤枠座標の校正，LaunchServicesの許可境界，長時間運転と終了処理，既存インク検出及びより頑健な空白分析は，それぞれ別の検証項目として残す．
 
 　AIやクラウドサービスを先に接続してはならない．まず，何を見て，どのスライドを対象とし，どこが空いており，どの発話を根拠としたかを観察・記録できる基盤を完成させる．
 

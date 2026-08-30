@@ -17,6 +17,7 @@ struct RuntimeVerificationSnapshotTests {
       stableFrameCount: 3,
       slideChangeCount: 2,
       slideIdentityState: .identified,
+      slideIdentityFrameSyncState: .timedOut,
       slideIdentitySampleCount: 8,
       slideIdentityContinuityBreakCount: 1,
       contentRevisionCount: 4,
@@ -39,6 +40,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["contentRevisionCount"] as? Int == 4)
     #expect(object["strokeCandidateRegionCount"] as? Int == 3)
     #expect(object["slideIdentityState"] as? String == "identified")
+    #expect(object["slideIdentityFrameSyncState"] as? String == "timedOut")
     #expect(object["slideIdentitySampleCount"] as? Int == 8)
     #expect(object["slideIdentityContinuityBreakCount"] as? Int == 1)
     #expect(object["slideID"] == nil)
@@ -59,6 +61,7 @@ struct RuntimeVerificationSnapshotTests {
       stableFrameCount: -4,
       slideChangeCount: -5,
       slideIdentityState: .interrupted,
+      slideIdentityFrameSyncState: .waiting,
       slideIdentitySampleCount: -6,
       slideIdentityContinuityBreakCount: -7,
       contentRevisionCount: -6,
@@ -77,6 +80,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.stableFrameCount == 0)
     #expect(snapshot.slideChangeCount == 0)
     #expect(snapshot.slideIdentityState == .interrupted)
+    #expect(snapshot.slideIdentityFrameSyncState == .waiting)
     #expect(snapshot.slideIdentitySampleCount == 0)
     #expect(snapshot.slideIdentityContinuityBreakCount == 0)
     #expect(snapshot.contentRevisionCount == 0)

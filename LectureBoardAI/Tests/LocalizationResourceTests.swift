@@ -16,6 +16,12 @@ struct LocalizationResourceTests {
           "Independent slide-identity signal is stable",
         "capture.slideIdentity.interrupted":
           "Slide-identity continuity was interrupted",
+        "capture.slideIdentityFrameSync.waiting":
+          "Waiting for a fresh frame after the slide-identity boundary",
+        "capture.slideIdentityFrameSync.synchronized":
+          "Fresh post-identity frame accepted",
+        "capture.slideIdentityFrameSync.timedOut":
+          "Fresh-frame wait timed out; analysis remains paused",
       ],
       "ja": [
         "app.title": "LectureBoard AI",
@@ -27,6 +33,12 @@ struct LocalizationResourceTests {
           "独立したスライド識別信号が安定しました",
         "capture.slideIdentity.interrupted":
           "スライド識別の連続性が中断しました",
+        "capture.slideIdentityFrameSync.waiting":
+          "スライド識別境界後の新しいフレームを待っています",
+        "capture.slideIdentityFrameSync.synchronized":
+          "識別境界後の新しいフレームを受理しました",
+        "capture.slideIdentityFrameSync.timedOut":
+          "新しいフレームの待機が時間切れになり，解析を停止しています",
       ],
     ]
 

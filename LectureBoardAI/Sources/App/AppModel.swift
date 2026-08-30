@@ -12,21 +12,21 @@ protocol PowerPointWindowScanning: Sendable {
 
 extension PowerPointWindowScanner: PowerPointWindowScanning {}
 
-enum SlideIdentityFrameBoundary {
-  static func accepts(displayTime: UInt64?, after minimumDisplayTime: UInt64?) -> Bool {
-    guard let displayTime, let minimumDisplayTime,
-      displayTime > 0,
-      minimumDisplayTime > 0
-    else { return false }
-    return displayTime > minimumDisplayTime
-  }
-}
-
 enum SlideIdentityTranscriptBoundary {
   static func accepts(sourceMachTime: UInt64, after minimumMachTime: UInt64?) -> Bool {
     guard sourceMachTime > 0 else { return false }
     guard let minimumMachTime else { return true }
     return minimumMachTime > 0 && sourceMachTime > minimumMachTime
+  }
+}
+
+protocol SlideIdentityFrameTimeoutWaiting: Sendable {
+  func wait(for duration: Duration) async
+}
+
+struct TaskSlideIdentityFrameTimeoutWaiter: SlideIdentityFrameTimeoutWaiting {
+  func wait(for duration: Duration) async {
+    try? await Task.sleep(for: duration)
   }
 }
 
@@ -71,6 +71,8 @@ final class AppModel: ObservableObject {
   /// Reserved for transitions confirmed by an independent slide-identity signal.
   @Published private(set) var slideChangeCount = 0
   @Published private(set) var slideIdentityState = SlideIdentityState.unavailable
+  @Published private(set) var slideIdentityFrameSyncState =
+    SlideIdentityFrameSyncState.notRequired
   @Published private(set) var slideIdentitySampleCount = 0
   @Published private(set) var slideIdentityContinuityBreakCount = 0
   @Published private(set) var contentRevisionCount = 0
@@ -85,6 +87,8 @@ final class AppModel: ObservableObject {
   private let windowCapture: any PowerPointWindowCapturing
   private let slideIdentityProvider: any PowerPointSlideIdentityProviding
   private let slideVisionAnalyzer: any SlideVisualAnalyzing
+  private let slideIdentityFrameTimeout: Duration
+  private let slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting
   private let boardEngine = ContextualBoardEngine()
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
@@ -97,12 +101,13 @@ final class AppModel: ObservableObject {
   private var activeCaptureIdentity: PowerPointWindowIdentity?
   private var lastAcceptedCaptureSequenceNumber: UInt64?
   private var slideIdentityTracker = SlideIdentityTracker()
+  private var slideIdentityFrameGate = PostIdentityBoundaryFrameGate()
   private var lastAcceptedSlideIdentitySequenceNumber: UInt64?
   private var slideIdentityGeneration = 0
   private var slideIdentityQuarantineActive = false
-  private var requiresNewFrameAfterSlideIdentityBoundary = false
-  private var minimumDisplayTimeAfterSlideIdentityBoundary: UInt64?
   private var latestSlideIdentityBoundaryMachTime: UInt64?
+  private var latestSlideIdentityFrameSynchronizationMachTime: UInt64?
+  private var slideIdentityFrameTimeoutTask: Task<Void, Never>?
   private var analysisGeneration = 0
   private var slideAnalysisTask: Task<Void, Never>?
   private var transcriptSegments: [TranscriptSegment] = []
@@ -114,13 +119,18 @@ final class AppModel: ObservableObject {
     scanner: any PowerPointWindowScanning = PowerPointWindowScanner(),
     slideIdentityProvider: any PowerPointSlideIdentityProviding =
       UnavailablePowerPointSlideIdentityProvider(),
-    slideVisionAnalyzer: any SlideVisualAnalyzing = SlideVisionAnalyzer()
+    slideVisionAnalyzer: any SlideVisualAnalyzing = SlideVisionAnalyzer(),
+    slideIdentityFrameTimeout: Duration = .seconds(2),
+    slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
+      TaskSlideIdentityFrameTimeoutWaiter()
   ) {
     self.permissionService = permissionService
     self.windowCapture = windowCapture
     self.scanner = scanner
     self.slideIdentityProvider = slideIdentityProvider
     self.slideVisionAnalyzer = slideVisionAnalyzer
+    self.slideIdentityFrameTimeout = max(slideIdentityFrameTimeout, .zero)
+    self.slideIdentityFrameTimeoutWaiter = slideIdentityFrameTimeoutWaiter
   }
 
   var selectedWindow: PowerPointWindowDescriptor? {
@@ -354,11 +364,17 @@ final class AppModel: ObservableObject {
     let segment = observation.segment
     liveTranscript = segment.text
     guard segment.isFinal else { return }
-    guard !isSlideIdentityQuarantined, !requiresNewFrameAfterSlideIdentityBoundary else { return }
+    guard !isSlideIdentityQuarantined, !slideIdentityFrameGate.requiresFreshFrame else {
+      return
+    }
     guard
       SlideIdentityTranscriptBoundary.accepts(
         sourceMachTime: observation.sourceMachTime,
         after: latestSlideIdentityBoundaryMachTime
+      ),
+      SlideIdentityTranscriptBoundary.accepts(
+        sourceMachTime: observation.sourceMachTime,
+        after: latestSlideIdentityFrameSynchronizationMachTime
       )
     else { return }
 
@@ -419,16 +435,17 @@ final class AppModel: ObservableObject {
     if slideIdentityQuarantineActive {
       return
     }
-    if requiresNewFrameAfterSlideIdentityBoundary {
-      guard frame.deliveryKind == .new else { return }
+    if slideIdentityFrameGate.requiresFreshFrame {
       guard
-        SlideIdentityFrameBoundary.accepts(
-          displayTime: frame.displayTime,
-          after: minimumDisplayTimeAfterSlideIdentityBoundary
+        slideIdentityFrameGate.acceptFrame(
+          isNewDelivery: frame.deliveryKind == .new,
+          displayTime: frame.displayTime
         )
       else { return }
-      requiresNewFrameAfterSlideIdentityBoundary = false
-      self.minimumDisplayTimeAfterSlideIdentityBoundary = nil
+      latestSlideIdentityFrameSynchronizationMachTime = mach_absolute_time()
+      publishSlideIdentityFrameSyncState()
+      slideIdentityFrameTimeoutTask?.cancel()
+      slideIdentityFrameTimeoutTask = nil
     }
     processVisualFrame(frame, sessionID: sessionID)
   }
@@ -662,12 +679,12 @@ final class AppModel: ObservableObject {
 
   private func prepareSlideIdentityForNewCapture() {
     slideIdentityTracker.reset()
+    cancelSlideIdentityFrameWait()
     lastAcceptedSlideIdentitySequenceNumber = nil
     slideIdentityGeneration += 1
     slideIdentityQuarantineActive = false
-    requiresNewFrameAfterSlideIdentityBoundary = false
-    minimumDisplayTimeAfterSlideIdentityBoundary = nil
     latestSlideIdentityBoundaryMachTime = nil
+    latestSlideIdentityFrameSynchronizationMachTime = nil
     publishSlideIdentityMetrics()
   }
 
@@ -680,8 +697,7 @@ final class AppModel: ObservableObject {
 
   private func enterSlideIdentityQuarantine() {
     slideIdentityQuarantineActive = true
-    requiresNewFrameAfterSlideIdentityBoundary = true
-    minimumDisplayTimeAfterSlideIdentityBoundary = nil
+    cancelSlideIdentityFrameWait()
     resetVisualStateForSlideIdentityBoundary()
   }
 
@@ -696,10 +712,9 @@ final class AppModel: ObservableObject {
 
   private func rebaseBoardContext(to sample: SlideIdentitySample, acceptedMachTime: UInt64) {
     slideIdentityQuarantineActive = false
-    requiresNewFrameAfterSlideIdentityBoundary = true
-    minimumDisplayTimeAfterSlideIdentityBoundary = acceptedMachTime
     latestSlideIdentityBoundaryMachTime = acceptedMachTime
     resetVisualStateForSlideIdentityBoundary()
+    beginSlideIdentityFrameWait(after: acceptedMachTime)
     boardIntents.removeAll()
     boardScene = BoardScene(slideNumber: sample.slideIndex)
     overlayController.update(scene: boardScene, style: digitalInkStyle)
@@ -712,10 +727,9 @@ final class AppModel: ObservableObject {
 
   private func abandonSlideIdentityCandidate(acceptedMachTime: UInt64) {
     slideIdentityQuarantineActive = false
-    requiresNewFrameAfterSlideIdentityBoundary = true
-    minimumDisplayTimeAfterSlideIdentityBoundary = acceptedMachTime
     latestSlideIdentityBoundaryMachTime = acceptedMachTime
     resetVisualStateForSlideIdentityBoundary()
+    beginSlideIdentityFrameWait(after: acceptedMachTime)
   }
 
   private func invalidateSlideIdentityAfterCaptureEnd(state: SlideIdentityState) {
@@ -723,10 +737,38 @@ final class AppModel: ObservableObject {
     lastAcceptedSlideIdentitySequenceNumber = nil
     slideIdentityTracker.reset()
     slideIdentityQuarantineActive = false
-    requiresNewFrameAfterSlideIdentityBoundary = false
-    minimumDisplayTimeAfterSlideIdentityBoundary = nil
+    cancelSlideIdentityFrameWait()
     latestSlideIdentityBoundaryMachTime = nil
     slideIdentityState = state
+  }
+
+  private func beginSlideIdentityFrameWait(after minimumDisplayTime: UInt64) {
+    slideIdentityFrameTimeoutTask?.cancel()
+    latestSlideIdentityFrameSynchronizationMachTime = nil
+    let token = slideIdentityFrameGate.beginWaiting(after: minimumDisplayTime)
+    publishSlideIdentityFrameSyncState()
+
+    let timeout = slideIdentityFrameTimeout
+    let waiter = slideIdentityFrameTimeoutWaiter
+    slideIdentityFrameTimeoutTask = Task { @MainActor [weak self] in
+      await waiter.wait(for: timeout)
+      guard !Task.isCancelled, let self else { return }
+      guard self.slideIdentityFrameGate.markTimedOut(for: token) else { return }
+      self.publishSlideIdentityFrameSyncState()
+      self.slideIdentityFrameTimeoutTask = nil
+    }
+  }
+
+  private func cancelSlideIdentityFrameWait() {
+    slideIdentityFrameTimeoutTask?.cancel()
+    slideIdentityFrameTimeoutTask = nil
+    slideIdentityFrameGate.reset()
+    latestSlideIdentityFrameSynchronizationMachTime = nil
+    publishSlideIdentityFrameSyncState()
+  }
+
+  private func publishSlideIdentityFrameSyncState() {
+    slideIdentityFrameSyncState = slideIdentityFrameGate.state
   }
 
   private var slideIdentityStateAfterCaptureFailure: SlideIdentityState {

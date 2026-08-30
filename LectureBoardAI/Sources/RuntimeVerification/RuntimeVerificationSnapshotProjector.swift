@@ -21,6 +21,7 @@ enum RuntimeVerificationSnapshotProjector {
       stableFrameCount: model.stableFrameCount,
       slideChangeCount: model.slideChangeCount,
       slideIdentityState: model.slideIdentityState,
+      slideIdentityFrameSyncState: model.slideIdentityFrameSyncState,
       slideIdentitySampleCount: model.slideIdentitySampleCount,
       slideIdentityContinuityBreakCount: model.slideIdentityContinuityBreakCount,
       contentRevisionCount: model.contentRevisionCount,

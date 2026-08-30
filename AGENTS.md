@@ -39,29 +39,30 @@ Implemented:
 - Capture-monitor analysis counts and occupied-region preview overlays.
 - A deterministic slide-identity tracker that confirms a baseline or transition only after two consecutive matching samples, discards continuity across unavailable gaps, and does not count presentation-session changes as slide changes.
 - An app-side identity-provider boundary with target, session, and sequence rejection; candidate-frame exclusion from visual analysis after delivery metrics are recorded; old scene and analysis invalidation at baseline or transition boundaries; and analysis resumption only for a `.new` frame whose ScreenCaptureKit `displayTime` is strictly later than the app's local mach-absolute acceptance time for the confirming observation.
-- A local speech-result boundary that rejects final transcript results emitted before an identity boundary or while the app is still waiting for the post-boundary frame.
+- A local speech-result boundary that rejects final transcript results emitted before an identity boundary, before the local acceptance time of the post-boundary frame, or while the app is still waiting for that frame.
+- A deterministic post-identity frame gate with observable waiting, synchronized, and timed-out states. Timeout remains fail-closed, stale timeout completions are rejected by boundary token, and a later strictly newer ScreenCaptureKit frame can recover the gate.
 - A safe default identity provider that requests no Automation permission, sends no Apple Event, and emits one unavailable observation per accepted capture start.
-- Metadata-only runtime reports at schema version 4, including slide-identity state, sample count, continuity-break count, content-revision count, and stroke-candidate count. Schema 1 through schema 3 remain decodable as historical formats with unavailable/zero identity metadata.
+- Metadata-only runtime reports at schema version 5, including slide-identity state, post-identity frame-sync state, sample count, continuity-break count, content-revision count, and stroke-candidate count. Schema 1 through schema 4 remain decodable as historical formats with safe defaults for absent metadata.
 - Click-through transparent overlay prototype.
 - Japanese or English Apple Speech prototype.
 - Platform-neutral `LectureBoardCore` package.
 - Contextual importance scoring and board-intent classification.
 - Vector board-scene models and simple empty-region placement.
-- Core unit tests and open-source repository documentation. The current source passes 90 Core tests and 103 native app tests on the development Mac.
+- Core unit tests and open-source repository documentation. The current source passes 98 Core tests and 110 native app tests on the development Mac.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
 - A later schema-2 but pre-semantic-correction build completed a separate 40-second exact-window run with 373 frames, 6 stable snapshots, the same 5 legacy heuristic change classifications, and 2 content revisions. The report SHA-256 is `704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`. This is build-specific historical evidence for capture and metadata production; it must not be presented as verification of the current source or of slide identity.
-- No live dynamic or mouse-ink result has yet been recorded for the current schema-4 build. A read-only PowerPoint probe observed Automation preflight status `0`, one slide-show window, and two Core Graphics windows, but PowerPoint's inherited `window.id` was `nil`; the semantic result therefore could not be bound to the exact captured window ID. No weaker name-, order-, or geometry-based fallback was adopted.
+- No live dynamic or mouse-ink result has yet been recorded for the current schema-5 build. A read-only PowerPoint probe observed Automation preflight status `0`, one slide-show window, and two Core Graphics windows, but PowerPoint's inherited `window.id` was `nil`; the semantic result therefore could not be bound to the exact captured window ID. No weaker name-, order-, or geometry-based fallback was adopted.
 - Neither historical run establishes standalone LaunchServices authorization, recognition or coordinate accuracy, slide-canvas isolation, representative-deck coverage, or lecture-length reliability.
 
 Not yet implemented or verified:
 
 - Independent LaunchServices runtime validation of continuous PowerPoint frame capture.
-- Live dynamic and same-slide mouse-ink validation with the current schema-4 build.
+- Live dynamic and same-slide mouse-ink validation with the current schema-5 build.
 - A production PowerPoint slide-identity provider that can bind semantic slide information to the exact captured window. The deterministic tracker and fail-closed app integration are implemented, but actual PowerPoint transitions remain unverified and the safe default provider supplies no identities.
-- Fresh-frame resynchronization or explicit timeout/state handling when a static slide yields only idle repeats after an identity boundary.
+- Automatic fresh-frame resynchronization when a static slide yields only idle repeats after an identity boundary. Explicit fail-closed timeout state is implemented and tested, but its live behavior with a production identity provider remains unverified.
 - Representative-deck, animation, reselection, and long-duration calibration of stable visual/content-update detection.
 - OCR correctness and coordinate-accuracy calibration of Vision text, rectangle, and occupied-region analysis.
 - Slide-canvas cropping and exclusion of PowerPoint controls or other window UI from analysis.

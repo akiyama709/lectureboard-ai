@@ -29,7 +29,7 @@
 
 ## Architecture decision records
 
-The [`adr`](adr/) directory records the platform，overlay，context，AI-provider，grounding，license，and public-v1 completion decisions.
+The [`adr`](adr/) directory records the platform, overlay, context, AI-provider, grounding, license, public-v1 completion, and fail-closed frame-synchronization timeout decisions.
 
 ## Local development handoff
 

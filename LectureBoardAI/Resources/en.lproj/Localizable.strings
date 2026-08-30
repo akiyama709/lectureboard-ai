@@ -45,6 +45,9 @@
 "capture.slideIdentity.establishing" = "Stabilizing independent slide-identity signal";
 "capture.slideIdentity.identified" = "Independent slide-identity signal is stable";
 "capture.slideIdentity.interrupted" = "Slide-identity continuity was interrupted";
+"capture.slideIdentityFrameSync.waiting" = "Waiting for a fresh frame after the slide-identity boundary";
+"capture.slideIdentityFrameSync.synchronized" = "Fresh post-identity frame accepted";
+"capture.slideIdentityFrameSync.timedOut" = "Fresh-frame wait timed out; analysis remains paused";
 "capture.slideIdentitySamples" = "Identity observations";
 "capture.slideIdentityInterruptions" = "Identity interruptions";
 "capture.noStableFrame" = "No stable frame has been confirmed yet.";

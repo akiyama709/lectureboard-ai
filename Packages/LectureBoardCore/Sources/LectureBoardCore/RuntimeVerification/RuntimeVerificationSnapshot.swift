@@ -35,6 +35,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let stableFrameCount: Int
   public let slideChangeCount: Int
   public let slideIdentityState: SlideIdentityState
+  public let slideIdentityFrameSyncState: SlideIdentityFrameSyncState
   public let slideIdentitySampleCount: Int
   public let slideIdentityContinuityBreakCount: Int
   public let contentRevisionCount: Int
@@ -57,6 +58,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     stableFrameCount: Int,
     slideChangeCount: Int,
     slideIdentityState: SlideIdentityState = .unavailable,
+    slideIdentityFrameSyncState: SlideIdentityFrameSyncState = .notRequired,
     slideIdentitySampleCount: Int = 0,
     slideIdentityContinuityBreakCount: Int = 0,
     contentRevisionCount: Int = 0,
@@ -81,6 +83,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.stableFrameCount = max(stableFrameCount, 0)
     self.slideChangeCount = max(slideChangeCount, 0)
     self.slideIdentityState = slideIdentityState
+    self.slideIdentityFrameSyncState = slideIdentityFrameSyncState
     self.slideIdentitySampleCount = max(slideIdentitySampleCount, 0)
     self.slideIdentityContinuityBreakCount = max(slideIdentityContinuityBreakCount, 0)
     self.contentRevisionCount = max(contentRevisionCount, 0)
@@ -108,6 +111,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case stableFrameCount
     case slideChangeCount
     case slideIdentityState
+    case slideIdentityFrameSyncState
     case slideIdentitySampleCount
     case slideIdentityContinuityBreakCount
     case contentRevisionCount
@@ -139,6 +143,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
         SlideIdentityState.self,
         forKey: .slideIdentityState
       ) ?? .unavailable,
+      slideIdentityFrameSyncState: try container.decodeIfPresent(
+        SlideIdentityFrameSyncState.self,
+        forKey: .slideIdentityFrameSyncState
+      ) ?? .notRequired,
       slideIdentitySampleCount: try container.decodeIfPresent(
         Int.self,
         forKey: .slideIdentitySampleCount

@@ -175,6 +175,7 @@ struct MainView: View {
         captureStatusLabel
         slideAnalysisStatusLabel
         slideIdentityStatusLabel
+        slideIdentityFrameSyncStatusLabel
 
         HStack(spacing: 24) {
           LabeledContent(
@@ -284,6 +285,29 @@ struct MainView: View {
       Label(
         "capture.slideIdentity.interrupted",
         systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
+      )
+      .foregroundStyle(.orange)
+    }
+  }
+
+  @ViewBuilder
+  private var slideIdentityFrameSyncStatusLabel: some View {
+    switch model.slideIdentityFrameSyncState {
+    case .notRequired:
+      EmptyView()
+    case .waiting:
+      Label("capture.slideIdentityFrameSync.waiting", systemImage: "hourglass")
+        .foregroundStyle(.orange)
+    case .synchronized:
+      Label(
+        "capture.slideIdentityFrameSync.synchronized",
+        systemImage: "checkmark.circle"
+      )
+      .foregroundStyle(.green)
+    case .timedOut:
+      Label(
+        "capture.slideIdentityFrameSync.timedOut",
+        systemImage: "exclamationmark.triangle"
       )
       .foregroundStyle(.orange)
     }

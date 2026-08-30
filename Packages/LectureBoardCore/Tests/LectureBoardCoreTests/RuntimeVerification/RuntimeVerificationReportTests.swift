@@ -77,7 +77,7 @@ struct RuntimeVerificationReportTests {
       snapshots: []
     )
 
-    #expect(RuntimeVerificationReport.currentSchemaVersion == 4)
+    #expect(RuntimeVerificationReport.currentSchemaVersion == 5)
     #expect(report.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
   }
 
@@ -109,6 +109,7 @@ struct RuntimeVerificationReportTests {
     snapshots[0]["slideChangeCount"] = 5
     snapshots[0]["contentRevisionCount"] = 2
     snapshots[0].removeValue(forKey: "slideIdentityState")
+    snapshots[0].removeValue(forKey: "slideIdentityFrameSyncState")
     snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
     snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     object["snapshots"] = snapshots
@@ -121,6 +122,7 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].slideChangeCount == 5)
     #expect(decoded.snapshots[0].contentRevisionCount == 2)
     #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
+    #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .notRequired)
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
   }
@@ -150,6 +152,7 @@ struct RuntimeVerificationReportTests {
     object["schemaVersion"] = 3
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0].removeValue(forKey: "slideIdentityState")
+    snapshots[0].removeValue(forKey: "slideIdentityFrameSyncState")
     snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
     snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     object["snapshots"] = snapshots
@@ -159,8 +162,46 @@ struct RuntimeVerificationReportTests {
 
     #expect(decoded.schemaVersion == 3)
     #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
+    #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .notRequired)
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
+  }
+
+  @Test func decodesSchemaFourWithoutFrameSyncMetadata() throws {
+    let report = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+      finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+      requestedDurationSeconds: 12,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 42,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .completed,
+      failureCode: nil,
+      untrustedFailureDetail: nil,
+      snapshots: [snapshot()]
+    )
+
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object["schemaVersion"] = 4
+    var snapshots = try #require(object["snapshots"] as? [[String: Any]])
+    snapshots[0].removeValue(forKey: "slideIdentityFrameSyncState")
+    object["snapshots"] = snapshots
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
+
+    #expect(decoded.schemaVersion == 4)
+    #expect(decoded.snapshots[0].slideIdentityState == .identified)
+    #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .notRequired)
+    #expect(decoded.snapshots[0].slideIdentitySampleCount == 12)
+    #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 1)
   }
 
   @Test func decodesSchemaOneSnapshotsWithoutNewMetadataCounters() throws {
@@ -190,6 +231,7 @@ struct RuntimeVerificationReportTests {
     snapshots[0].removeValue(forKey: "contentRevisionCount")
     snapshots[0].removeValue(forKey: "strokeCandidateRegionCount")
     snapshots[0].removeValue(forKey: "slideIdentityState")
+    snapshots[0].removeValue(forKey: "slideIdentityFrameSyncState")
     snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
     snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     object["snapshots"] = snapshots
@@ -201,6 +243,7 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].contentRevisionCount == 0)
     #expect(decoded.snapshots[0].strokeCandidateRegionCount == 0)
     #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
+    #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .notRequired)
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
   }
@@ -330,6 +373,7 @@ struct RuntimeVerificationReportTests {
         "stableFrameCount",
         "slideChangeCount",
         "slideIdentityState",
+        "slideIdentityFrameSyncState",
         "slideIdentitySampleCount",
         "slideIdentityContinuityBreakCount",
         "contentRevisionCount",
@@ -346,6 +390,7 @@ struct RuntimeVerificationReportTests {
     #expect(encodedSnapshot["contentRevisionCount"] as? Int == 2)
     #expect(encodedSnapshot["strokeCandidateRegionCount"] as? Int == 1)
     #expect(encodedSnapshot["slideIdentityState"] as? String == "identified")
+    #expect(encodedSnapshot["slideIdentityFrameSyncState"] as? String == "waiting")
     #expect(encodedSnapshot["slideIdentitySampleCount"] as? Int == 12)
     #expect(encodedSnapshot["slideIdentityContinuityBreakCount"] as? Int == 1)
   }
@@ -406,6 +451,7 @@ struct RuntimeVerificationReportTests {
       stableFrameCount: 1,
       slideChangeCount: 0,
       slideIdentityState: .identified,
+      slideIdentityFrameSyncState: .waiting,
       slideIdentitySampleCount: 12,
       slideIdentityContinuityBreakCount: 1,
       contentRevisionCount: 2,
