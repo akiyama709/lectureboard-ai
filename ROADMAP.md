@@ -14,14 +14,14 @@ The roadmap describes validation gates rather than promises of release dates.
 
 ## Milestone 1 — Observable lecture prototype
 
-- [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit — implementation builds，runtime validation pending
-- [ ] Detect slide changes and stable frames — deterministic Core tests pass，real PowerPoint calibration pending
-- [ ] Recognize slide text and geometry — implementation builds，real-slide accuracy validation pending
-- [ ] Build normalized occupied regions from detected text and rectangles — deterministic Core tests pass，real-slide calibration pending
+- [ ] Capture the selected PowerPoint window continuously with ScreenCaptureKit — the current post-lifecycle-fix executable delivered 50 frames in a five-second static synthetic run; independent LaunchServices launch, dynamic rerun, representative decks, window reselection, and long-duration reliability remain pending
+- [ ] Detect slide changes and stable frames — an earlier pre-lifecycle-fix run confirmed 5 stable frames and classified 4 slide changes, while the current executable confirmed one static stable frame; dynamic rerun and animations remain unverified, and broader threshold calibration across representative transitions remains pending
+- [ ] Recognize slide text and geometry — Vision completed on the current executable with maxima of 35 text and 9 rectangle observations; OCR correctness and coordinate accuracy remain pending
+- [ ] Build normalized occupied regions from detected text and rectangles — the current static run produced up to 4 occupied regions; coordinate and overlap-avoidance accuracy remain pending
 - [ ] Detect existing PowerPoint ink as occupied space
 - [ ] Route live transcript segments into the contextual board engine
 - [ ] Render stable text, boxes, arrows, and causal chains
-- [ ] Save the session as JSON and SVG
+- [ ] Save the session as JSON and SVG — the runtime-verification metadata JSON is diagnostic evidence, not a lecture-session export
 
 **Exit criterion:** a ten-minute Japanese or English lecture can run without overlap on a controlled slide deck.
 
@@ -53,7 +53,7 @@ The roadmap describes validation gates rather than promises of release dates.
 - [ ] Recovery after PowerPoint restart or display reconnection
 - [ ] Privacy-preserving lecture export
 - [ ] Accessibility review
-- [ ] Code signing and notarization
+- [ ] Developer ID distribution signing, hardened runtime, and notarization
 - [ ] Reproducible release workflow
 
 **Exit criterion:** repeated use in real lectures with documented fallback procedures.

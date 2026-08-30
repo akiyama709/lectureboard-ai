@@ -5,10 +5,16 @@ import Foundation
 import LectureBoardCore
 import ScreenCaptureKit
 
+enum CapturedFrameDeliveryKind: Equatable, Sendable {
+  case new
+  case idleRepeat
+}
+
 struct CapturedPowerPointFrame: @unchecked Sendable {
   let windowID: CGWindowID
   let sequenceNumber: UInt64
   let capturedAt: Date
+  let deliveryKind: CapturedFrameDeliveryKind
   let image: CGImage
   let fingerprint: FrameFingerprint
 }
@@ -24,25 +30,108 @@ enum PowerPointWindowCaptureError: LocalizedError {
   }
 }
 
-actor PowerPointWindowCapture {
-  typealias FrameHandler = @Sendable (CapturedPowerPointFrame) -> Void
-  typealias ErrorHandler = @Sendable (String) -> Void
+struct CaptureOperationID: Comparable, Hashable, Sendable {
+  let rawValue: UInt64
+
+  static func < (lhs: CaptureOperationID, rhs: CaptureOperationID) -> Bool {
+    lhs.rawValue < rhs.rawValue
+  }
+}
+
+struct CaptureSessionLifecycle: Sendable {
+  private(set) var latestOperationID: CaptureOperationID?
+  private(set) var activeSessionID: CaptureOperationID?
+
+  mutating func acceptStart(_ operationID: CaptureOperationID) -> Bool {
+    guard isNewer(operationID) else { return false }
+    latestOperationID = operationID
+    activeSessionID = operationID
+    return true
+  }
+
+  mutating func acceptStop(_ operationID: CaptureOperationID) -> Bool {
+    guard isNewer(operationID) else { return false }
+    latestOperationID = operationID
+    activeSessionID = nil
+    return true
+  }
+
+  func isCurrent(_ operationID: CaptureOperationID) -> Bool {
+    latestOperationID == operationID && activeSessionID == operationID
+  }
+
+  mutating func finishFailedStart(_ operationID: CaptureOperationID) {
+    guard isCurrent(operationID) else { return }
+    activeSessionID = nil
+  }
+
+  private func isNewer(_ operationID: CaptureOperationID) -> Bool {
+    guard let latestOperationID else { return true }
+    return operationID > latestOperationID
+  }
+}
+
+typealias CaptureFrameHandler = @Sendable (CapturedPowerPointFrame) -> Void
+typealias CaptureErrorHandler = @Sendable (String) -> Void
+
+protocol PowerPointWindowCapturing: Sendable {
+  func start(
+    operationID: CaptureOperationID,
+    windowID: CGWindowID,
+    onFrame: @escaping CaptureFrameHandler,
+    onError: @escaping CaptureErrorHandler
+  ) async throws
+
+  func stop(operationID: CaptureOperationID) async
+}
+
+actor PowerPointWindowCapture: PowerPointWindowCapturing {
+  private var lifecycle = CaptureSessionLifecycle()
 
   private var stream: SCStream?
   private var output: CaptureOutput?
 
   func start(
+    operationID: CaptureOperationID,
     windowID: CGWindowID,
-    onFrame: @escaping FrameHandler,
-    onError: @escaping ErrorHandler
+    onFrame: @escaping CaptureFrameHandler,
+    onError: @escaping CaptureErrorHandler
   ) async throws {
-    await stop()
+    guard lifecycle.acceptStart(operationID) else {
+      throw CancellationError()
+    }
 
-    let content = try await SCShareableContent.excludingDesktopWindows(
-      true,
-      onScreenWindowsOnly: true
-    )
+    let previousStream = stream
+    let previousOutput = output
+    stream = nil
+    output = nil
+
+    if let previousStream {
+      try? await previousStream.stopCapture()
+      if let previousOutput {
+        try? previousStream.removeStreamOutput(previousOutput, type: .screen)
+      }
+    }
+
+    guard lifecycle.isCurrent(operationID) else {
+      throw CancellationError()
+    }
+
+    let content: SCShareableContent
+    do {
+      content = try await SCShareableContent.excludingDesktopWindows(
+        true,
+        onScreenWindowsOnly: true
+      )
+    } catch {
+      lifecycle.finishFailedStart(operationID)
+      throw error
+    }
+    guard lifecycle.isCurrent(operationID) else {
+      throw CancellationError()
+    }
     guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+      lifecycle.finishFailedStart(operationID)
       throw PowerPointWindowCaptureError.selectedWindowUnavailable
     }
 
@@ -66,23 +155,31 @@ actor PowerPointWindowCapture {
 
     do {
       try await stream.startCapture()
+      guard lifecycle.isCurrent(operationID) else {
+        try? await stream.stopCapture()
+        try? stream.removeStreamOutput(output, type: .screen)
+        throw CancellationError()
+      }
       self.output = output
       self.stream = stream
     } catch {
       try? stream.removeStreamOutput(output, type: .screen)
+      lifecycle.finishFailedStart(operationID)
       throw error
     }
   }
 
-  func stop() async {
-    guard let stream else {
-      output = nil
-      return
-    }
-
+  func stop(operationID: CaptureOperationID) async {
+    guard lifecycle.acceptStop(operationID) else { return }
+    let stream = stream
+    let output = output
     self.stream = nil
-    output = nil
+    self.output = nil
+    guard let stream else { return }
     try? await stream.stopCapture()
+    if let output {
+      try? stream.removeStreamOutput(output, type: .screen)
+    }
   }
 
   private func makeConfiguration(for filter: SCContentFilter) -> SCStreamConfiguration {
@@ -115,16 +212,16 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   )
 
   private let windowID: CGWindowID
-  private let frameHandler: PowerPointWindowCapture.FrameHandler
-  private let errorHandler: PowerPointWindowCapture.ErrorHandler
+  private let frameHandler: CaptureFrameHandler
+  private let errorHandler: CaptureErrorHandler
   private let imageContext = CIContext(options: [.cacheIntermediates: false])
   private var sequenceNumber: UInt64 = 0
   private var lastFrame: CapturedPowerPointFrame?
 
   init(
     windowID: CGWindowID,
-    frameHandler: @escaping PowerPointWindowCapture.FrameHandler,
-    errorHandler: @escaping PowerPointWindowCapture.ErrorHandler
+    frameHandler: @escaping CaptureFrameHandler,
+    errorHandler: @escaping CaptureErrorHandler
   ) {
     self.windowID = windowID
     self.frameHandler = frameHandler
@@ -166,6 +263,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
         windowID: windowID,
         sequenceNumber: sequenceNumber,
         capturedAt: Date(),
+        deliveryKind: .idleRepeat,
         image: lastFrame.image,
         fingerprint: lastFrame.fingerprint
       )
@@ -188,6 +286,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
       windowID: windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
+      deliveryKind: .new,
       image: image,
       fingerprint: fingerprint
     )

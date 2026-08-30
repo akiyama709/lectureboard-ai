@@ -2,7 +2,7 @@ SHELL := /bin/bash
 PROJECT := LectureBoardAI.xcodeproj
 SCHEME := LectureBoardAI
 
-.PHONY: bootstrap doctor local-setup generate test test-core build open codex verify clean
+.PHONY: bootstrap doctor local-setup generate test test-core test-app test-app-script build build-runtime test-build-runtime-script test-runtime-launch-smoke open codex verify clean
 
 
 doctor:
@@ -23,8 +23,23 @@ test: test-core build
 test-core:
 	swift test --package-path Packages/LectureBoardCore
 
+test-app: test-app-script
+	./scripts/test-local-app.sh
+
+test-app-script:
+	./scripts/test-test-local-app.sh
+
 build: generate
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+
+build-runtime: test-build-runtime-script
+	./scripts/build-local-runtime.sh
+
+test-build-runtime-script:
+	./scripts/test-build-local-runtime.sh
+
+test-runtime-launch-smoke:
+	./scripts/test-runtime-launch-smoke.sh
 
 open:
 	./scripts/open-in-xcode.sh

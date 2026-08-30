@@ -1,0 +1,94 @@
+import Foundation
+import Testing
+
+@testable import LectureBoardCore
+
+struct RuntimeVerificationSnapshotTests {
+  @Test func roundTripsMetadataThroughJSON() throws {
+    let snapshot = RuntimeVerificationSnapshot(
+      timestamp: Date(timeIntervalSince1970: 1_788_045_600),
+      elapsedMilliseconds: 1_250,
+      screenRecordingPermission: .authorized,
+      captureState: .capturing,
+      visionState: .completed,
+      frameCount: 120,
+      newFrameCount: 4,
+      repeatedFrameCount: 116,
+      stableFrameCount: 3,
+      slideChangeCount: 2,
+      recognizedTextCount: 7,
+      detectedRectangleCount: 2,
+      occupiedRegionCount: 5,
+      lastNewFrameAt: Date(timeIntervalSince1970: 1_788_045_599),
+      latestDifferenceFromStableFrame: 0.42
+    )
+
+    let data = try JSONEncoder().encode(snapshot)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationSnapshot.self, from: data)
+
+    #expect(decoded == snapshot)
+    let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(object["image"] == nil)
+    #expect(object["recognizedText"] == nil)
+    #expect(object["title"] == nil)
+  }
+
+  @Test func normalizesInvalidCountersAndMeasurements() {
+    let snapshot = RuntimeVerificationSnapshot(
+      timestamp: Date(timeIntervalSince1970: 0),
+      elapsedMilliseconds: -9,
+      screenRecordingPermission: .unknown,
+      captureState: .idle,
+      visionState: .idle,
+      frameCount: -1,
+      newFrameCount: -2,
+      repeatedFrameCount: -3,
+      stableFrameCount: -4,
+      slideChangeCount: -5,
+      recognizedTextCount: -6,
+      detectedRectangleCount: -7,
+      occupiedRegionCount: -8,
+      lastNewFrameAt: Date(timeIntervalSince1970: .infinity),
+      latestDifferenceFromStableFrame: .nan
+    )
+
+    #expect(snapshot.frameCount == 0)
+    #expect(snapshot.elapsedMilliseconds == 0)
+    #expect(snapshot.newFrameCount == 0)
+    #expect(snapshot.repeatedFrameCount == 0)
+    #expect(snapshot.stableFrameCount == 0)
+    #expect(snapshot.slideChangeCount == 0)
+    #expect(snapshot.recognizedTextCount == 0)
+    #expect(snapshot.detectedRectangleCount == 0)
+    #expect(snapshot.occupiedRegionCount == 0)
+    #expect(snapshot.lastNewFrameAt == nil)
+    #expect(snapshot.latestDifferenceFromStableFrame == nil)
+  }
+
+  @Test func clampsFiniteDifferenceToNormalizedRange() {
+    let low = snapshot(difference: -0.1)
+    let high = snapshot(difference: 1.1)
+
+    #expect(low.latestDifferenceFromStableFrame == 0)
+    #expect(high.latestDifferenceFromStableFrame == 1)
+  }
+
+  private func snapshot(difference: Double) -> RuntimeVerificationSnapshot {
+    RuntimeVerificationSnapshot(
+      timestamp: Date(timeIntervalSince1970: 0),
+      elapsedMilliseconds: 0,
+      screenRecordingPermission: .authorized,
+      captureState: .capturing,
+      visionState: .completed,
+      frameCount: 0,
+      newFrameCount: 0,
+      repeatedFrameCount: 0,
+      stableFrameCount: 0,
+      slideChangeCount: 0,
+      recognizedTextCount: 0,
+      detectedRectangleCount: 0,
+      occupiedRegionCount: 0,
+      latestDifferenceFromStableFrame: difference
+    )
+  }
+}

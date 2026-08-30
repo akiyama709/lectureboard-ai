@@ -5,6 +5,7 @@
 "setup.microphone" = "マイク";
 "setup.speech" = "音声認識";
 "setup.request" = "アクセスを許可";
+"setup.requestScreen" = "画面収録を許可";
 "setup.refresh" = "PowerPointウィンドウを再検出";
 "setup.noPowerPoint" = "表示中のPowerPointウィンドウが見つかりません．";
 "setup.language" = "講義言語";

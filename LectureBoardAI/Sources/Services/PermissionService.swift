@@ -3,9 +3,40 @@ import CoreGraphics
 import Speech
 
 @MainActor
-final class PermissionService {
-  var screenCaptureGranted: Bool {
+protocol ScreenCapturePermissionClient {
+  var isAuthorized: Bool { get }
+
+  @discardableResult
+  func requestAccess() -> Bool
+}
+
+@MainActor
+struct SystemScreenCapturePermissionClient: ScreenCapturePermissionClient {
+  var isAuthorized: Bool {
     CGPreflightScreenCaptureAccess()
+  }
+
+  @discardableResult
+  func requestAccess() -> Bool {
+    CGRequestScreenCaptureAccess()
+  }
+}
+
+@MainActor
+final class PermissionService {
+  private let screenCaptureClient: any ScreenCapturePermissionClient
+
+  init(screenCaptureClient: (any ScreenCapturePermissionClient)? = nil) {
+    self.screenCaptureClient =
+      screenCaptureClient ?? SystemScreenCapturePermissionClient()
+  }
+
+  var screenCaptureAccessGranted: Bool {
+    screenCaptureClient.isAuthorized
+  }
+
+  var screenCaptureGranted: Bool {
+    screenCaptureAccessGranted
   }
 
   var microphoneGranted: Bool {
@@ -17,8 +48,13 @@ final class PermissionService {
   }
 
   @discardableResult
+  func requestScreenCaptureAccess() -> Bool {
+    screenCaptureClient.requestAccess()
+  }
+
+  @discardableResult
   func requestScreenCapture() -> Bool {
-    CGRequestScreenCaptureAccess()
+    requestScreenCaptureAccess()
   }
 
   func requestMicrophone() async -> Bool {

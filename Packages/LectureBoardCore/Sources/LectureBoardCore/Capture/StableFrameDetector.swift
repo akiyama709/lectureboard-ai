@@ -35,7 +35,7 @@ public struct StableFrameDetectorConfiguration: Equatable, Sendable {
 
   public init(
     stableDifferenceThreshold: Double = 0.012,
-    slideChangeThreshold: Double = 0.10,
+    slideChangeThreshold: Double = 0.02,
     requiredConsecutiveFrames: Int = 3
   ) {
     let stableThreshold = min(max(stableDifferenceThreshold, 0), 1)

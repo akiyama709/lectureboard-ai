@@ -15,6 +15,15 @@ All notable changes to this project will be documented in this file.
 - Stable-frame Vision text and rectangle analysis using the native macOS framework
 - Deterministic normalized occupied-region assembly with unit tests
 - Analysis counters, title candidates, and occupied-region preview overlays
+- Native macOS app unit tests and a local prepublication test gate
+- A metadata-only runtime-verification mode for controlled PowerPoint capture checks
+- New-frame and idle-repeat delivery metrics for ScreenCaptureKit streams
+- Explicit Screen Recording permission controls that do not scan or start capture while preflight access is unavailable
+- A local ad hoc-signed runtime build with signature diagnostics and a no-permission-request launch smoke test
+- Monotonic capture-operation ownership and regression tests for overlapping starts, stops, errors, refreshes, and selection changes
+- Exact whole-requirement team binding checks, including disjunction and negation regressions, for the optional Developer-signing path
+- Fixed-message runtime failure reports that discard untrusted framework error details
+- Controlled synthetic PowerPoint runtime evidence for current static frame delivery and Vision execution, plus separately identified pre-lifecycle dynamic calibration evidence
 
 ### Planned
 

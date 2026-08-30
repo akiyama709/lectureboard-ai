@@ -32,10 +32,35 @@ struct MainView: View {
       }
     }
     .task {
-      await model.refreshPowerPointWindows()
+      await performScreenCaptureSetupAction(
+        ScreenCaptureSetupPolicy.action(
+          for: .viewAppeared(
+            preflightGranted: model.permissionService.screenCaptureAccessGranted
+          )
+        )
+      )
     }
     .onDisappear {
       Task { await model.stopWindowCapture() }
+    }
+  }
+
+  @MainActor
+  private func performScreenCaptureSetupAction(
+    _ action: ScreenCaptureSetupPolicy.Action
+  ) async {
+    switch action {
+    case .none:
+      return
+    case .requestScreenCapturePermission:
+      let granted = model.requestScreenCapturePermission()
+      await performScreenCaptureSetupAction(
+        ScreenCaptureSetupPolicy.action(
+          for: .permissionRequestCompleted(granted: granted)
+        )
+      )
+    case .refreshPowerPointWindows:
+      await model.refreshPowerPointWindows()
     }
   }
 
@@ -61,7 +86,7 @@ struct MainView: View {
       HStack(spacing: 18) {
         PermissionBadge(
           titleKey: "setup.screen",
-          granted: model.permissionService.screenCaptureGranted
+          granted: model.permissionService.screenCaptureAccessGranted
         )
         PermissionBadge(
           titleKey: "setup.microphone",
@@ -72,8 +97,12 @@ struct MainView: View {
           granted: model.permissionService.speechRecognitionGranted
         )
         Spacer()
-        Button("setup.request") {
-          Task { await model.requestPermissions() }
+        Button("setup.requestScreen") {
+          Task {
+            await performScreenCaptureSetupAction(
+              ScreenCaptureSetupPolicy.action(for: .permissionButtonPressed)
+            )
+          }
         }
       }
       .padding(.vertical, 8)
@@ -97,18 +126,38 @@ struct MainView: View {
           .frame(maxWidth: 500)
           .onChange(of: model.selectedPowerPointWindowID) { oldValue, newValue in
             guard oldValue != newValue else { return }
-            Task { await model.stopWindowCapture() }
+            guard let sessionID = model.activeCaptureSessionID(for: oldValue) else {
+              return
+            }
+            Task {
+              await model.stopWindowCapture(ifCurrentSessionID: sessionID)
+            }
           }
         }
 
         HStack(spacing: 10) {
           Button("setup.refresh") {
-            Task { await model.refreshPowerPointWindows() }
+            Task {
+              await performScreenCaptureSetupAction(
+                ScreenCaptureSetupPolicy.action(
+                  for: .refreshButtonPressed(
+                    preflightGranted: model.permissionService.screenCaptureAccessGranted
+                  )
+                )
+              )
+            }
           }
           Button("capture.start") {
             Task { await model.startWindowCapture() }
           }
-          .disabled(model.selectedPowerPointWindowID == nil || model.captureStatus == .starting)
+          .disabled(
+            !CaptureControlPolicy.canStart(
+              screenCaptureAccessGranted:
+                model.permissionService.screenCaptureAccessGranted,
+              hasSelectedWindow: model.selectedWindow != nil,
+              captureStatus: model.captureStatus
+            )
+          )
           Button("capture.stop") {
             Task { await model.stopWindowCapture() }
           }

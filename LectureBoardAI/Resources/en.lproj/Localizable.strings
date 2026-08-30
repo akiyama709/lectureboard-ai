@@ -5,6 +5,7 @@
 "setup.microphone" = "Microphone";
 "setup.speech" = "Speech recognition";
 "setup.request" = "Request access";
+"setup.requestScreen" = "Allow screen recording";
 "setup.refresh" = "Refresh PowerPoint windows";
 "setup.noPowerPoint" = "No visible PowerPoint window was found.";
 "setup.language" = "Lecture language";

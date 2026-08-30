@@ -5,6 +5,12 @@ import CoreGraphics
 import LectureBoardCore
 import Speech
 
+protocol PowerPointWindowScanning: Sendable {
+  func scan() async throws -> [PowerPointWindowDescriptor]
+}
+
+extension PowerPointWindowScanner: PowerPointWindowScanning {}
+
 @MainActor
 final class AppModel: ObservableObject {
   enum Status: Equatable {
@@ -38,41 +44,70 @@ final class AppModel: ObservableObject {
   @Published var digitalInkStyle = DigitalInkStyle.clean
   @Published private(set) var captureStatus: CaptureStatus = .stopped
   @Published private(set) var capturedFrameCount = 0
+  @Published private(set) var newCapturedFrameCount = 0
+  @Published private(set) var repeatedCapturedFrameCount = 0
+  @Published private(set) var lastNewFrameAt: Date?
+  @Published private(set) var latestDifferenceFromStableFrame: Double?
   @Published private(set) var stableFrameCount = 0
   @Published private(set) var slideChangeCount = 0
   @Published private(set) var latestStableFrame: CGImage?
   @Published private(set) var slideAnalysisStatus: SlideAnalysisStatus = .idle
   @Published private(set) var latestSlideAnalysis: SlideVisualAnalysis?
 
-  let permissionService = PermissionService()
-  private let scanner = PowerPointWindowScanner()
+  let permissionService: PermissionService
+  private let scanner: any PowerPointWindowScanning
   private let overlayController = OverlayWindowController()
   private let speechProvider = AppleSpeechRecognizerProvider()
-  private let windowCapture = PowerPointWindowCapture()
+  private let windowCapture: any PowerPointWindowCapturing
   private let slideVisionAnalyzer = SlideVisionAnalyzer()
   private let boardEngine = ContextualBoardEngine()
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
-  private var captureGeneration = 0
+  private var captureDeliveryMetrics = CaptureDeliveryMetrics()
+  private var refreshGeneration: UInt64 = 0
+  private var nextCaptureOperationRawValue: UInt64 = 0
+  private var activeCaptureSessionID: CaptureOperationID?
+  private var activeCaptureWindowID: CGWindowID?
   private var analysisGeneration = 0
   private var slideAnalysisTask: Task<Void, Never>?
   private var transcriptSegments: [TranscriptSegment] = []
   private var boardIntents: [BoardIntent] = []
 
+  init(
+    permissionService: PermissionService = PermissionService(),
+    windowCapture: any PowerPointWindowCapturing = PowerPointWindowCapture(),
+    scanner: any PowerPointWindowScanning = PowerPointWindowScanner()
+  ) {
+    self.permissionService = permissionService
+    self.windowCapture = windowCapture
+    self.scanner = scanner
+  }
+
   var selectedWindow: PowerPointWindowDescriptor? {
     powerPointWindows.first { $0.id == selectedPowerPointWindowID }
   }
 
-  func requestPermissions() async {
-    _ = permissionService.requestScreenCapture()
-    _ = await permissionService.requestMicrophone()
-    _ = await permissionService.requestSpeechRecognition()
+  @discardableResult
+  func requestScreenCapturePermission() -> Bool {
+    permissionService.requestScreenCaptureAccess()
   }
 
   func refreshPowerPointWindows() async {
+    guard
+      CaptureControlPolicy.canRefreshPowerPointWindows(
+        screenCaptureAccessGranted: permissionService.screenCaptureAccessGranted
+      )
+    else {
+      return
+    }
+
     status = .scanning
+    precondition(refreshGeneration < UInt64.max, "Window refresh generation exhausted.")
+    refreshGeneration += 1
+    let generation = refreshGeneration
     do {
       let windows = try await scanner.scan()
+      guard generation == refreshGeneration else { return }
       let previousSelection = selectedPowerPointWindowID
       powerPointWindows = windows
 
@@ -81,27 +116,49 @@ final class AppModel: ObservableObject {
       {
         selectedPowerPointWindowID = previousSelection
       } else {
-        await stopWindowCapture()
+        let stopOperationID = await stopWindowCaptureForOperation()
+        guard generation == refreshGeneration else { return }
+        guard isLatestCaptureOperation(stopOperationID) else {
+          status = .ready
+          return
+        }
         selectedPowerPointWindowID = windows.first?.id
       }
       status = .ready
     } catch {
+      guard generation == refreshGeneration else { return }
       status = .error(error.localizedDescription)
     }
   }
 
   func startWindowCapture() async {
-    guard let selectedPowerPointWindowID else {
+    guard let selectedWindow else {
       captureStatus = .error(
         NSLocalizedString("error.captureWindowUnavailable", comment: "")
       )
       return
     }
+    let selectedPowerPointWindowID = selectedWindow.id
+    guard
+      CaptureControlPolicy.canStart(
+        screenCaptureAccessGranted: permissionService.screenCaptureAccessGranted,
+        hasSelectedWindow: true,
+        captureStatus: captureStatus
+      )
+    else {
+      return
+    }
 
-    captureGeneration += 1
-    let generation = captureGeneration
+    let operationID = nextCaptureOperationID()
+    activeCaptureSessionID = operationID
+    activeCaptureWindowID = selectedPowerPointWindowID
     captureStatus = .starting
     capturedFrameCount = 0
+    captureDeliveryMetrics.reset()
+    newCapturedFrameCount = 0
+    repeatedCapturedFrameCount = 0
+    lastNewFrameAt = nil
+    latestDifferenceFromStableFrame = nil
     stableFrameCount = 0
     slideChangeCount = 0
     latestStableFrame = nil
@@ -110,37 +167,65 @@ final class AppModel: ObservableObject {
 
     do {
       try await windowCapture.start(
+        operationID: operationID,
         windowID: selectedPowerPointWindowID,
         onFrame: { [weak self] frame in
           Task { @MainActor [weak self] in
-            self?.receive(frame, generation: generation)
+            self?.receive(frame, sessionID: operationID)
           }
         },
         onError: { [weak self] message in
           Task { @MainActor [weak self] in
-            await self?.handleCaptureError(message, generation: generation)
+            await self?.handleCaptureError(message, sessionID: operationID)
           }
         }
       )
-      guard generation == captureGeneration,
-        selectedPowerPointWindowID == self.selectedPowerPointWindowID
-      else {
-        await windowCapture.stop()
+      guard activeCaptureSessionID == operationID else { return }
+      guard selectedPowerPointWindowID == self.selectedPowerPointWindowID else {
+        let stopOperationID = nextCaptureOperationID()
+        activeCaptureSessionID = nil
+        activeCaptureWindowID = nil
+        stableFrameDetector.reset()
+        resetSlideAnalysis()
+        captureStatus = .stopped
+        await windowCapture.stop(operationID: stopOperationID)
         return
       }
       captureStatus = .capturing
     } catch {
-      guard generation == captureGeneration else { return }
+      guard activeCaptureSessionID == operationID else { return }
+      activeCaptureSessionID = nil
+      activeCaptureWindowID = nil
       captureStatus = .error(error.localizedDescription)
+      stableFrameDetector.reset()
+      resetSlideAnalysis()
+      await windowCapture.stop(operationID: nextCaptureOperationID())
     }
   }
 
   func stopWindowCapture() async {
-    captureGeneration += 1
-    await windowCapture.stop()
+    _ = await stopWindowCaptureForOperation()
+  }
+
+  func activeCaptureSessionID(for windowID: CGWindowID?) -> CaptureOperationID? {
+    guard windowID == activeCaptureWindowID else { return nil }
+    return activeCaptureSessionID
+  }
+
+  func stopWindowCapture(ifCurrentSessionID sessionID: CaptureOperationID) async {
+    guard activeCaptureSessionID == sessionID else { return }
+    _ = await stopWindowCaptureForOperation()
+  }
+
+  private func stopWindowCaptureForOperation() async -> CaptureOperationID {
+    let operationID = nextCaptureOperationID()
+    activeCaptureSessionID = nil
+    activeCaptureWindowID = nil
     stableFrameDetector.reset()
     resetSlideAnalysis()
     captureStatus = .stopped
+    await windowCapture.stop(operationID: operationID)
+    return operationID
   }
 
   func showOverlayDemo() {
@@ -212,42 +297,52 @@ final class AppModel: ObservableObject {
     overlayController.update(scene: boardScene, style: digitalInkStyle)
   }
 
-  private func receive(_ frame: CapturedPowerPointFrame, generation: Int) {
-    guard generation == captureGeneration,
+  private func receive(_ frame: CapturedPowerPointFrame, sessionID: CaptureOperationID) {
+    guard sessionID == activeCaptureSessionID,
       frame.windowID == selectedPowerPointWindowID
     else {
       return
     }
     capturedFrameCount = Int(frame.sequenceNumber)
+    captureDeliveryMetrics.record(frame.deliveryKind, capturedAt: frame.capturedAt)
+    newCapturedFrameCount = captureDeliveryMetrics.newFrameCount
+    repeatedCapturedFrameCount = captureDeliveryMetrics.repeatedFrameCount
+    lastNewFrameAt = captureDeliveryMetrics.lastNewFrameAt
     let observation = stableFrameDetector.ingest(frame.fingerprint)
+    latestDifferenceFromStableFrame = observation.differenceFromStableFrame
 
     switch observation.stability {
     case .stable:
       stableFrameCount += 1
       latestStableFrame = frame.image
-      startSlideAnalysis(frame, captureGeneration: generation)
+      startSlideAnalysis(frame, captureSessionID: sessionID)
     case .slideChanged:
       stableFrameCount += 1
       slideChangeCount += 1
       latestStableFrame = frame.image
-      startSlideAnalysis(frame, captureGeneration: generation)
+      startSlideAnalysis(frame, captureSessionID: sessionID)
     case .invalid, .collecting, .unchanged, .transitioning:
       break
     }
   }
 
-  private func handleCaptureError(_ message: String, generation: Int) async {
-    guard generation == captureGeneration else { return }
-    captureGeneration += 1
-    await windowCapture.stop()
+  private func handleCaptureError(
+    _ message: String,
+    sessionID: CaptureOperationID
+  ) async {
+    guard sessionID == activeCaptureSessionID else { return }
+    let stopOperationID = nextCaptureOperationID()
+    activeCaptureSessionID = nil
+    activeCaptureWindowID = nil
     stableFrameDetector.reset()
     resetSlideAnalysis()
     captureStatus = .error(message)
+    await windowCapture.stop(operationID: stopOperationID)
   }
 
   private func startSlideAnalysis(
     _ frame: CapturedPowerPointFrame,
-    captureGeneration: Int
+    captureSessionID: CaptureOperationID
   ) {
     analysisGeneration += 1
     let requestGeneration = analysisGeneration
@@ -264,7 +359,7 @@ final class AppModel: ObservableObject {
         receive(
           analysis,
           frame: frame,
-          captureGeneration: captureGeneration,
+          captureSessionID: captureSessionID,
           requestGeneration: requestGeneration
         )
       } catch is CancellationError {
@@ -274,7 +369,7 @@ final class AppModel: ObservableObject {
         handleSlideAnalysisError(
           error.localizedDescription,
           frame: frame,
-          captureGeneration: captureGeneration,
+          captureSessionID: captureSessionID,
           requestGeneration: requestGeneration
         )
       }
@@ -284,10 +379,10 @@ final class AppModel: ObservableObject {
   private func receive(
     _ analysis: SlideVisualAnalysis,
     frame: CapturedPowerPointFrame,
-    captureGeneration: Int,
+    captureSessionID: CaptureOperationID,
     requestGeneration: Int
   ) {
-    guard captureGeneration == self.captureGeneration,
+    guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
       frame.windowID == selectedPowerPointWindowID
     else {
@@ -301,10 +396,10 @@ final class AppModel: ObservableObject {
   private func handleSlideAnalysisError(
     _ message: String,
     frame: CapturedPowerPointFrame,
-    captureGeneration: Int,
+    captureSessionID: CaptureOperationID,
     requestGeneration: Int
   ) {
-    guard captureGeneration == self.captureGeneration,
+    guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
       frame.windowID == selectedPowerPointWindowID
     else {
@@ -320,5 +415,18 @@ final class AppModel: ObservableObject {
     slideAnalysisTask = nil
     latestSlideAnalysis = nil
     slideAnalysisStatus = .idle
+  }
+
+  private func nextCaptureOperationID() -> CaptureOperationID {
+    precondition(
+      nextCaptureOperationRawValue < UInt64.max,
+      "Capture operation identifier exhausted."
+    )
+    nextCaptureOperationRawValue += 1
+    return CaptureOperationID(rawValue: nextCaptureOperationRawValue)
+  }
+
+  private func isLatestCaptureOperation(_ operationID: CaptureOperationID) -> Bool {
+    operationID.rawValue == nextCaptureOperationRawValue
   }
 }

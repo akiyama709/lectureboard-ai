@@ -27,8 +27,8 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - path: LectureBoardAI/Sources
-    resources:
       - path: LectureBoardAI/Resources
+        buildPhase: resources
     dependencies:
       - package: LectureBoardCore
     settings:
@@ -47,6 +47,21 @@ targets:
         INFOPLIST_KEY_NSScreenCaptureUsageDescription: "LectureBoard AI observes the selected PowerPoint window to identify slide content and unused space."
         CODE_SIGN_STYLE: Automatic
 
+  LectureBoardAITests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: LectureBoardAI/Tests
+    dependencies:
+      - target: LectureBoardAI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.akiyama709.LectureBoardAITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LectureBoard AI.app/Contents/MacOS/LectureBoard AI"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
 schemes:
   LectureBoardAI:
     build:
@@ -54,5 +69,9 @@ schemes:
         LectureBoardAI: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - LectureBoardAITests
     archive:
       config: Release

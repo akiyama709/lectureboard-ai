@@ -1,14 +1,65 @@
+import LectureBoardCore
 import SwiftUI
 
 @main
+@MainActor
 struct LectureBoardAIApp: App {
-  @StateObject private var model = AppModel()
+  @StateObject private var model: AppModel
+
+  #if DEBUG
+    @NSApplicationDelegateAdaptor(RuntimeVerificationApplicationDelegate.self)
+    private var applicationDelegate
+
+    private enum LaunchMode {
+      case standard
+      case runtimeVerification(RuntimeVerificationConfiguration)
+      case invalidRuntimeVerification(String)
+    }
+
+    private let launchMode: LaunchMode
+    private let runtimeVerificationRunner: RuntimeVerificationRunner
+
+    init() {
+      let appModel = AppModel()
+      let runner = RuntimeVerificationRunner()
+      _model = StateObject(wrappedValue: appModel)
+      runtimeVerificationRunner = runner
+
+      let resolvedLaunchMode: LaunchMode
+      do {
+        if let configuration = try RuntimeVerificationArguments.parse(CommandLine.arguments) {
+          resolvedLaunchMode = .runtimeVerification(configuration)
+        } else {
+          resolvedLaunchMode = .standard
+        }
+      } catch {
+        resolvedLaunchMode = .invalidRuntimeVerification(String(describing: error))
+      }
+      launchMode = resolvedLaunchMode
+
+      switch resolvedLaunchMode {
+      case .standard:
+        break
+      case .runtimeVerification(let configuration):
+        applicationDelegate.configureRuntimeVerification {
+          await runner.run(configuration: configuration, model: appModel)
+        }
+      case .invalidRuntimeVerification(let message):
+        applicationDelegate.configureInvalidRuntimeVerification(
+          errorDescription: message
+        )
+      }
+    }
+  #else
+    init() {
+      _model = StateObject(wrappedValue: AppModel())
+    }
+  #endif
 
   var body: some Scene {
     WindowGroup {
-      MainView()
+      rootView
         .environmentObject(model)
-        .frame(minWidth: 920, minHeight: 640)
     }
     .windowStyle(.titleBar)
 
@@ -17,5 +68,23 @@ struct LectureBoardAIApp: App {
         .environmentObject(model)
         .frame(width: 520, height: 360)
     }
+  }
+
+  @ViewBuilder
+  private var rootView: some View {
+    #if DEBUG
+      switch launchMode {
+      case .standard:
+        MainView()
+          .frame(minWidth: 920, minHeight: 640)
+      case .runtimeVerification:
+        RuntimeVerificationHostView(runner: runtimeVerificationRunner)
+      case .invalidRuntimeVerification(let message):
+        RuntimeVerificationLaunchErrorView(message: message)
+      }
+    #else
+      MainView()
+        .frame(minWidth: 920, minHeight: 640)
+    #endif
   }
 }

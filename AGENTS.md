@@ -2,7 +2,7 @@
 
 ## Project purpose
 
-LectureBoard AI is a macOS-first, open-source research prototype that observes a live PowerPoint lecture, infers what is educationally important from context, and adds concise text or simple diagrams to unused slide space as digital ink.
+LectureBoard AI is a macOS-first, open-source research prototype intended to observe a live PowerPoint lecture, infer what is educationally important from context, and add concise text or simple diagrams to unused slide space as digital ink.
 
 The lecturer must not need to memorize or use voice commands. The system should remain quiet, defer uncertain decisions, and avoid interrupting the lecture.
 
@@ -10,7 +10,7 @@ The lecturer must not need to memorize or use voice commands. The system should 
 
 - Initial platform: macOS only, Apple silicon first.
 - Initial presentation application: Microsoft PowerPoint for Mac.
-- Initial verified lecture languages: Japanese, English, and staged Japanese–English mixing.
+- Initial target lecture languages: Japanese, English, and staged Japanese–English mixing.
 - Default rendering style: clean digital ink.
 - Alternate rendering style: more handwritten, with adjustable strength.
 - Human pen input always has priority over AI output.
@@ -29,9 +29,9 @@ Implemented:
 - Native SwiftUI/AppKit application shell.
 - PowerPoint-window discovery prototype with ScreenCaptureKit.
 - Compiled ScreenCaptureKit adapter for continuous capture of the selected PowerPoint window.
-- Deterministic frame fingerprints，stable-frame confirmation，and slide-change classification.
+- Deterministic frame fingerprints, stable-frame confirmation, and slide-change classification.
 - Compiled Vision text and rectangle analysis triggered by confirmed stable frames.
-- Deterministic normalized occupied-region filtering，padding，and merging.
+- Deterministic normalized occupied-region filtering, padding, and merging.
 - Capture-monitor analysis counts and occupied-region preview overlays.
 - Click-through transparent overlay prototype.
 - Japanese or English Apple Speech prototype.
@@ -40,19 +40,26 @@ Implemented:
 - Vector board-scene models and simple empty-region placement.
 - Core unit tests and open-source repository documentation.
 
+Narrow runtime evidence from controlled synthetic PowerPoint runs:
+
+- The current post-lifecycle-fix executable was launched directly under the Codex-authorized environment, not through LaunchServices. A five-second static run delivered 50 frames, confirmed one stable frame, and reached completed Vision analysis with observed maxima of 35 text observations, 9 rectangles, and 4 occupied regions.
+- An earlier pre-lifecycle-fix executable completed one dynamic slideshow run with 220 frames, 5 stable frames, and 4 classified slide changes. That run remains threshold-calibration evidence, but it is not runtime evidence for the current executable.
+- Neither run establishes standalone LaunchServices authorization, recognition or coordinate accuracy, representative-deck coverage, or lecture-length reliability.
+
 Not yet implemented or verified:
 
-- Runtime validation of continuous PowerPoint frame capture.
-- Runtime calibration and validation of stable slide-change detection.
-- Runtime validation and accuracy calibration of Vision slide text and rectangle analysis.
-- Robust object，empty-space，and existing-ink analysis beyond detected text and rectangles.
+- Independent LaunchServices runtime validation of continuous PowerPoint frame capture.
+- Dynamic slideshow validation of slide-change delivery with the current post-lifecycle-fix executable.
+- Representative-deck, animation, reselection, and long-duration calibration of stable slide-change detection.
+- OCR correctness and coordinate-accuracy calibration of Vision text, rectangle, and occupied-region analysis.
+- Robust object, empty-space, and existing-ink analysis beyond detected text and rectangles.
 - Existing PowerPoint ink detection.
 - Real speaker-note and `.pptx` parsing.
 - Reliable Japanese–English code switching.
 - Production-grade contextual model adapters.
 - Session export to JSON, SVG, PDF, and Markdown.
-- Native runtime validation on the user's Mac beyond compilation and linking.
-- Signing and notarization.
+- Runtime validation of microphone transcription, the click-through overlay, and AI board rendering during a lecture.
+- Developer ID distribution signing, hardened runtime, and notarization.
 
 ## Immediate next milestone
 
@@ -86,7 +93,9 @@ Do not jump to cloud LLM integration before the capture, slide-state, occupancy,
 make doctor          # Inspect the local Mac toolchain without changing it
 make local-setup     # Run checks, core tests, and generate the Xcode project
 make test-core       # Run platform-neutral tests
-make build           # Generate and build the native macOS target
+make test-app        # Run native macOS app unit tests with local ad hoc signing
+make build           # Compile and link the native target with signing disabled
+make build-runtime   # Build an arm64 Debug app with local ad hoc signing
 make open            # Generate and open the Xcode project
 make codex           # Open this repository in ChatGPT desktop Codex
 make verify          # Run publication and local verification checks

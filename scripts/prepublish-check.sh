@@ -4,43 +4,59 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-echo "[1/8] Linting Swift sources"
+echo "[1/10] Linting Swift sources and tests"
 swift format lint --recursive \
   LectureBoardAI/Sources \
+  LectureBoardAI/Tests \
   Packages/LectureBoardCore/Sources \
   Packages/LectureBoardCore/Tests
 
-echo "[2/8] Running platform-neutral core tests"
+echo "[2/10] Running platform-neutral core tests"
 make test-core
 
-echo "[3/8] Building the native app when macOS and XcodeGen are available"
+echo "[3/10] Running native app tests when macOS and XcodeGen are available"
+if [[ "$(uname -s)" == "Darwin" ]] && command -v xcodegen >/dev/null 2>&1; then
+  make test-app
+else
+  echo "Native app tests skipped: macOS and XcodeGen are required."
+fi
+
+echo "[4/10] Building the native app when macOS and XcodeGen are available"
 if [[ "$(uname -s)" == "Darwin" ]] && command -v xcodegen >/dev/null 2>&1; then
   make build
 else
-  echo "Native app build skipped in this environment."
+  echo "Native app build skipped: macOS and XcodeGen are required."
 fi
 
-echo "[4/8] Checking that all Swift sources are included in Git"
+echo "[5/10] Building and smoke-testing the runtime app when macOS and XcodeGen are available"
+if [[ "$(uname -s)" == "Darwin" ]] && command -v xcodegen >/dev/null 2>&1; then
+  make build-runtime
+  make test-runtime-launch-smoke
+else
+  echo "Runtime app build and launch smoke test skipped: macOS and XcodeGen are required."
+fi
+
+echo "[6/10] Checking that all Swift sources are included in Git"
 ./scripts/check-publication-sources.sh
 
-echo "[5/8] Checking README language boundaries"
+echo "[7/10] Checking README language boundaries"
 ./scripts/check-readme-language-boundary.sh
 
-echo "[6/8] Checking for tracked build output"
+echo "[8/10] Checking for tracked build output"
 tracked="$(git ls-files)"
 if printf '%s\n' "$tracked" | grep -E '(^|/)(\.build|DerivedData)/' >/dev/null; then
   echo "Tracked build output found." >&2
   exit 1
 fi
 
-echo "[7/8] Checking for common secrets"
+echo "[9/10] Checking for common secrets"
 if grep -RInE --exclude-dir=.git --exclude-dir=.build --exclude='prepublish-check.sh' \
   '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|LECTUREBOARD_API_KEY=[^[:space:]]+|sk-[A-Za-z0-9_-]{20,})' .; then
   echo "Potential secret detected." >&2
   exit 1
 fi
 
-echo "[8/8] Checking for lecture-data extensions"
+echo "[10/10] Checking for lecture-data extensions"
 if find . -type f \
   ! -path './.git/*' \
   ! -path './.build/*' \

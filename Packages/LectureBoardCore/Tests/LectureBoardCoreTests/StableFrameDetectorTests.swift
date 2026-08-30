@@ -37,6 +37,41 @@ struct StableFrameDetectorTests {
     #expect(observation.stability == .unchanged)
   }
 
+  @Test func defaultConfigurationReportsMeasuredSlideDifferenceAsAChange() {
+    var detector = StableFrameDetector()
+    let firstSlide = fingerprint(100)
+    let secondSlide = fingerprint(107)
+    _ = detector.ingest(firstSlide)
+    _ = detector.ingest(firstSlide)
+    _ = detector.ingest(firstSlide)
+
+    #expect(detector.ingest(secondSlide).stability == .transitioning)
+    #expect(detector.ingest(secondSlide).stability == .transitioning)
+    let observation = detector.ingest(secondSlide)
+
+    #expect(observation.differenceFromStableFrame! > 0.027)
+    #expect(observation.stability == .slideChanged)
+  }
+
+  @Test func defaultConfigurationKeepsMeasuredIdleNoiseUnchanged() {
+    var detector = StableFrameDetector()
+    let stableFrame = fingerprint(columns: 32, rows: 18, luminance: 100)
+    _ = detector.ingest(stableFrame)
+    _ = detector.ingest(stableFrame)
+    _ = detector.ingest(stableFrame)
+
+    var noisyLuminance = stableFrame.luminance
+    for index in noisyLuminance.indices.prefix(51) {
+      noisyLuminance[index] += 1
+    }
+    let observation = detector.ingest(
+      FrameFingerprint(sampleColumns: 32, sampleRows: 18, luminance: noisyLuminance)
+    )
+
+    #expect(observation.differenceFromStableFrame! < 0.00035)
+    #expect(observation.stability == .unchanged)
+  }
+
   @Test func waitsForANewStableFrameBeforeReportingSlideChange() {
     var detector = StableFrameDetector(configuration: configuration)
     let firstSlide = fingerprint(10)
@@ -108,10 +143,14 @@ struct StableFrameDetectorTests {
   }
 
   private func fingerprint(_ luminance: UInt8) -> FrameFingerprint {
+    fingerprint(columns: 2, rows: 2, luminance: luminance)
+  }
+
+  private func fingerprint(columns: Int, rows: Int, luminance: UInt8) -> FrameFingerprint {
     FrameFingerprint(
-      sampleColumns: 2,
-      sampleRows: 2,
-      luminance: Array(repeating: luminance, count: 4)
+      sampleColumns: columns,
+      sampleRows: rows,
+      luminance: Array(repeating: luminance, count: columns * rows)
     )
   }
 }
