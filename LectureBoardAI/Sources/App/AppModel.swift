@@ -71,6 +71,7 @@ final class AppModel: ObservableObject {
   private var nextCaptureOperationRawValue: UInt64 = 0
   private var activeCaptureSessionID: CaptureOperationID?
   private var activeCaptureWindowID: CGWindowID?
+  private var activeCaptureIdentity: PowerPointWindowIdentity?
   private var lastAcceptedCaptureSequenceNumber: UInt64?
   private var analysisGeneration = 0
   private var slideAnalysisTask: Task<Void, Never>?
@@ -90,7 +91,11 @@ final class AppModel: ObservableObject {
   }
 
   var selectedWindow: PowerPointWindowDescriptor? {
-    powerPointWindows.first { $0.id == selectedPowerPointWindowID }
+    guard let selectedPowerPointWindowID else { return nil }
+    return PowerPointWindowIdentityResolver.uniqueDescriptor(
+      windowID: selectedPowerPointWindowID,
+      in: powerPointWindows
+    )
   }
 
   @discardableResult
@@ -118,7 +123,11 @@ final class AppModel: ObservableObject {
       powerPointWindows = windows
 
       if let previousSelection,
-        windows.contains(where: { $0.id == previousSelection })
+        let refreshedSelection = PowerPointWindowIdentityResolver.uniqueDescriptor(
+          windowID: previousSelection,
+          in: windows
+        ),
+        activeCaptureIdentity == nil || refreshedSelection.identity == activeCaptureIdentity
       {
         selectedPowerPointWindowID = previousSelection
       } else {
@@ -128,7 +137,13 @@ final class AppModel: ObservableObject {
           status = .ready
           return
         }
-        selectedPowerPointWindowID = windows.first?.id
+        selectedPowerPointWindowID =
+          windows.first { window in
+            PowerPointWindowIdentityResolver.uniqueDescriptor(
+              windowID: window.id,
+              in: windows
+            ) != nil
+          }?.id
       }
       status = .ready
     } catch {
@@ -138,13 +153,13 @@ final class AppModel: ObservableObject {
   }
 
   func startWindowCapture() async {
-    guard let selectedWindow else {
+    guard let selectedWindow, let selectedIdentity = selectedWindow.identity else {
       captureStatus = .error(
         NSLocalizedString("error.captureWindowUnavailable", comment: "")
       )
       return
     }
-    let selectedPowerPointWindowID = selectedWindow.id
+    let selectedPowerPointWindowID = selectedIdentity.windowID
     guard
       CaptureControlPolicy.canStart(
         screenCaptureAccessGranted: permissionService.screenCaptureAccessGranted,
@@ -158,6 +173,7 @@ final class AppModel: ObservableObject {
     let operationID = nextCaptureOperationID()
     activeCaptureSessionID = operationID
     activeCaptureWindowID = selectedPowerPointWindowID
+    activeCaptureIdentity = selectedIdentity
     captureStatus = .starting
     capturedFrameCount = 0
     captureDeliveryMetrics.reset()
@@ -177,7 +193,7 @@ final class AppModel: ObservableObject {
     do {
       try await windowCapture.start(
         operationID: operationID,
-        windowID: selectedPowerPointWindowID,
+        identity: selectedIdentity,
         onFrame: { [weak self] frame in
           Task { @MainActor [weak self] in
             self?.receive(frame, sessionID: operationID)
@@ -190,10 +206,11 @@ final class AppModel: ObservableObject {
         }
       )
       guard activeCaptureSessionID == operationID else { return }
-      guard selectedPowerPointWindowID == self.selectedPowerPointWindowID else {
+      guard selectedIdentity == self.selectedWindow?.identity else {
         let stopOperationID = nextCaptureOperationID()
         activeCaptureSessionID = nil
         activeCaptureWindowID = nil
+        activeCaptureIdentity = nil
         stableFrameDetector.reset()
         stableContentChangeDetector.reset()
         lastAcceptedCaptureSequenceNumber = nil
@@ -207,6 +224,7 @@ final class AppModel: ObservableObject {
       guard activeCaptureSessionID == operationID else { return }
       activeCaptureSessionID = nil
       activeCaptureWindowID = nil
+      activeCaptureIdentity = nil
       captureStatus = .error(error.localizedDescription)
       stableFrameDetector.reset()
       stableContentChangeDetector.reset()
@@ -234,6 +252,7 @@ final class AppModel: ObservableObject {
     let operationID = nextCaptureOperationID()
     activeCaptureSessionID = nil
     activeCaptureWindowID = nil
+    activeCaptureIdentity = nil
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
@@ -370,6 +389,7 @@ final class AppModel: ObservableObject {
     let stopOperationID = nextCaptureOperationID()
     activeCaptureSessionID = nil
     activeCaptureWindowID = nil
+    activeCaptureIdentity = nil
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil

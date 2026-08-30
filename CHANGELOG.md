@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 - macOS toolchain diagnostic and first-run scripts
 - Japanese local-development and session-handoff documentation
 - Selected-window ScreenCaptureKit stream for continuous PowerPoint frame capture
-- Deterministic stable-frame and slide-change detection with unit tests
+- Deterministic stable-frame and significant visual/content-change classification with unit tests
 - In-app capture controls, counters, and a latest-stable-frame preview
 - Stable-frame Vision text and rectangle analysis using the native macOS framework
 - Deterministic normalized occupied-region assembly with unit tests
@@ -23,16 +23,17 @@ All notable changes to this project will be documented in this file.
 - Monotonic capture-operation ownership and regression tests for overlapping starts, stops, errors, refreshes, and selection changes
 - Exact whole-requirement team binding checks, including disjunction and negation regressions, for the optional Developer-signing path
 - Fixed-message runtime failure reports that discard untrusted framework error details
-- Controlled synthetic PowerPoint runtime evidence for current static frame delivery and Vision execution, plus separately identified pre-lifecycle dynamic calibration evidence
+- Build-specific historical synthetic PowerPoint evidence for static frame delivery, Vision execution, and pre-semantic dynamic calibration; not evidence for the current semantic build
 
 ### Planned
 
 - Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
+- An independent PowerPoint slide-identity signal before actual slide transitions are counted
 - Runtime calibration of Vision recognition and occupied regions with real presentations
 - PowerPoint package parsing and speaker-note extraction
 - Japanese–English code-switching transcription
 - Contextual AI-provider adapters
-- Signed and notarized alpha release
+- Developer ID-signed and notarized release-candidate and `v1.0.0` distribution artifacts
 
 ## [0.1.0-alpha] - 2026-08-29
 

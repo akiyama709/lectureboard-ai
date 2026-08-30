@@ -395,6 +395,48 @@ The final `make verify` run completed all 11 stages successfully on 2026-08-30:
 
 The final runtime executable reproduced checkpoint SHA-256 `3ee3e83ee69386891d41c9f8890c14cb6b30f18524fd5858181eb579efcfd439` and ad hoc CDHash `6ad10a5e800ac45a5d1779196cd5bc547dd34e35`. `file` again identified a Mach-O 64-bit arm64 executable, and `codesign --verify --deep --strict` passed. The bundle is not Developer ID distribution signed or notarized.
 
+### Public-v1 completion definition and PowerPoint identity hardening at 16:28 JST
+
+The project completion definition was extended beyond the lecture-ready alpha gate. Completion now means a public `v1.0.0` GitHub Release that contains an installable macOS artifact with hardened runtime, Developer ID distribution signing, Apple notarization, and successful post-publication re-download verification. Repository creation, source availability, alpha, beta, and release-candidate builds remain intermediate gates. The authoritative checklist is `docs/v1-release-checklist.md`; ADR 0007 records the decision. The initial `scripts/publish-to-github.sh` and its associated publication checklists are now explicitly historical and must not be reused for branch updates or the final release.
+
+A release-definition checker and negative fixture test were added. They require the public-v1 completion statement; alpha, beta, and release-candidate status as intermediate gates; the beta, release-candidate, and public-v1 milestones; hardened runtime; Developer ID signing; notarization; public-artifact re-download and independent re-verification; the Japanese and English definitions; the v1 checklist; corrected CHANGELOG language that does not claim independent slide identity or current-build runtime evidence; the completed initial-source-publication review and separate v1-scope reassessment in ADR 0006; and ADR 0007. The negative fixtures separately reject a missing v1 checklist, public-v1 milestone, README completion definition, prerelease-intermediate statement, hardened-runtime gate, public-artifact re-download gate, downloaded-artifact security rechecks, corrected visual/content-change wording, corrected historical-evidence wording, and corrected ADR 0006 status.
+
+The historical initial-publication script now refuses to run inside an existing Git checkout or when the target GitHub repository already exists. It also fails closed when remote absence cannot be established, before `git init`, staging, or committing. Four fixtures cover an existing checkout, existing remote, indeterminate remote state, and a confirmed HTTP 404 that is allowed to reach initialization. The live current-repository check also stopped immediately at the existing-checkout guard without changing Git state. `make verify` runs this guard regression as stage 9, the release-definition fixture as stage 10, and the live release-definition consistency gate as stage 11 of 14.
+
+The prior current-build dynamic attempt was also reclassified more precisely. Production window discovery and capture use ScreenCaptureKit and do not depend on Accessibility. The failed check occurred in an ignored local automation helper: Core Graphics saw the exact synthetic window, while PowerPoint's Accessibility `AXWindows` result did not expose a usable `AXWindow`. The helper therefore stopped before input. This is not evidence that the production ScreenCaptureKit scanner or capture path failed, and no Accessibility, AppleScript, HID, keyboard, or mouse fallback was added to production code.
+
+The tracked production capture path was hardened independently of that helper:
+
+- `PowerPointWindowIdentity` freezes the ScreenCaptureKit window identifier, owning process identifier, and exact case-sensitive `com.microsoft.Powerpoint` bundle identifier.
+- The scanner no longer accepts an application-name fallback.
+- Title and window-ID runtime selection apply the same owner policy.
+- Capture start re-enumerates ScreenCaptureKit windows and proceeds only when the window identifier is unique and the complete frozen identity still matches.
+- Reused identifiers, changed owner processes, wrong or missing bundles, duplicate descriptors, missing owners, missing targets, and stale cached identities fail closed.
+- `AppModel` passes the frozen identity through start, stops when a refresh replaces the owner behind the same window identifier, and preserves the active session when the complete identity remains unchanged.
+
+Native regressions cover all of the rejection paths above, the positive full-identity resolution path, the identity passed to capture, replacement during a suspended start, replacement during refresh, and preservation across a same-identity refresh. An independent read-only code audit found no remaining P0 or P1 issue; the audit's P2 requests for direct resolver coverage and a non-nil session-preservation assertion were added before final verification.
+
+The required baseline commands were repeated. The first sandboxed `make local-setup` could not write Swift and Clang user cache paths and failed before tests; the unchanged command then succeeded in the ordinary local macOS context, where `make doctor` reported zero failures and zero warnings, GitHub CLI authentication as `akiyama709`, all 80 Core tests passed, and XcodeGen regenerated the project. This remains an execution-sandbox boundary rather than a source failure.
+
+Two consecutive 13-stage `make verify` runs at 16:28 JST were successful intermediate checkpoints. Final audit then added the initial-publication guard, expanded the completion-definition regressions, corrected two CHANGELOG overclaims, and reconciled ADR 0006 with the completed initial source publication and the still-required v1-scope reassessment. After those changes, the final ordinary-context `make verify` run started at 16:42 JST, completed by 16:42:58 JST, and passed all 14 stages against the final staged source. It verified:
+
+- Swift format lint for all app and Core sources and tests
+- All 80 Core tests in 12 suites
+- All 89 native app tests in 16 suites with local ad hoc signing
+- The signing-disabled native arm64 compile-and-link build
+- The arm64 ad hoc runtime build, English and Japanese resources, no debug-dylib dependency, and strict bundle-signature verification
+- WindowServer preflight regressions and runtime launch smoke without requesting Screen Recording
+- Publication-source fixture and live source-inclusion checks
+- The four-path initial-publication fail-closed fixture
+- README language boundary and the expanded release-definition fixtures and consistency gate
+- No tracked build output, common secret pattern, or lecture-data extension
+
+The final runtime executable SHA-256 was `512fd4febf52768d1248fdcd6975ad08ba241f09230c226964a95451fdbcc7cb`. Its ad hoc CDHash was `e1a87229d46e21ed110f42255f96b053cff24024`; `file` identified a Mach-O 64-bit arm64 executable, and the complete bundle passed strict signature verification. This is a local development artifact, not a hardened-runtime, Developer ID distribution-signed, notarized, beta, release-candidate, or `v1.0.0` artifact.
+
+No live dynamic slideshow or mouse-ink input was sent during this work, and no current-build schema-3 runtime success report was created. Those gates remain unverified. No branch was pushed, no pull request or tag was created, and no GitHub Release was published.
+
+At 16:33 JST, a read-only GitHub query confirmed that `akiyama709/lectureboard-ai` was `PUBLIC` with `main` as its default branch. `gh release list --repo akiyama709/lectureboard-ai --limit 100` returned no entries, and the local tag list was empty. This verifies only that no GitHub Release or local tag existed at that checkpoint; it does not verify a release artifact or any untested runtime behavior.
+
 ## Still unverified on this Mac
 
 - Independent LaunchServices capture of a current schema-3 build and post-restart permission persistence

@@ -14,4 +14,4 @@ API credentials must be stored in the macOS Keychain by provider adapters. They 
 
 ## Supported versions
 
-During the alpha phase, only the latest tagged alpha receives security fixes. No production-security warranty is made.
+No GitHub prerelease or final release has been published. During development, security fixes target the latest supported commit on `main`; no production-security warranty is made for the alpha scaffold or local development artifacts. If a prerelease is published, its release notes must state whether it receives security fixes. The supported-version policy for `v1.0.0` must be fixed before the release-candidate gate closes.

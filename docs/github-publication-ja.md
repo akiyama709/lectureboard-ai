@@ -1,8 +1,14 @@
-# GitHub公開チェックリスト
+# 初回GitHubリポジトリ公開記録
 
 想定公開先：`akiyama709/lectureboard-ai`
 
-## 1．公開前の判断
+## この文書の位置付け
+
+　本書は，2026年8月29日に公開ソースリポジトリを初めて作成した際の判断，確認及び手順を残す履歴文書である．公開リポジトリは作成済みであり，以下の初回公開コマンド及び`scripts/publish-to-github.sh`を再実行しない．
+
+　この初回リポジトリ公開は，完成版の公開ではない．α版，β版，Release Candidate（RC）及び`v1.0.0`のGitHub Releaseはまだ公開していない．本プロジェクトの完成条件と正式公開手順は，[`v1-release-checklist.md`](v1-release-checklist.md)を正本とする．
+
+## 1．初回公開時の判断
 
 - [x] リポジトリ所有アカウントが`akiyama709`である
 - [x] リポジトリ名を`lectureboard-ai`とする
@@ -12,7 +18,7 @@
 - [x] 本プロジェクトに第三者の秘密情報が含まれていない
 - [x] 使用した既存コード・画像・フォントのライセンスを確認した
 
-## 2．ファイル
+## 2．初回公開時のファイル確認
 
 - [x] READMEの「実装済み」と「未実装」が正確である
 - [x] `.env`や秘密鍵がない
@@ -22,7 +28,9 @@
 - [x] `.DS_Store`と`.build`が除外されている
 - [x] `swift test --package-path Packages/LectureBoardCore`が通る
 
-## 3．GitHub設定
+## 3．初回公開時点のGitHub設定スナップショット
+
+　次のチェック状態は初回公開時点の記録であり，現在の設定又は`v1.0.0`公開可否を証明するものではない．正式版公開時には現行設定を改めて検証する．
 
 - [x] Default branchを`main`とする
 - [x] Issuesを有効にする
@@ -34,9 +42,9 @@
 - [ ] Pull RequestでCI通過を必須にする
 - [ ] Force pushとbranch deletionを制限する
 
-## 4．初回公開コマンド
+## 4．初回公開に用いた手順（履歴・再実行禁止）
 
-GitHub上で空のPublicリポジトリ`lectureboard-ai`を作成した後，ローカルで次を実行する．
+　次のコマンドは，空のPublicリポジトリを初めて作成する場合の履歴である．対象リポジトリは既に存在するため，現在の開発又は正式版公開では使用しない．
 
 ```bash
 cd lectureboard-ai
@@ -48,13 +56,15 @@ git remote add origin git@github.com:akiyama709/lectureboard-ai.git
 git push -u origin main
 ```
 
-HTTPSを使用する場合：
+　HTTPSを使用する場合の当時の代替案は次のとおりであった．
 
 ```bash
 git remote add origin https://github.com/akiyama709/lectureboard-ai.git
 ```
 
-## 5．初期Issue候補
+## 5．初回公開時のIssue候補
+
+　次の一覧は初回公開時の候補であり，現在の実装状況を示すものではない．現状は[`AGENTS.md`](../AGENTS.md)，[`ROADMAP.md`](../ROADMAP.md)及び[`build-verification.md`](build-verification.md)を参照する．
 
 - Implement live microphone transcription provider
 - Implement ScreenCaptureKit PowerPoint window capture
@@ -65,16 +75,22 @@ git remote add origin https://github.com/akiyama709/lectureboard-ai.git
 - Evaluate Japanese-English code switching
 - Add signed and notarized alpha release pipeline
 
-## 6．初回リリース
+## 6．当時のプレリリース案（未実施）
 
-最初のGitHub Releaseは，実PowerPoint取得と実音声入力が統合されるまでは`v0.1.0-alpha`とし，完成品と誤解されない説明を付す．
+　初回公開時には`v0.1.0-alpha`というGitHub Release案があったが，実施していない．`v0.1.0-alpha`を含め，α版，β版又はRCのGitHub Releaseが公開済みであるとは記述しない．将来プレリリースを公開する場合も，完成品ではないこと，検証範囲及び既知の制約を明記する．
 
-## 7．誤アカウント公開防止
+## 7．初回公開スクリプト（履歴・再実行禁止）
 
-同梱の`scripts/publish-to-github.sh`は，GitHub CLIで現在認証されているアカウントが`akiyama709`であることを確認する．一致しない場合は，リポジトリを作成せず停止する．
+　同梱の`scripts/publish-to-github.sh`は，初回リポジトリ作成時に，GitHub CLIで認証中のアカウントを確認するためのスクリプトである．現在のリポジトリ更新，作業ブランチのpush，PR又は`v1.0.0` GitHub Releaseには使用しない．
+
+　誤実行時のローカル副作用を防ぐため，現行スクリプトは既存のGit checkout内，又は同名のGitHubリポジトリが存在する場合，`git init`，stage及びcommitより前に終了する．GitHub上の不存在を安全に確認できない場合も変更せずに終了する．これは履歴スクリプトを再利用可能にするものではない．
 
 ```bash
 ./scripts/publish-to-github.sh
 ```
 
-このスクリプトは公開直前に再度確認を求める．所属機関の知財・ソフトウェア公開規程の確認が終わるまでは実行しない．
+　上記は履歴上の呼出し方を示すだけであり，再実行しない．通常の変更は作業ブランチ，Pull Request，必須CI及び`main`への統合によって行う．完成版のタグ及びGitHub Releaseを外部公開する直前には，別途，明示的な最終確認を得る．
+
+## 8．完成版公開への移行
+
+　`v1.0.0`では，公開予定コミットと同一の成果物について，Developer ID署名，Hardened Runtime，Apple notarization，インストール及び新規Macでの起動を検証する．その後，明示的な最終確認を得て，署名・notarization済みのインストール可能なmacOS成果物，リリースノート及びSHA-256を含む公開GitHub Releaseを作成する．公開物を再取得して検証し，その証拠を記録した時点を完成とする．

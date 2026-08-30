@@ -552,53 +552,18 @@ LectureBoard Sessions/
 
 ## 17．実装順序
 
-### Milestone 0：基盤
+　実装順序及び完成条件の正本は[`ROADMAP.md`](../ROADMAP.md)とし，日本語版は[`roadmap-ja.md`](roadmap-ja.md)とする．本設計書の個別機能は，次の依存順序に従う．
 
-- 中核モデル
-- 規則ベース板書判断
-- 空白配置
-- SwiftUIデモ
-- 自動テスト
-- GitHub文書とCI
+1. 安全なPowerPoint対象窓特定及び連続取得
+2. 安定した視覚・内容更新，スライドキャンバス分離及び独立したスライド同一性
+3. OCR，図形，占有領域及び確認済み既存インク
+4. `.pptx`，発表者ノート及び確定発話を用いる根拠付き文脈判断
+5. 人間の手書きを優先する安定板書及びセッション保存
+6. 制御講義によるα検証，代表資料によるβ検証及び機能凍結後のRC検証
+7. Developer ID署名，Hardened Runtime，Apple notarization及びクリーンMacでの受入試験
+8. 公開`v1.0.0` GitHub Release及び公開成果物の再取得検証
 
-### Milestone 1：実音声
-
-- マイク選択
-- 日本語・英語音声認識
-- 意味単位分割
-- 文脈バッファ
-- 確定発話だけを板書判断へ送る
-
-### Milestone 2：PowerPoint
-
-- PowerPointウィンドウ選択
-- ScreenCaptureKit連続取得
-- スライド変化検出
-- Visionによる占有領域
-- 合成出力ウィンドウ
-
-### Milestone 3：ペンタブ
-
-- 低遅延手書き
-- 筆圧・傾き
-- 人間占有領域
-- AI板書とのレイヤー分離
-
-### Milestone 4：高度な文脈AI
-
-- プロバイダプロトコル
-- 根拠付き構造化出力
-- 幻覚抑制
-- 日英混在用語集
-- ローカル／クラウド選択
-
-### Milestone 5：β版
-
-- 講義後編集
-- PDF／SVG／Markdown出力
-- クラッシュ回復
-- 署名・notarization
-- 実講義評価
+　公開リポジトリ作成，α版，β版及びRCは中間ゲートである．[`v1-release-checklist.md`](v1-release-checklist.md)の全項目を満たす公開`v1.0.0` GitHub Releaseの成立だけを，本プロジェクトの完成とする．
 
 ## 18．公式技術資料
 

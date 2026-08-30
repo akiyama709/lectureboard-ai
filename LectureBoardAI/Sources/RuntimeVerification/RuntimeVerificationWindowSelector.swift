@@ -4,7 +4,7 @@ import LectureBoardCore
 
 struct RuntimeVerificationWindowSelection: Equatable, Sendable {
   enum Resolution: Equatable, Sendable {
-    case selected(CGWindowID)
+    case selected(PowerPointWindowIdentity)
     case notFound
     case ambiguous
   }
@@ -14,9 +14,6 @@ struct RuntimeVerificationWindowSelection: Equatable, Sendable {
 }
 
 enum RuntimeVerificationWindowSelector {
-  private static let powerPointApplicationName = "Microsoft PowerPoint"
-  private static let powerPointBundleIdentifier = "com.microsoft.Powerpoint"
-
   static func select(
     from windows: [PowerPointWindowDescriptor],
     target: RuntimeVerificationWindowTarget
@@ -41,10 +38,11 @@ enum RuntimeVerificationWindowSelector {
       )
     }
 
-    let exactMatches = windows.filter { normalized($0.title) == target }
+    let eligibleWindows = windows.filter { $0.identity != nil }
+    let exactMatches = eligibleWindows.filter { normalized($0.title) == target }
     let preferredMatches: [PowerPointWindowDescriptor]
     if exactMatches.isEmpty {
-      preferredMatches = windows.filter { normalized($0.title).contains(target) }
+      preferredMatches = eligibleWindows.filter { normalized($0.title).contains(target) }
     } else {
       preferredMatches = exactMatches
     }
@@ -56,8 +54,21 @@ enum RuntimeVerificationWindowSelector {
         matchedWindowCount: 0
       )
     case 1:
+      guard let identity = preferredMatches[0].identity else {
+        return RuntimeVerificationWindowSelection(
+          resolution: .notFound,
+          matchedWindowCount: 0
+        )
+      }
+      let identifierMatchCount = windows.filter { $0.id == identity.windowID }.count
+      guard identifierMatchCount == 1 else {
+        return RuntimeVerificationWindowSelection(
+          resolution: .ambiguous,
+          matchedWindowCount: identifierMatchCount
+        )
+      }
       return RuntimeVerificationWindowSelection(
-        resolution: .selected(preferredMatches[0].id),
+        resolution: .selected(identity),
         matchedWindowCount: 1
       )
     default:
@@ -80,14 +91,14 @@ enum RuntimeVerificationWindowSelector {
         matchedWindowCount: 0
       )
     case 1:
-      guard isMicrosoftPowerPoint(identifierMatches[0]) else {
+      guard let identity = identifierMatches[0].identity else {
         return RuntimeVerificationWindowSelection(
           resolution: .notFound,
           matchedWindowCount: 0
         )
       }
       return RuntimeVerificationWindowSelection(
-        resolution: .selected(identifierMatches[0].id),
+        resolution: .selected(identity),
         matchedWindowCount: 1
       )
     default:
@@ -96,13 +107,6 @@ enum RuntimeVerificationWindowSelector {
         matchedWindowCount: identifierMatches.count
       )
     }
-  }
-
-  private static func isMicrosoftPowerPoint(
-    _ window: PowerPointWindowDescriptor
-  ) -> Bool {
-    window.bundleIdentifier.caseInsensitiveCompare(powerPointBundleIdentifier) == .orderedSame
-      && window.applicationName.caseInsensitiveCompare(powerPointApplicationName) == .orderedSame
   }
 
   private static func normalized(_ value: String) -> String {

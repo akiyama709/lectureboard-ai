@@ -1,4 +1,8 @@
-# Open-source release checklist
+# Initial open-source repository checklist (historical)
+
+This checklist records the initial publication of the source repository on 2026-08-29. It is not the release checklist for the completed application. The repository is public, but no alpha, beta, release-candidate, or `v1.0.0` GitHub Release has been published.
+
+Do not rerun the initial repository-publication script. Use [`v1-release-checklist.md`](v1-release-checklist.md) for the authoritative completion gates and the future public `v1.0.0` release.
 
 ## Repository
 
@@ -27,7 +31,9 @@
 
 ## Communication
 
-- [x] Clearly label the release as alpha
+- [x] Clearly label the repository implementation as an alpha scaffold
 - [x] State what is implemented and what is not
 - [x] Include a privacy warning for real lecture use
 - [x] Publish reproducible build instructions
+
+These checked items describe repository content at initial publication. They do not establish that a distributable app, prerelease, signed build, notarized build, or completed product exists.

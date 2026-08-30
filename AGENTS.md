@@ -19,6 +19,7 @@ The lecturer must not need to memorize or use voice commands. The system should 
 - Confirmed board elements should remain stable so students can read and take notes.
 - Local processing is preferred; cloud providers must remain optional adapters.
 - Public GitHub repository: `akiyama709/lectureboard-ai`.
+- Project completion means a public `v1.0.0` GitHub Release with a verified, signed, notarized, installable macOS artifact. Repository creation, source availability, alpha, beta, and release-candidate builds are intermediate milestones rather than completion.
 
 ## Current implementation state
 
@@ -29,6 +30,7 @@ Implemented:
 - Native SwiftUI/AppKit application shell.
 - PowerPoint-window discovery prototype with ScreenCaptureKit.
 - Compiled ScreenCaptureKit adapter for continuous capture of the selected PowerPoint window.
+- Fail-closed capture identity binding across the ScreenCaptureKit window identifier, owning process identifier, and exact PowerPoint bundle identifier from selection through capture start.
 - Deterministic coarse luminance fingerprints and stable-frame or significant-visual-change classification. Image difference alone is not treated as slide identity.
 - Persistent visual-content updates from dense 160-by-90 RGB fingerprints.
 - Compiled Vision text and rectangle analysis triggered by confirmed stable visual frames or content updates.
@@ -41,13 +43,13 @@ Implemented:
 - Platform-neutral `LectureBoardCore` package.
 - Contextual importance scoring and board-intent classification.
 - Vector board-scene models and simple empty-region placement.
-- Core unit tests and open-source repository documentation. The current source passes 80 Core tests and 71 native app tests on the development Mac.
+- Core unit tests and open-source repository documentation. The current source passes 80 Core tests and 89 native app tests on the development Mac.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
 - A later schema-2 but pre-semantic-correction build completed a separate 40-second exact-window run with 373 frames, 6 stable snapshots, the same 5 legacy heuristic change classifications, and 2 content revisions. The report SHA-256 is `704d9266bf1564161dd756a0be57c4a47d5459dfb9c9ae5cf0c103acc8320f41`. This is build-specific historical evidence for capture and metadata production; it must not be presented as verification of the current source or of slide identity.
-- No live dynamic or mouse-ink result has yet been recorded for the current build in which image-only changes are content revisions and `slideChangeCount` is reserved for a future independent identity signal. A current-build dynamic attempt stopped before sending input because PowerPoint exposed no usable Accessibility window for the exact synthetic presentation; no runtime report was produced.
+- No live dynamic or mouse-ink result has yet been recorded for the current build in which image-only changes are content revisions and `slideChangeCount` is reserved for a future independent identity signal. A current-build dynamic attempt stopped before sending input because the ignored local automation helper could not establish a usable Accessibility window for the exact synthetic presentation; no runtime report was produced. This does not establish that the production ScreenCaptureKit scanner or capture path failed.
 - Neither historical run establishes standalone LaunchServices authorization, recognition or coordinate accuracy, slide-canvas isolation, representative-deck coverage, or lecture-length reliability.
 
 Not yet implemented or verified:

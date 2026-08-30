@@ -2,6 +2,8 @@
 
 ## Product and design
 
+- [Project roadmap](../ROADMAP.md)
+- [開発ロードマップ](roadmap-ja.md)
 - [macOS MVP technical design（日本語）](technical-design-ja.md)
 - [Detailed technical design（日本語）](technical-design-detailed-ja.md)
 - [Product requirements（日本語）](product-requirements-ja.md)
@@ -21,12 +23,13 @@
 
 - [Privacy and security](privacy-and-security.md)
 - [プライバシー・セキュリティ設計](privacy-security-ja.md)
-- [GitHub公開チェックリスト](github-publication-ja.md)
-- [Open-source release checklist](open-source-release-checklist.md)
+- [v1.0.0 release checklist](v1-release-checklist.md) — authoritative completion and release gates
+- [初回GitHubリポジトリ公開記録](github-publication-ja.md) — historical initial-publication record; not the v1 release procedure
+- [Initial open-source repository checklist](open-source-release-checklist.md) — historical initial-publication checklist
 
 ## Architecture decision records
 
-The [`adr`](adr/) directory records the initial platform，overlay，context，AI-provider，grounding，and license decisions.
+The [`adr`](adr/) directory records the platform，overlay，context，AI-provider，grounding，license，and public-v1 completion decisions.
 
 ## Local development handoff
 

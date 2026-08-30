@@ -114,12 +114,45 @@ typealias CaptureErrorHandler = @Sendable (String) -> Void
 protocol PowerPointWindowCapturing: Sendable {
   func start(
     operationID: CaptureOperationID,
-    windowID: CGWindowID,
+    identity: PowerPointWindowIdentity,
     onFrame: @escaping CaptureFrameHandler,
     onError: @escaping CaptureErrorHandler
   ) async throws
 
   func stop(operationID: CaptureOperationID) async
+}
+
+struct ReenumeratedPowerPointWindowCandidate: Equatable, Sendable {
+  let windowID: CGWindowID
+  let ownerProcessID: pid_t?
+  let bundleIdentifier: String?
+
+  var identity: PowerPointWindowIdentity? {
+    guard let ownerProcessID, let bundleIdentifier else { return nil }
+    return PowerPointWindowIdentity(
+      windowID: windowID,
+      ownerProcessID: ownerProcessID,
+      bundleIdentifier: bundleIdentifier
+    )
+  }
+}
+
+enum ReenumeratedPowerPointWindowResolver {
+  static func uniqueMatchingIndex(
+    for expectedIdentity: PowerPointWindowIdentity,
+    among candidates: [ReenumeratedPowerPointWindowCandidate]
+  ) -> Int? {
+    let identifierMatches = candidates.indices.filter {
+      candidates[$0].windowID == expectedIdentity.windowID
+    }
+    guard identifierMatches.count == 1,
+      let index = identifierMatches.first,
+      candidates[index].identity == expectedIdentity
+    else {
+      return nil
+    }
+    return index
+  }
 }
 
 actor PowerPointWindowCapture: PowerPointWindowCapturing {
@@ -130,7 +163,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
 
   func start(
     operationID: CaptureOperationID,
-    windowID: CGWindowID,
+    identity: PowerPointWindowIdentity,
     onFrame: @escaping CaptureFrameHandler,
     onError: @escaping CaptureErrorHandler
   ) async throws {
@@ -167,15 +200,28 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     guard lifecycle.isCurrent(operationID) else {
       throw CancellationError()
     }
-    guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+    let candidates = content.windows.map { window in
+      ReenumeratedPowerPointWindowCandidate(
+        windowID: window.windowID,
+        ownerProcessID: window.owningApplication?.processID,
+        bundleIdentifier: window.owningApplication?.bundleIdentifier
+      )
+    }
+    guard
+      let windowIndex = ReenumeratedPowerPointWindowResolver.uniqueMatchingIndex(
+        for: identity,
+        among: candidates
+      )
+    else {
       lifecycle.finishFailedStart(operationID)
       throw PowerPointWindowCaptureError.selectedWindowUnavailable
     }
+    let window = content.windows[windowIndex]
 
     let filter = SCContentFilter(desktopIndependentWindow: window)
     let configuration = makeConfiguration(for: filter)
     let output = CaptureOutput(
-      windowID: windowID,
+      windowID: identity.windowID,
       frameHandler: onFrame,
       errorHandler: onError
     )

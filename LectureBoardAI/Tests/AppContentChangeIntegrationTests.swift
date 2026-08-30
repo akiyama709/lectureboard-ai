@@ -671,6 +671,7 @@ struct AppContentChangeIntegrationTests {
         id: 42,
         title: "Synthetic content integration window",
         applicationName: "Microsoft PowerPoint",
+        ownerProcessID: 700,
         bundleIdentifier: "com.microsoft.Powerpoint",
         frame: .zero
       )
@@ -773,7 +774,7 @@ private actor FrameEmittingWindowCapture: PowerPointWindowCapturing {
 
   func start(
     operationID: CaptureOperationID,
-    windowID: CGWindowID,
+    identity: PowerPointWindowIdentity,
     onFrame: @escaping CaptureFrameHandler,
     onError: @escaping CaptureErrorHandler
   ) async throws {

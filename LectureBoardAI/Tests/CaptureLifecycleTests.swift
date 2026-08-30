@@ -87,6 +87,88 @@ struct AppModelCaptureLifecycleTests {
     #expect(start.operationID < stopOperationID)
   }
 
+  @Test func startPassesTheFrozenWindowIdentityToCapture() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let model = makeModel(capture: capture)
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+
+    #expect(start.identity.windowID == 42)
+    #expect(start.identity.ownerProcessID == 700)
+    #expect(
+      start.identity.bundleIdentifier
+        == PowerPointWindowIdentity.expectedBundleIdentifier
+    )
+
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+    #expect(model.captureStatus == .capturing)
+    await model.stopWindowCapture()
+  }
+
+  @Test func completedStartStopsAfterSameWindowIDChangesOwnerProcess() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let model = makeModel(capture: capture)
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    model.powerPointWindows = [makeWindow(id: 42, ownerProcessID: 701)]
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+
+    #expect(start.identity.ownerProcessID == 700)
+    #expect(model.captureStatus == .stopped)
+    let stopOperationID = try await capture.stopInvocation(at: 0)
+    #expect(start.operationID < stopOperationID)
+  }
+
+  @Test func refreshStopsCaptureAfterSameWindowIDChangesOwnerProcess() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let replacement = makeWindow(id: 42, ownerProcessID: 701)
+    let model = makeModel(
+      capture: capture,
+      scanner: FixedWindowScanner(windows: [replacement])
+    )
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+    #expect(model.captureStatus == .capturing)
+
+    await model.refreshPowerPointWindows()
+
+    #expect(model.captureStatus == .stopped)
+    #expect(model.selectedWindow?.identity == replacement.identity)
+    let stopOperationID = try await capture.stopInvocation(at: 0)
+    #expect(start.operationID < stopOperationID)
+  }
+
+  @Test func refreshPreservesCaptureForTheSameExactWindowIdentity() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let sameWindow = makeWindow(id: 42, ownerProcessID: 700)
+    let model = makeModel(
+      capture: capture,
+      scanner: FixedWindowScanner(windows: [sameWindow])
+    )
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+    let sessionBeforeRefresh = try #require(model.activeCaptureSessionID(for: 42))
+
+    await model.refreshPowerPointWindows()
+
+    let stopInvocationCount = await capture.stopInvocationCount
+    #expect(model.captureStatus == .capturing)
+    #expect(model.activeCaptureSessionID(for: 42) == sessionBeforeRefresh)
+    #expect(stopInvocationCount == 0)
+
+    await model.stopWindowCapture()
+  }
+
   @Test func startRejectsAnIDMissingFromTheLatestWindowList() async {
     let capture = ControllableWindowCapture(suspendsStops: false)
     let model = makeModel(capture: capture)
@@ -271,11 +353,15 @@ struct AppModelCaptureLifecycleTests {
     return model
   }
 
-  private func makeWindow(id: CGWindowID) -> PowerPointWindowDescriptor {
+  private func makeWindow(
+    id: CGWindowID,
+    ownerProcessID: pid_t = 700
+  ) -> PowerPointWindowDescriptor {
     PowerPointWindowDescriptor(
       id: id,
       title: "Controlled window",
       applicationName: "Microsoft PowerPoint",
+      ownerProcessID: ownerProcessID,
       bundleIdentifier: "com.microsoft.Powerpoint",
       frame: .zero
     )
@@ -284,7 +370,7 @@ struct AppModelCaptureLifecycleTests {
 
 private struct CaptureInvocation: Sendable {
   let operationID: CaptureOperationID
-  let windowID: CGWindowID
+  let identity: PowerPointWindowIdentity
 }
 
 private enum CaptureLifecycleTestError: Error {
@@ -316,13 +402,13 @@ private actor ControllableWindowCapture: PowerPointWindowCapturing {
 
   func start(
     operationID: CaptureOperationID,
-    windowID: CGWindowID,
+    identity: PowerPointWindowIdentity,
     onFrame: @escaping CaptureFrameHandler,
     onError: @escaping CaptureErrorHandler
   ) async throws {
     errorHandlers[operationID] = onError
     startInvocations.append(
-      CaptureInvocation(operationID: operationID, windowID: windowID)
+      CaptureInvocation(operationID: operationID, identity: identity)
     )
     try await withCheckedThrowingContinuation { continuation in
       pendingStarts[operationID] = continuation

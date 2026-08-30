@@ -219,19 +219,18 @@ final class RuntimeVerificationRunner: ObservableObject {
       matchedWindowCount = selection.matchedWindowCount
       lastResolution = selection.resolution
 
-      if case .selected(let windowID) = selection.resolution {
-        let matchingDescriptors = model.powerPointWindows.filter { $0.id == windowID }
-        switch matchingDescriptors.count {
-        case 0:
-          lastResolution = .notFound
-        case 1:
-          if let window = matchingDescriptors.first {
-            return window
-          }
-        default:
-          lastResolution = .ambiguous
+      if case .selected(let identity) = selection.resolution {
+        if let window = PowerPointWindowIdentityResolver.uniqueDescriptor(
+          identity: identity,
+          in: model.powerPointWindows
+        ) {
+          return window
         }
-        matchedWindowCount = matchingDescriptors.count
+        let identifierMatchCount = model.powerPointWindows.filter {
+          $0.id == identity.windowID
+        }.count
+        matchedWindowCount = identifierMatchCount
+        lastResolution = identifierMatchCount > 1 ? .ambiguous : .notFound
       }
 
       let remaining = deadline.timeIntervalSinceNow

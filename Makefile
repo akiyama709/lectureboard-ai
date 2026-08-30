@@ -2,7 +2,7 @@ SHELL := /bin/bash
 PROJECT := LectureBoardAI.xcodeproj
 SCHEME := LectureBoardAI
 
-.PHONY: bootstrap doctor local-setup generate test test-core test-app test-app-script build build-runtime test-build-runtime-script test-runtime-launch-script test-runtime-launch-smoke test-publication-sources-script open codex verify clean
+.PHONY: bootstrap doctor local-setup generate test test-core test-app test-app-script build build-runtime test-build-runtime-script test-runtime-launch-script test-runtime-launch-smoke test-publication-sources-script test-initial-publication-script test-release-definition-script open codex verify clean
 
 
 doctor:
@@ -46,6 +46,12 @@ test-runtime-launch-smoke: test-runtime-launch-script
 
 test-publication-sources-script:
 	./scripts/test-check-publication-sources.sh
+
+test-initial-publication-script:
+	./scripts/test-publish-to-github.sh
+
+test-release-definition-script:
+	./scripts/test-check-release-definition.sh
 
 open:
 	./scripts/open-in-xcode.sh

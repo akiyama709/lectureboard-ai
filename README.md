@@ -4,7 +4,9 @@
 
 LectureBoard AI is an open-source research and development project for university lectures and online teaching. It is intended to listen to a lecturer, observe the current slide, estimate what is educationally important from context, and render a restrained digital-ink annotation layer. The lecturer should not need to say commands such as “write this on the board.”
 
-> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, selected-window capture, stable visual/content-update paths, Vision and raster-candidate analysis, transparent-overlay prototype, and tests are included. The current source passes 80 Core tests and 71 native app tests on the development Mac. Its image-only classifier reports a stable `.significantVisualChange`; the app records that as a visual/content revision and does not claim that the PowerPoint slide identity changed. `slideChangeCount` is reserved for a future independent identity signal and remains zero in the current implementation. No live dynamic or mouse-ink result has yet been recorded for this semantic build; a dynamic attempt stopped before sending input because PowerPoint exposed no usable Accessibility window for the exact synthetic presentation.
+> Status: **0.1.0-alpha repository scaffold**. The core context engine, vector board model, layout prototype, PowerPoint-window discovery, selected-window capture, stable visual/content-update paths, Vision and raster-candidate analysis, transparent-overlay prototype, and tests are included. The current source passes 80 Core tests and 89 native app tests on the development Mac. Its image-only classifier reports a stable `.significantVisualChange`; the app records that as a visual/content revision and does not claim that the PowerPoint slide identity changed. `slideChangeCount` is reserved for a future independent identity signal and remains zero in the current implementation. No live dynamic or mouse-ink result has yet been recorded for this semantic build; a dynamic attempt stopped before sending input because the ignored local automation helper could not establish a usable Accessibility window for the exact synthetic presentation. That result is not evidence that the production ScreenCaptureKit scanner or capture path failed.
+
+> Completion means publication of the public `v1.0.0` GitHub Release with a verified, signed, notarized, installable macOS artifact. The existing public repository and any alpha, beta, or release-candidate builds are intermediate milestones. See [`ROADMAP.md`](ROADMAP.md) for the validation gates.
 
 ## Design principles
 
@@ -31,6 +33,7 @@ Focusing on one operating system is deliberate. Screen capture, transparent over
 - Screen-capture permission checking
 - Discovery of visible PowerPoint windows with ScreenCaptureKit
 - A compiled selected-window ScreenCaptureKit stream with stable-snapshot preview
+- Fail-closed binding of the selected ScreenCaptureKit window ID, owning process ID, and exact PowerPoint bundle identifier through capture start
 - Deterministic coarse luminance fingerprints and stable-frame/significant-visual-change classification
 - Persistent content-update detection from dense 160-by-90 RGB fingerprints
 - A compiled Vision text/rectangle analyzer that runs on confirmed stable visual frames and content updates
@@ -151,7 +154,9 @@ Microsoft PowerPoint and other product names are trademarks of their respective 
 
 　講師が「ここを板書してください」などの命令を発することなく使える構成を目指します．現在のスライド，発表者ノート，直前までの発話，反復，対比，因果関係，定義，発話上の強調，既存板書などから，何を学生に残すべきかを文脈的に判断する設計です．
 
-　現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得，安定した視覚・内容更新の判定，Vision及びラスタ候補解析，透明オーバーレイの試作，テストを収録しています．現行ソースは，開発用Mac上でCore 80件及びネイティブApp 71件のテストに合格しています．画像差分だけからスライドの同一性を断定せず，Coreの`.significantVisualChange`をAppでは安定した視覚・内容更新として数えます．`slideChangeCount`は，将来の独立したスライド識別信号のために予約し，現行実装では増加させません．現行のruntimeレポートはschema 3であり，意味修正前のschema 2と機械的に区別できます．この意味修正後のビルドでは，動的スライド又はマウス手書きのライブ成功結果をまだ記録していません．動的検証の試行は，PowerPointが対象合成資料の利用可能なAccessibilityウィンドウを返さなかったため，入力送信前に停止しました．
+　現段階は**0.1.0-alphaの初期リポジトリ**です．文脈判断の中核モデル，ベクトル板書モデル，空白配置の試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得，安定した視覚・内容更新の判定，Vision及びラスタ候補解析，透明オーバーレイの試作，テストを収録しています．現行ソースは，開発用Mac上でCore 80件及びネイティブApp 89件のテストに合格しています．選択から取得開始まで，ScreenCaptureKit窓ID，所有PID及びPowerPointの完全一致bundle identifierを固定し，不一致又は重複時には取得を開始しません．画像差分だけからスライドの同一性を断定せず，Coreの`.significantVisualChange`をAppでは安定した視覚・内容更新として数えます．`slideChangeCount`は，将来の独立したスライド識別信号のために予約し，現行実装では増加させません．現行のruntimeレポートはschema 3であり，意味修正前のschema 2と機械的に区別できます．この意味修正後のビルドでは，動的スライド又はマウス手書きのライブ成功結果をまだ記録していません．動的検証の試行は，無視対象のローカル自動操作補助が対象合成資料の利用可能なAccessibilityウィンドウを確立できなかったため，入力送信前に停止しました．これは，本番のScreenCaptureKit窓検出又は取得が失敗した証拠ではありません．
+
+　本プロジェクトの完成は，検証済みで署名・notarization済みのインストール可能なmacOS配布物を伴う，公開`v1.0.0` GitHub Releaseの成立を意味します．既存の公開リポジトリ並びにα版，β版及びRelease Candidateは中間段階です．検証ゲートは[`ROADMAP.md`](ROADMAP.md)に示します．
 
 ### 当面の対象
 
