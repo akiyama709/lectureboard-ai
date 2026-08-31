@@ -12,6 +12,7 @@ struct RuntimeVerificationSnapshotTests {
       captureState: .capturing,
       visionState: .completed,
       slideCanvasState: .confirmed,
+      slideCanvasOverlayState: .mapped,
       frameCount: 120,
       newFrameCount: 4,
       repeatedFrameCount: 116,
@@ -45,6 +46,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["slideIdentitySampleCount"] as? Int == 8)
     #expect(object["slideIdentityContinuityBreakCount"] as? Int == 1)
     #expect(object["slideCanvasState"] as? String == "confirmed")
+    #expect(object["slideCanvasOverlayState"] as? String == "mapped")
     #expect(object["slideID"] == nil)
     #expect(object["slideIndex"] == nil)
     #expect(object["presentationSessionToken"] == nil)
@@ -58,6 +60,7 @@ struct RuntimeVerificationSnapshotTests {
       captureState: .idle,
       visionState: .idle,
       slideCanvasState: .invalidated,
+      slideCanvasOverlayState: .ambiguousContainingDisplays,
       frameCount: -1,
       newFrameCount: -2,
       repeatedFrameCount: -3,
@@ -87,6 +90,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.slideIdentitySampleCount == 0)
     #expect(snapshot.slideIdentityContinuityBreakCount == 0)
     #expect(snapshot.slideCanvasState == .invalidated)
+    #expect(snapshot.slideCanvasOverlayState == .ambiguousContainingDisplays)
     #expect(snapshot.contentRevisionCount == 0)
     #expect(snapshot.recognizedTextCount == 0)
     #expect(snapshot.detectedRectangleCount == 0)
@@ -118,6 +122,37 @@ struct RuntimeVerificationSnapshotTests {
       let encoded = try JSONEncoder().encode(state)
       #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
       #expect(try JSONDecoder().decode(RuntimeSlideCanvasState.self, from: encoded) == state)
+    }
+  }
+
+  @Test func slideCanvasOverlayStateRawValuesAreStableMetadata() throws {
+    let expected: [(RuntimeSlideCanvasOverlayState, String)] = [
+      (.unavailable, "unavailable"),
+      (.mapped, "mapped"),
+      (.captureContextMismatch, "captureContextMismatch"),
+      (
+        .surfaceGeometryUnavailableOrMismatched,
+        "surfaceGeometryUnavailableOrMismatched"
+      ),
+      (.screenGeometryUnavailable, "screenGeometryUnavailable"),
+      (.unsupportedSelectionProvenance, "unsupportedSelectionProvenance"),
+      (.invalidSurfaceGeometry, "invalidSurfaceGeometry"),
+      (.contentScaleMismatch, "contentScaleMismatch"),
+      (.invalidCanvasRegion, "invalidCanvasRegion"),
+      (.canvasOutsideCapturedContent, "canvasOutsideCapturedContent"),
+      (.invalidQuartzTarget, "invalidQuartzTarget"),
+      (.noContainingDisplay, "noContainingDisplay"),
+      (.ambiguousContainingDisplays, "ambiguousContainingDisplays"),
+      (.invalidAppKitTarget, "invalidAppKitTarget"),
+    ]
+
+    for (state, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(state)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(
+        try JSONDecoder().decode(RuntimeSlideCanvasOverlayState.self, from: encoded)
+          == state
+      )
     }
   }
 

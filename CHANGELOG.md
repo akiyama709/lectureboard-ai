@@ -38,6 +38,7 @@ All notable changes to this project will be documented in this file.
 - Independent App and Apple-provider transcription generation guards, provider stop and stale-callback rejection at semantic slide/canvas/capture boundaries, and explicit user resumption after each safety stop
 - Demo-scene cleanup at capture start and demo suppression during active capture or capture-provider shutdown
 - Metadata-only runtime schema 6 slide-canvas state with schema-1-through-schema-5 decoding compatibility
+- Metadata-only schema-7 overlay diagnostics and schema-8 confirmation provenance, plus narrow direct static exact-window capture evidence that does not validate user-confirmed canvas, visible overlay alignment, semantic identity, dynamic slides, mouse ink, or LaunchServices launch
 - Fail-closed production-overlay mapping from the confirmed output-pixel canvas through the exact current ScreenCaptureKit surface and `screenRect` into one uniquely containing AppKit display, bound to the capture operation, exact window, output dimensions, and current frame sequence, with no full-display or approximate fallback
 - Production-overlay eligibility checks for the frozen PowerPoint process and bundle being frontmost, one matching on-screen layer-zero Core Graphics window, window-bound agreement within two points, and no earlier intersecting on-screen window, plus a persistent manual-hide latch, visual/content-unavailable hiding, and an independently expiring eligibility lease
 - A separate full-display demo-overlay path that is never used as a production-coordinate fallback

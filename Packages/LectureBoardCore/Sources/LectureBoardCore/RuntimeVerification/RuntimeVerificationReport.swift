@@ -6,11 +6,21 @@ public enum RuntimeVerificationRunStatus: String, Codable, Equatable, Sendable {
   case failed
 }
 
+/// Records whether the runtime verifier itself requested slide-canvas
+/// confirmation. It deliberately does not infer that a person confirmed a
+/// canvas when the verifier only observed existing app state.
+public enum RuntimeSlideCanvasConfirmationMode: String, Codable, Equatable, Sendable {
+  case noneRequested
+  case diagnosticFullFrame
+}
+
 public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable {
   case screenRecordingUnavailable
   case windowNotFound
   case ambiguousWindow
   case captureFailed
+  case captureFrameUnavailable
+  case slideCanvasConfirmationFailed
   case outputWriteFailed
   case internalFailure
 
@@ -24,6 +34,10 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
       "More than one PowerPoint window matched the requested selection."
     case .captureFailed:
       "PowerPoint window capture failed."
+    case .captureFrameUnavailable:
+      "No capturable PowerPoint frame was delivered."
+    case .slideCanvasConfirmationFailed:
+      "The requested slide canvas could not be confirmed."
     case .outputWriteFailed:
       "The runtime verification report could not be written."
     case .internalFailure:
@@ -34,7 +48,7 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
 
 /// A metadata-only runtime verification record that excludes captured content and window titles.
 public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
-  public static let currentSchemaVersion = 6
+  public static let currentSchemaVersion = 8
 
   public let schemaVersion: Int
   public let startedAt: Date
@@ -47,6 +61,9 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
   public let matchedWindowCount: Int
   public let selectedWindowID: UInt32?
   public let selectedBundleIdentifier: String?
+  /// `nil` only when decoding a schema 1 through schema 7 report that did not
+  /// record confirmation provenance.
+  public let slideCanvasConfirmationMode: RuntimeSlideCanvasConfirmationMode?
   public let runStatus: RuntimeVerificationRunStatus
   public let failureCode: RuntimeVerificationFailureCode?
   public let failureMessage: String?
@@ -64,6 +81,7 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     matchedWindowCount: Int,
     selectedWindowID: UInt32?,
     selectedBundleIdentifier: String?,
+    slideCanvasConfirmationMode: RuntimeSlideCanvasConfirmationMode = .noneRequested,
     runStatus: RuntimeVerificationRunStatus,
     failureCode: RuntimeVerificationFailureCode?,
     untrustedFailureDetail _: String?,
@@ -95,6 +113,7 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     self.matchedWindowCount = max(matchedWindowCount, 0)
     self.selectedWindowID = selectedWindowID
     self.selectedBundleIdentifier = Self.normalizedMetadata(selectedBundleIdentifier)
+    self.slideCanvasConfirmationMode = slideCanvasConfirmationMode
     self.runStatus = runStatus
     if runStatus == .completed {
       self.failureCode = nil

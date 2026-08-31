@@ -22,6 +22,7 @@
 		32B0BAD8455006EF069C6262 /* AppleSpeechRecognizerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */; };
 		35BC6B6DE951DA097BC3E475 /* SlideCanvasOverlayMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1DAF0B44265BC7421ACDAE3 /* SlideCanvasOverlayMapper.swift */; };
 		37112F068A4C294AD6EFFB68 /* SlideCanvasCropper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0EA92CF3A0B5423014404B /* SlideCanvasCropper.swift */; };
+		384D1B69AAB6B188A4781135 /* RuntimeVerificationRunnerIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D65BCB707258FE845C04C66 /* RuntimeVerificationRunnerIntegrationTests.swift */; };
 		53537409C4AF944D620CEEE3 /* CaptureLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42C9215A5BA5559FDF4EE0E2 /* CaptureLifecycleTests.swift */; };
 		5761707899B7C6D6AA9990B0 /* RuntimeVerificationLaunchPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F13F8B70B77EDF54B1C9C1 /* RuntimeVerificationLaunchPolicyTests.swift */; };
 		58032BACDC7958B9DF1816E7 /* LocalizationResourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A260C8874F1DCC60F8B435B /* LocalizationResourceTests.swift */; };
@@ -36,8 +37,10 @@
 		7D0F7C013D60CAF470AB49D3 /* CaptureControlPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019E6AC260CFEF3D74B974DA /* CaptureControlPolicy.swift */; };
 		8101E217E14EB3CD58DCC807 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F453CD2C95C2282F00144BE6 /* AppModel.swift */; };
 		870663B764FE1F02EDD9165D /* RuntimeVerificationSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4BEFE7878AD8CA03EE430A /* RuntimeVerificationSnapshotProjector.swift */; };
+		8E6F6A95BAEA8F0F56E84460 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339DE12925806880C6DF0482 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift */; };
 		9090BCC90A84A8C83D6F189B /* RuntimeVerificationRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A933ACEEBCE6CE87BD3D07 /* RuntimeVerificationRunner.swift */; };
 		962ACFE2A3B95063564923E7 /* ScreenCaptureSetupPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0302CA2C3C1FD7E8E62412FB /* ScreenCaptureSetupPolicy.swift */; };
+		9B9A427405B04A23770D24D3 /* RuntimeVerificationCanvasConfirmationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2727F689FF17EFFBD3816B79 /* RuntimeVerificationCanvasConfirmationPolicy.swift */; };
 		A4E7163F132C8E8545BA9376 /* AppSlideIdentityIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7C61CD4E4190A5CDA3B42A /* AppSlideIdentityIntegrationTests.swift */; };
 		A7EAB2B8DD0FC248EBDBF6B2 /* AppSlideCanvasIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3395EFB908D5DD6084507C /* AppSlideCanvasIntegrationTests.swift */; };
 		A94CFE60E848E7A8640904F8 /* AppContentChangeIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A278657D170BEE56FC7CA483 /* AppContentChangeIntegrationTests.swift */; };
@@ -92,8 +95,10 @@
 		2031BAC88C496EA305DD34EB /* SlideCanvasOverlayMapperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideCanvasOverlayMapperTests.swift; sourceTree = "<group>"; };
 		20F2BB381CD97FBF611B74A8 /* LectureBoardAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LectureBoardAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		23F13F8B70B77EDF54B1C9C1 /* RuntimeVerificationLaunchPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationLaunchPolicyTests.swift; sourceTree = "<group>"; };
+		2727F689FF17EFFBD3816B79 /* RuntimeVerificationCanvasConfirmationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationCanvasConfirmationPolicy.swift; sourceTree = "<group>"; };
 		2FA791C51645A1AC2C207D65 /* LectureBoardAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LectureBoardAIApp.swift; sourceTree = "<group>"; };
 		2FC879B22ADEB760BE850009 /* AppModelPermissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelPermissionTests.swift; sourceTree = "<group>"; };
+		339DE12925806880C6DF0482 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationCanvasConfirmationPolicyTests.swift; sourceTree = "<group>"; };
 		36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowCapture.swift; sourceTree = "<group>"; };
 		402B0930A4297FE5E924C6C1 /* SlideVisionAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideVisionAnalyzerTests.swift; sourceTree = "<group>"; };
 		429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowScanner.swift; sourceTree = "<group>"; };
@@ -104,6 +109,7 @@
 		55A345C0DC1E4887ADBE0CC9 /* RuntimeVerificationHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationHostView.swift; sourceTree = "<group>"; };
 		66D800008C4AA26556CF4B74 /* CaptureDeliveryMetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDeliveryMetricsTests.swift; sourceTree = "<group>"; };
 		6CE5A06FD66D0421B4FCDB73 /* RuntimeVerificationReportWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationReportWriter.swift; sourceTree = "<group>"; };
+		6D65BCB707258FE845C04C66 /* RuntimeVerificationRunnerIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationRunnerIntegrationTests.swift; sourceTree = "<group>"; };
 		7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionOverlayEligibilityProviderTests.swift; sourceTree = "<group>"; };
 		9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalInkStyle.swift; sourceTree = "<group>"; };
 		9C4BEFE7878AD8CA03EE430A /* RuntimeVerificationSnapshotProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationSnapshotProjector.swift; sourceTree = "<group>"; };
@@ -163,6 +169,7 @@
 			isa = PBXGroup;
 			children = (
 				A34351EA1ADCD2D88705AB4E /* RuntimeVerificationApplicationDelegate.swift */,
+				2727F689FF17EFFBD3816B79 /* RuntimeVerificationCanvasConfirmationPolicy.swift */,
 				55A345C0DC1E4887ADBE0CC9 /* RuntimeVerificationHostView.swift */,
 				4DE751E95121001B5CC8751E /* RuntimeVerificationPermissionPolicy.swift */,
 				6CE5A06FD66D0421B4FCDB73 /* RuntimeVerificationReportWriter.swift */,
@@ -271,8 +278,10 @@
 				FBA29FBA6A9428279D53EFCC /* PowerPointSlideIdentityProviderTests.swift */,
 				E78A6B7F5758FCB240CA36DA /* PowerPointWindowIdentityTests.swift */,
 				7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */,
+				339DE12925806880C6DF0482 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift */,
 				23F13F8B70B77EDF54B1C9C1 /* RuntimeVerificationLaunchPolicyTests.swift */,
 				F3C2C608ADD9A862BE8A054E /* RuntimeVerificationPermissionPolicyTests.swift */,
+				6D65BCB707258FE845C04C66 /* RuntimeVerificationRunnerIntegrationTests.swift */,
 				D97ECBF169A76FA69A221EE0 /* RuntimeVerificationSnapshotProjectorTests.swift */,
 				B67ED979FFCBC3875345D1B6 /* RuntimeVerificationWindowSelectorTests.swift */,
 				CF5656CA14C9CC8E0001F8F6 /* ScreenCaptureSetupPolicyTests.swift */,
@@ -457,8 +466,10 @@
 				0B13D3DDEDE73A8CA04EBB73 /* PowerPointSlideIdentityProviderTests.swift in Sources */,
 				B9CE3E736D7119F11F2F8E43 /* PowerPointWindowIdentityTests.swift in Sources */,
 				DDE3CDC591EAB8E3961F7A4E /* ProductionOverlayEligibilityProviderTests.swift in Sources */,
+				8E6F6A95BAEA8F0F56E84460 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift in Sources */,
 				5761707899B7C6D6AA9990B0 /* RuntimeVerificationLaunchPolicyTests.swift in Sources */,
 				21DC587215C72D20CEA81EB2 /* RuntimeVerificationPermissionPolicyTests.swift in Sources */,
+				384D1B69AAB6B188A4781135 /* RuntimeVerificationRunnerIntegrationTests.swift in Sources */,
 				F1B2904112B349E990E8D233 /* RuntimeVerificationSnapshotProjectorTests.swift in Sources */,
 				1CFEB3D0827FEABA39C4E7F9 /* RuntimeVerificationWindowSelectorTests.swift in Sources */,
 				3135AFAA4AAC399B9D13D2D8 /* ScreenCaptureSetupPolicyTests.swift in Sources */,
@@ -492,6 +503,7 @@
 				15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */,
 				6B96BA4A022B9A508F238B82 /* ProductionOverlayEligibilityProvider.swift in Sources */,
 				62E4D20F0F695EFC53BD25FF /* RuntimeVerificationApplicationDelegate.swift in Sources */,
+				9B9A427405B04A23770D24D3 /* RuntimeVerificationCanvasConfirmationPolicy.swift in Sources */,
 				D246E75CC4EC3135D57F194F /* RuntimeVerificationHostView.swift in Sources */,
 				170B4EBB32FCC514A6F1DD12 /* RuntimeVerificationPermissionPolicy.swift in Sources */,
 				0C1C9DD2DB8B6C95CC6C1295 /* RuntimeVerificationReportWriter.swift in Sources */,

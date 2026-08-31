@@ -17,6 +17,7 @@ struct RuntimeVerificationConfigurationTests {
       "--output-path",
       "/tmp/lectureboard-runtime.json",
       "--request-screen-recording",
+      "--confirm-full-frame-canvas",
     ])
     let configuration = try #require(parsed)
 
@@ -24,6 +25,7 @@ struct RuntimeVerificationConfigurationTests {
     #expect(configuration.observationDurationSeconds == 12.5)
     #expect(configuration.outputPath == "/tmp/lectureboard-runtime.json")
     #expect(configuration.requestsScreenRecordingPermission)
+    #expect(configuration.canvasSelection == .confirmFullFrame)
   }
 
   @Test func parsesMaximumWindowID() throws {
@@ -66,6 +68,62 @@ struct RuntimeVerificationConfigurationTests {
     ])
 
     #expect(try #require(parsed).requestsScreenRecordingPermission == false)
+  }
+
+  @Test func defaultsCanvasSelectionToCurrentBehavior() throws {
+    let parsed = try RuntimeVerificationArguments.parse([
+      "--runtime-verification",
+      "--window-title-contains",
+      "Verification",
+      "--observation-seconds",
+      "10",
+      "--output-path",
+      "/tmp/result.json",
+    ])
+
+    #expect(try #require(parsed).canvasSelection == .currentBehavior)
+  }
+
+  @Test func parsesExplicitFullFrameCanvasConfirmation() throws {
+    let parsed = try RuntimeVerificationArguments.parse([
+      "--runtime-verification",
+      "--confirm-full-frame-canvas",
+      "--window-title-contains",
+      "Verification",
+      "--observation-seconds",
+      "10",
+      "--output-path",
+      "/tmp/result.json",
+    ])
+
+    #expect(try #require(parsed).canvasSelection == .confirmFullFrame)
+  }
+
+  @Test func rejectsDuplicateFullFrameCanvasConfirmationFlag() {
+    assertParseError(
+      [
+        "--runtime-verification",
+        "--confirm-full-frame-canvas",
+        "--window-title-contains",
+        "Verification",
+        "--observation-seconds",
+        "10",
+        "--output-path",
+        "/tmp/result.json",
+        "--confirm-full-frame-canvas",
+      ],
+      equals: .duplicateFlag("--confirm-full-frame-canvas")
+    )
+  }
+
+  @Test func ignoresFullFrameCanvasConfirmationWithoutActivation() throws {
+    let parsed = try RuntimeVerificationArguments.parse([
+      "LectureBoardAI",
+      "--confirm-full-frame-canvas",
+      "--confirm-full-frame-canvas",
+    ])
+
+    #expect(parsed == nil)
   }
 
   @Test func reportsMissingOptionAndValue() {

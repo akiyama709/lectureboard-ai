@@ -2,6 +2,34 @@ import AppKit
 import Foundation
 import LectureBoardCore
 
+struct RuntimeVerificationTiming: Equatable, Sendable {
+  static let production = RuntimeVerificationTiming(
+    sampleIntervalSeconds: 0.25,
+    windowDiscoveryTimeoutSeconds: 15,
+    canvasConfirmationTimeoutSeconds: 15
+  )
+
+  let sampleIntervalSeconds: TimeInterval
+  let windowDiscoveryTimeoutSeconds: TimeInterval
+  let canvasConfirmationTimeoutSeconds: TimeInterval
+
+  init(
+    sampleIntervalSeconds: TimeInterval,
+    windowDiscoveryTimeoutSeconds: TimeInterval,
+    canvasConfirmationTimeoutSeconds: TimeInterval
+  ) {
+    self.sampleIntervalSeconds = Self.normalized(sampleIntervalSeconds)
+    self.windowDiscoveryTimeoutSeconds = Self.normalized(windowDiscoveryTimeoutSeconds)
+    self.canvasConfirmationTimeoutSeconds = Self.normalized(
+      canvasConfirmationTimeoutSeconds
+    )
+  }
+
+  private static func normalized(_ value: TimeInterval) -> TimeInterval {
+    value.isFinite ? max(value, 0.001) : 0.001
+  }
+}
+
 @MainActor
 final class RuntimeVerificationRunner: ObservableObject {
   enum State: Equatable {
@@ -30,10 +58,22 @@ final class RuntimeVerificationRunner: ObservableObject {
 
   @Published private(set) var state = State.idle
 
-  private static let sampleIntervalSeconds: TimeInterval = 0.25
-  private static let windowDiscoveryTimeoutSeconds: TimeInterval = 15
   private var hasStarted = false
-  private let reportWriter = RuntimeVerificationReportWriter()
+  private let timing: RuntimeVerificationTiming
+  private let reportWriter: RuntimeVerificationReportWriter
+  private let terminateApplication: @MainActor @Sendable () -> Void
+
+  init(
+    timing: RuntimeVerificationTiming = .production,
+    reportWriter: RuntimeVerificationReportWriter = RuntimeVerificationReportWriter(),
+    terminateApplication: @escaping @MainActor @Sendable () -> Void = {
+      NSApplication.shared.terminate(nil)
+    }
+  ) {
+    self.timing = timing
+    self.reportWriter = reportWriter
+    self.terminateApplication = terminateApplication
+  }
 
   func run(
     configuration: RuntimeVerificationConfiguration,
@@ -84,6 +124,9 @@ final class RuntimeVerificationRunner: ObservableObject {
       matchedWindowCount: context.matchedWindowCount,
       selectedWindowID: context.selectedWindowID,
       selectedBundleIdentifier: context.selectedBundleIdentifier,
+      slideCanvasConfirmationMode: RuntimeVerificationCanvasConfirmationPolicy.reportMode(
+        for: configuration.canvasSelection
+      ),
       runStatus: runStatus,
       failureCode: failureCode,
       untrustedFailureDetail: failureMessage,
@@ -103,7 +146,7 @@ final class RuntimeVerificationRunner: ObservableObject {
       )
     }
 
-    NSApplication.shared.terminate(nil)
+    terminateApplication()
   }
 
   private func execute(
@@ -170,6 +213,13 @@ final class RuntimeVerificationRunner: ObservableObject {
       )
     }
 
+    try await confirmRequestedCanvas(
+      configuration.canvasSelection,
+      model: model,
+      startedUptime: startedUptime,
+      context: &context
+    )
+
     state = .observing
     let observationStartedUptime = ProcessInfo.processInfo.systemUptime
     while true {
@@ -196,10 +246,80 @@ final class RuntimeVerificationRunner: ObservableObject {
       guard remaining > 0 else { break }
       try await Task.sleep(
         nanoseconds: UInt64(
-          min(Self.sampleIntervalSeconds, remaining) * 1_000_000_000
+          min(timing.sampleIntervalSeconds, remaining) * 1_000_000_000
         )
       )
     }
+
+    if configuration.canvasSelection == .confirmFullFrame,
+      model.slideCanvasStatus != .confirmed
+    {
+      throw canvasConfirmationFailure(for: model)
+    }
+  }
+
+  private func confirmRequestedCanvas(
+    _ selection: RuntimeVerificationCanvasSelection,
+    model: AppModel,
+    startedUptime: TimeInterval,
+    context: inout RunContext
+  ) async throws {
+    guard selection == .confirmFullFrame else { return }
+
+    let deadline = Date().addingTimeInterval(timing.canvasConfirmationTimeoutSeconds)
+    while true {
+      if case .error(let message) = model.captureStatus {
+        appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
+        throw Failure(code: .captureFailed, message: message)
+      }
+
+      switch RuntimeVerificationCanvasConfirmationPolicy.action(
+        for: selection,
+        status: model.slideCanvasStatus
+      ) {
+      case .leaveUnchanged, .complete:
+        return
+      case .waitForFrame:
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else {
+          appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
+          throw canvasConfirmationFailure(for: model)
+        }
+        try await Task.sleep(
+          nanoseconds: UInt64(
+            min(timing.sampleIntervalSeconds, remaining) * 1_000_000_000
+          )
+        )
+      case .beginSelection:
+        model.beginSlideCanvasSelection()
+        guard model.slideCanvasStatus == .selecting else {
+          appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
+          throw canvasConfirmationFailure(for: model)
+        }
+      case .confirmFullFrame:
+        guard
+          let region = SlideCanvasRegion(
+            NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+          ),
+          model.confirmSlideCanvasSelection(region),
+          model.slideCanvasStatus == .confirmed
+        else {
+          appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
+          throw canvasConfirmationFailure(for: model)
+        }
+      case .failClosed:
+        appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
+        throw canvasConfirmationFailure(for: model)
+      }
+    }
+  }
+
+  private func canvasConfirmationFailure(for model: AppModel) -> Failure {
+    let code = RuntimeVerificationCanvasConfirmationPolicy.failureCode(
+      for: model.slideCanvasStatus,
+      capturedFrameCount: model.capturedFrameCount
+    )
+    return Failure(code: code, message: code.safeReportMessage)
   }
 
   private func findWindow(
@@ -207,7 +327,7 @@ final class RuntimeVerificationRunner: ObservableObject {
     model: AppModel,
     matchedWindowCount: inout Int
   ) async throws -> PowerPointWindowDescriptor {
-    let deadline = Date().addingTimeInterval(Self.windowDiscoveryTimeoutSeconds)
+    let deadline = Date().addingTimeInterval(timing.windowDiscoveryTimeoutSeconds)
     var lastResolution = RuntimeVerificationWindowSelection.Resolution.notFound
 
     repeat {
@@ -237,7 +357,7 @@ final class RuntimeVerificationRunner: ObservableObject {
       guard remaining > 0 else { break }
       try await Task.sleep(
         nanoseconds: UInt64(
-          min(Self.sampleIntervalSeconds, remaining) * 1_000_000_000
+          min(timing.sampleIntervalSeconds, remaining) * 1_000_000_000
         )
       )
     } while true

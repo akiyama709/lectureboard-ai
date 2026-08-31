@@ -5,22 +5,30 @@ public enum RuntimeVerificationWindowTarget: Equatable, Sendable {
   case windowID(UInt32)
 }
 
+public enum RuntimeVerificationCanvasSelection: Equatable, Sendable {
+  case currentBehavior
+  case confirmFullFrame
+}
+
 public struct RuntimeVerificationConfiguration: Equatable, Sendable {
   public let targetWindow: RuntimeVerificationWindowTarget
   public let observationDurationSeconds: TimeInterval
   public let outputPath: String
   public let requestsScreenRecordingPermission: Bool
+  public let canvasSelection: RuntimeVerificationCanvasSelection
 
   public init(
     targetWindow: RuntimeVerificationWindowTarget,
     observationDurationSeconds: TimeInterval,
     outputPath: String,
-    requestsScreenRecordingPermission: Bool
+    requestsScreenRecordingPermission: Bool,
+    canvasSelection: RuntimeVerificationCanvasSelection = .currentBehavior
   ) {
     self.targetWindow = targetWindow
     self.observationDurationSeconds = observationDurationSeconds
     self.outputPath = outputPath
     self.requestsScreenRecordingPermission = requestsScreenRecordingPermission
+    self.canvasSelection = canvasSelection
   }
 }
 
@@ -35,6 +43,7 @@ public enum RuntimeVerificationArgumentError: Error, Equatable, Sendable {
   case missingValue(RuntimeVerificationOption)
   case missingRequiredOption(RuntimeVerificationOption)
   case duplicateOption(RuntimeVerificationOption)
+  case duplicateFlag(String)
   case missingWindowSelection
   case conflictingWindowSelectionOptions
   case unknownOption(String)
@@ -47,6 +56,7 @@ public enum RuntimeVerificationArgumentError: Error, Equatable, Sendable {
 public enum RuntimeVerificationArguments {
   public static let activationFlag = "--runtime-verification"
   public static let screenRecordingRequestFlag = "--request-screen-recording"
+  public static let confirmFullFrameCanvasFlag = "--confirm-full-frame-canvas"
   public static let maximumObservationDurationSeconds: TimeInterval = 3_600
 
   public static func parse(
@@ -56,6 +66,7 @@ public enum RuntimeVerificationArguments {
 
     var values: [RuntimeVerificationOption: String] = [:]
     var requestsScreenRecordingPermission = false
+    var canvasSelection = RuntimeVerificationCanvasSelection.currentBehavior
     var index = arguments.startIndex
 
     while index < arguments.endIndex {
@@ -66,6 +77,14 @@ public enum RuntimeVerificationArguments {
       }
       if argument == screenRecordingRequestFlag {
         requestsScreenRecordingPermission = true
+        index += 1
+        continue
+      }
+      if argument == confirmFullFrameCanvasFlag {
+        guard canvasSelection != .confirmFullFrame else {
+          throw RuntimeVerificationArgumentError.duplicateFlag(argument)
+        }
+        canvasSelection = .confirmFullFrame
         index += 1
         continue
       }
@@ -140,7 +159,8 @@ public enum RuntimeVerificationArguments {
       targetWindow: targetWindow,
       observationDurationSeconds: duration,
       outputPath: outputPath,
-      requestsScreenRecordingPermission: requestsScreenRecordingPermission
+      requestsScreenRecordingPermission: requestsScreenRecordingPermission,
+      canvasSelection: canvasSelection
     )
   }
 

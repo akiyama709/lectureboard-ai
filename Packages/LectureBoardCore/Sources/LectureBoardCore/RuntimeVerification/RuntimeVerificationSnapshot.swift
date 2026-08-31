@@ -32,6 +32,25 @@ public enum RuntimeSlideCanvasState: String, Codable, Equatable, Sendable {
   case invalidated
 }
 
+/// Metadata-only outcome for mapping a confirmed slide canvas to an AppKit
+/// overlay target. It records no coordinates, display identifiers, or content.
+public enum RuntimeSlideCanvasOverlayState: String, Codable, Equatable, Sendable {
+  case unavailable
+  case mapped
+  case captureContextMismatch
+  case surfaceGeometryUnavailableOrMismatched
+  case screenGeometryUnavailable
+  case unsupportedSelectionProvenance
+  case invalidSurfaceGeometry
+  case contentScaleMismatch
+  case invalidCanvasRegion
+  case canvasOutsideCapturedContent
+  case invalidQuartzTarget
+  case noContainingDisplay
+  case ambiguousContainingDisplays
+  case invalidAppKitTarget
+}
+
 /// A metadata-only observation. It deliberately carries no frame image or recognized slide text.
 public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let timestamp: Date
@@ -40,6 +59,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let captureState: RuntimeCaptureState
   public let visionState: RuntimeVisionState
   public let slideCanvasState: RuntimeSlideCanvasState
+  public let slideCanvasOverlayState: RuntimeSlideCanvasOverlayState
   public let frameCount: Int
   public let newFrameCount: Int
   public let repeatedFrameCount: Int
@@ -64,6 +84,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     captureState: RuntimeCaptureState,
     visionState: RuntimeVisionState,
     slideCanvasState: RuntimeSlideCanvasState = .unavailable,
+    slideCanvasOverlayState: RuntimeSlideCanvasOverlayState = .unavailable,
     frameCount: Int,
     newFrameCount: Int,
     repeatedFrameCount: Int,
@@ -90,6 +111,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.captureState = captureState
     self.visionState = visionState
     self.slideCanvasState = slideCanvasState
+    self.slideCanvasOverlayState = slideCanvasOverlayState
     self.frameCount = max(frameCount, 0)
     self.newFrameCount = max(newFrameCount, 0)
     self.repeatedFrameCount = max(repeatedFrameCount, 0)
@@ -119,6 +141,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case captureState
     case visionState
     case slideCanvasState
+    case slideCanvasOverlayState
     case frameCount
     case newFrameCount
     case repeatedFrameCount
@@ -151,6 +174,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
       slideCanvasState: try container.decodeIfPresent(
         RuntimeSlideCanvasState.self,
         forKey: .slideCanvasState
+      ) ?? .unavailable,
+      slideCanvasOverlayState: try container.decodeIfPresent(
+        RuntimeSlideCanvasOverlayState.self,
+        forKey: .slideCanvasOverlayState
       ) ?? .unavailable,
       frameCount: try container.decode(Int.self, forKey: .frameCount),
       newFrameCount: try container.decode(Int.self, forKey: .newFrameCount),

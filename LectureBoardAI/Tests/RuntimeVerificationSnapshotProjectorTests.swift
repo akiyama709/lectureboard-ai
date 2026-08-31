@@ -41,6 +41,43 @@ struct RuntimeVerificationSnapshotProjectorTests {
     )
   }
 
+  @Test func mapsEveryOverlayOutcomeWithoutCollapsingRejectionReasons() {
+    #expect(
+      RuntimeVerificationSnapshotProjector.slideCanvasOverlayState(for: .unavailable)
+        == .unavailable
+    )
+    #expect(
+      RuntimeVerificationSnapshotProjector.slideCanvasOverlayState(for: .mapped)
+        == .mapped
+    )
+
+    let expectations: [(SlideCanvasOverlayMappingRejection, RuntimeSlideCanvasOverlayState)] = [
+      (.captureContextMismatch, .captureContextMismatch),
+      (
+        .surfaceGeometryUnavailableOrMismatched,
+        .surfaceGeometryUnavailableOrMismatched
+      ),
+      (.screenGeometryUnavailable, .screenGeometryUnavailable),
+      (.unsupportedSelectionProvenance, .unsupportedSelectionProvenance),
+      (.invalidSurfaceGeometry, .invalidSurfaceGeometry),
+      (.contentScaleMismatch, .contentScaleMismatch),
+      (.invalidCanvasRegion, .invalidCanvasRegion),
+      (.canvasOutsideCapturedContent, .canvasOutsideCapturedContent),
+      (.invalidQuartzTarget, .invalidQuartzTarget),
+      (.noContainingDisplay, .noContainingDisplay),
+      (.ambiguousContainingDisplays, .ambiguousContainingDisplays),
+      (.invalidAppKitTarget, .invalidAppKitTarget),
+    ]
+
+    for (rejection, expected) in expectations {
+      #expect(
+        RuntimeVerificationSnapshotProjector.slideCanvasOverlayState(
+          for: .rejected(rejection)
+        ) == expected
+      )
+    }
+  }
+
   @Test func elapsedMillisecondsAreMonotonicAndClampedAtZero() {
     #expect(
       RuntimeVerificationSnapshotProjector.elapsedMilliseconds(
@@ -68,6 +105,7 @@ struct RuntimeVerificationSnapshotProjectorTests {
 
     #expect(snapshot.slideIdentityFrameSyncState == .notRequired)
     #expect(snapshot.slideCanvasState == .unavailable)
+    #expect(snapshot.slideCanvasOverlayState == .unavailable)
     #expect(snapshot.contentRevisionCount == model.contentRevisionCount)
     #expect(snapshot.strokeCandidateRegionCount == 0)
   }

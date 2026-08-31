@@ -359,6 +359,192 @@ struct SlideCanvasOverlayMapperTests {
     )
   }
 
+  @Test func reportsMetadataOnlyMappingRejectionReasons() throws {
+    let surface = try #require(canonicalSurface())
+    let screen = try #require(
+      CaptureScreenGeometry(screenRect: CGRect(x: 100, y: 200, width: 160, height: 80))
+    )
+    let selection = try #require(
+      makeSelection(
+        surface: surface,
+        region: SlideCanvasRegion(x: 0.3, y: 0.25, width: 0.4, height: 0.5)
+      )
+    )
+    let display = try #require(canonicalDisplay())
+    let frame = makeFrame(surface: surface, screen: screen)
+
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: frame,
+        captureOperationID: CaptureOperationID(rawValue: operationID.rawValue + 1),
+        displays: [display]
+      ),
+      as: .captureContextMismatch
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: makeFrame(surface: surface, screen: nil),
+        captureOperationID: operationID,
+        displays: [display]
+      ),
+      as: .screenGeometryUnavailable
+    )
+
+    let changedSurface = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 11, y: 10, width: 79, height: 40),
+        scaleFactor: 2,
+        contentScale: 0.5,
+        outputPixelWidth: 200,
+        outputPixelHeight: 120
+      )
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: makeFrame(surface: changedSurface, screen: screen),
+        captureOperationID: operationID,
+        displays: [display]
+      ),
+      as: .surfaceGeometryUnavailableOrMismatched
+    )
+
+    let testOnlySelection = try #require(
+      ConfirmedSlideCanvasSelection.testOnlyFullFrame(
+        captureOperationID: operationID,
+        windowID: windowID,
+        sourcePixelWidth: surface.outputPixelWidth,
+        sourcePixelHeight: surface.outputPixelHeight
+      )
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: testOnlySelection,
+        frame: frame,
+        captureOperationID: operationID,
+        displays: [display]
+      ),
+      as: .unsupportedSelectionProvenance
+    )
+
+    let invalidSurface = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 10, y: 10, width: 91, height: 40),
+        scaleFactor: 2,
+        contentScale: 0.5,
+        outputPixelWidth: 200,
+        outputPixelHeight: 120
+      )
+    )
+    let invalidSurfaceSelection = try #require(
+      makeSelection(
+        surface: invalidSurface,
+        region: SlideCanvasRegion(x: 0.3, y: 0.25, width: 0.4, height: 0.5)
+      )
+    )
+    let matchingInvalidSurfaceScreen = try #require(
+      CaptureScreenGeometry(
+        screenRect: CGRect(x: 100, y: 200, width: 182, height: 80)
+      )
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: invalidSurfaceSelection,
+        frame: makeFrame(
+          surface: invalidSurface,
+          screen: matchingInvalidSurfaceScreen
+        ),
+        captureOperationID: operationID,
+        displays: [display]
+      ),
+      as: .invalidSurfaceGeometry
+    )
+
+    let mismatchedScreen = try #require(
+      CaptureScreenGeometry(screenRect: CGRect(x: 100, y: 200, width: 162, height: 80))
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: makeFrame(surface: surface, screen: mismatchedScreen),
+        captureOperationID: operationID,
+        displays: [display]
+      ),
+      as: .contentScaleMismatch
+    )
+
+    let outsideSelection = try #require(
+      makeSelection(
+        surface: surface,
+        region: SlideCanvasRegion(x: 0, y: 0, width: 1, height: 1)
+      )
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: outsideSelection,
+        frame: frame,
+        captureOperationID: operationID,
+        displays: [display]
+      ),
+      as: .canvasOutsideCapturedContent
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: frame,
+        captureOperationID: operationID,
+        displays: []
+      ),
+      as: .noContainingDisplay
+    )
+    let secondDisplay = try #require(canonicalDisplay(displayID: 2))
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: frame,
+        captureOperationID: operationID,
+        displays: [display, secondDisplay]
+      ),
+      as: .ambiguousContainingDisplays
+    )
+
+    let underflowingAppKitDisplay = try #require(
+      DisplayCoordinateSnapshot(
+        displayID: 3,
+        quartzGlobalFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900),
+        appKitFrame: CGRect(
+          x: 0,
+          y: 0,
+          width: CGFloat(Double.leastNonzeroMagnitude),
+          height: 900
+        )
+      )
+    )
+    expectRejected(
+      SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: frame,
+        captureOperationID: operationID,
+        displays: [underflowingAppKitDisplay]
+      ),
+      as: .invalidAppKitTarget
+    )
+
+    guard
+      case .mapped = SlideCanvasOverlayMapper.evaluatePlacement(
+        selection: selection,
+        frame: frame,
+        captureOperationID: operationID,
+        displays: [display]
+      )
+    else {
+      Issue.record("Canonical current geometry must produce a mapped result.")
+      return
+    }
+  }
+
   @Test func convertsAPlacementOnANegativePositionDisplay() throws {
     let surface = try #require(canonicalSurface())
     let screen = try #require(
@@ -552,5 +738,17 @@ struct SlideCanvasOverlayMapperTests {
     #expect(abs(Double(actual.minY - expected.minY)) <= tolerance)
     #expect(abs(Double(actual.width - expected.width)) <= tolerance)
     #expect(abs(Double(actual.height - expected.height)) <= tolerance)
+  }
+
+  private func expectRejected(
+    _ result: SlideCanvasOverlayMappingResult,
+    as expectedReason: SlideCanvasOverlayMappingRejection,
+    sourceLocation: SourceLocation = #_sourceLocation
+  ) {
+    guard case .rejected(let reason) = result else {
+      Issue.record("Expected a rejected mapping result.", sourceLocation: sourceLocation)
+      return
+    }
+    #expect(reason == expectedReason, sourceLocation: sourceLocation)
   }
 }

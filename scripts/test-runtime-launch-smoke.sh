@@ -6,7 +6,7 @@ repository_root="$(cd -- "$script_directory/.." && pwd)"
 source "$script_directory/runtime-launch-preflight.sh"
 runtime_app="$repository_root/DerivedData/RuntimeBuild/Build/Products/Debug/LectureBoard AI.app"
 runtime_executable="$runtime_app/Contents/MacOS/LectureBoard AI"
-expected_schema_version="6"
+expected_schema_version="8"
 temporary_parent="${TMPDIR:-/tmp}"
 temporary_directory="$(mktemp -d "$temporary_parent/lectureboard-runtime-smoke.XXXXXX")"
 invalid_report_path="$temporary_directory/invalid-runtime-report.json"
@@ -231,6 +231,7 @@ allowed_root_report_keys="$(
     matchedWindowCount \
     selectedWindowID \
     selectedBundleIdentifier \
+    slideCanvasConfirmationMode \
     runStatus \
     failureCode \
     failureMessage \
@@ -249,6 +250,9 @@ done < <(sed -n 's/^[[:space:]]*<key>\([^<]*\)<\/key>$/\1/p' "$root_report_plist
 permission_was_requested="$(
   plutil -extract permissionWasRequested raw -o - "$report_path"
 )"
+slide_canvas_confirmation_mode="$(
+  plutil -extract slideCanvasConfirmationMode raw -o - "$report_path"
+)"
 schema_version="$(plutil -extract schemaVersion raw -o - "$report_path")"
 run_status="$(plutil -extract runStatus raw -o - "$report_path")"
 failure_code="$(plutil -extract failureCode raw -o - "$report_path")"
@@ -256,6 +260,7 @@ snapshot_count="$(plutil -extract snapshots raw -o - "$report_path")"
 
 if [[ "$schema_version" != "$expected_schema_version" \
   || "$permission_was_requested" != "false" \
+  || "$slide_canvas_confirmation_mode" != "noneRequested" \
   || "$run_status" != "failed" \
   || "$snapshot_count" != "0" ]] \
   || [[ "$failure_code" != "screenRecordingUnavailable" \

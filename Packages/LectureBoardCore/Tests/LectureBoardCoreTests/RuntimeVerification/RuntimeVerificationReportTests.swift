@@ -16,6 +16,7 @@ struct RuntimeVerificationReportTests {
       matchedWindowCount: 1,
       selectedWindowID: 42,
       selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      slideCanvasConfirmationMode: .diagnosticFullFrame,
       runStatus: .completed,
       failureCode: nil,
       untrustedFailureDetail: nil,
@@ -27,6 +28,7 @@ struct RuntimeVerificationReportTests {
 
     #expect(decoded == report)
     #expect(decoded.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
+    #expect(decoded.slideCanvasConfirmationMode == .diagnosticFullFrame)
   }
 
   @Test func normalizesInvalidNumericAndMetadataValues() {
@@ -77,7 +79,7 @@ struct RuntimeVerificationReportTests {
       snapshots: []
     )
 
-    #expect(RuntimeVerificationReport.currentSchemaVersion == 6)
+    #expect(RuntimeVerificationReport.currentSchemaVersion == 8)
     #expect(report.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
   }
 
@@ -104,6 +106,7 @@ struct RuntimeVerificationReportTests {
       JSONSerialization.jsonObject(with: encoded) as? [String: Any]
     )
     object["schemaVersion"] = 2
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0]["stableFrameCount"] = 6
     snapshots[0]["slideChangeCount"] = 5
@@ -113,12 +116,14 @@ struct RuntimeVerificationReportTests {
     snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
     snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     snapshots[0].removeValue(forKey: "slideCanvasState")
+    snapshots[0].removeValue(forKey: "slideCanvasOverlayState")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
     let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
 
     #expect(decoded.schemaVersion == 2)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
     #expect(decoded.snapshots[0].stableFrameCount == 6)
     #expect(decoded.snapshots[0].slideChangeCount == 5)
     #expect(decoded.snapshots[0].contentRevisionCount == 2)
@@ -127,6 +132,7 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
     #expect(decoded.snapshots[0].slideCanvasState == .unavailable)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
   }
 
   @Test func decodesSchemaThreeWithoutSlideIdentityMetadata() throws {
@@ -152,23 +158,27 @@ struct RuntimeVerificationReportTests {
       JSONSerialization.jsonObject(with: encoded) as? [String: Any]
     )
     object["schemaVersion"] = 3
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0].removeValue(forKey: "slideIdentityState")
     snapshots[0].removeValue(forKey: "slideIdentityFrameSyncState")
     snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
     snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     snapshots[0].removeValue(forKey: "slideCanvasState")
+    snapshots[0].removeValue(forKey: "slideCanvasOverlayState")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
     let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
 
     #expect(decoded.schemaVersion == 3)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
     #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
     #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .notRequired)
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
     #expect(decoded.snapshots[0].slideCanvasState == .unavailable)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
   }
 
   @Test func decodesSchemaFourWithoutFrameSyncMetadata() throws {
@@ -194,20 +204,24 @@ struct RuntimeVerificationReportTests {
       JSONSerialization.jsonObject(with: encoded) as? [String: Any]
     )
     object["schemaVersion"] = 4
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0].removeValue(forKey: "slideIdentityFrameSyncState")
     snapshots[0].removeValue(forKey: "slideCanvasState")
+    snapshots[0].removeValue(forKey: "slideCanvasOverlayState")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
     let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
 
     #expect(decoded.schemaVersion == 4)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
     #expect(decoded.snapshots[0].slideIdentityState == .identified)
     #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .notRequired)
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 12)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 1)
     #expect(decoded.snapshots[0].slideCanvasState == .unavailable)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
   }
 
   @Test func decodesSchemaFiveWithoutSlideCanvasMetadata() throws {
@@ -233,17 +247,93 @@ struct RuntimeVerificationReportTests {
       JSONSerialization.jsonObject(with: encoded) as? [String: Any]
     )
     object["schemaVersion"] = 5
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0].removeValue(forKey: "slideCanvasState")
+    snapshots[0].removeValue(forKey: "slideCanvasOverlayState")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
     let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
 
     #expect(decoded.schemaVersion == 5)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
     #expect(decoded.snapshots[0].slideIdentityState == .identified)
     #expect(decoded.snapshots[0].slideIdentityFrameSyncState == .waiting)
     #expect(decoded.snapshots[0].slideCanvasState == .unavailable)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
+  }
+
+  @Test func decodesSchemaSixWithoutSlideCanvasOverlayMetadata() throws {
+    let report = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+      finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+      requestedDurationSeconds: 12,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 42,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .completed,
+      failureCode: nil,
+      untrustedFailureDetail: nil,
+      snapshots: [snapshot()]
+    )
+
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object["schemaVersion"] = 6
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
+    var snapshots = try #require(object["snapshots"] as? [[String: Any]])
+    snapshots[0].removeValue(forKey: "slideCanvasOverlayState")
+    object["snapshots"] = snapshots
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
+
+    #expect(decoded.schemaVersion == 6)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
+    #expect(decoded.snapshots[0].slideCanvasState == .confirmed)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
+  }
+
+  @Test func decodesSchemaSevenWithoutCanvasConfirmationProvenance() throws {
+    let report = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+      finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+      requestedDurationSeconds: 12,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 42,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      slideCanvasConfirmationMode: .diagnosticFullFrame,
+      runStatus: .completed,
+      failureCode: nil,
+      untrustedFailureDetail: nil,
+      snapshots: [snapshot()]
+    )
+
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object["schemaVersion"] = 7
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
+
+    #expect(decoded.schemaVersion == 7)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
+    #expect(decoded.snapshots[0].slideCanvasState == .confirmed)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .mapped)
   }
 
   @Test func decodesSchemaOneSnapshotsWithoutNewMetadataCounters() throws {
@@ -269,6 +359,7 @@ struct RuntimeVerificationReportTests {
       JSONSerialization.jsonObject(with: encoded) as? [String: Any]
     )
     object["schemaVersion"] = 1
+    object.removeValue(forKey: "slideCanvasConfirmationMode")
     var snapshots = try #require(object["snapshots"] as? [[String: Any]])
     snapshots[0].removeValue(forKey: "contentRevisionCount")
     snapshots[0].removeValue(forKey: "strokeCandidateRegionCount")
@@ -277,12 +368,14 @@ struct RuntimeVerificationReportTests {
     snapshots[0].removeValue(forKey: "slideIdentitySampleCount")
     snapshots[0].removeValue(forKey: "slideIdentityContinuityBreakCount")
     snapshots[0].removeValue(forKey: "slideCanvasState")
+    snapshots[0].removeValue(forKey: "slideCanvasOverlayState")
     object["snapshots"] = snapshots
 
     let legacyData = try JSONSerialization.data(withJSONObject: object)
     let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
 
     #expect(decoded.schemaVersion == 1)
+    #expect(decoded.slideCanvasConfirmationMode == nil)
     #expect(decoded.snapshots[0].contentRevisionCount == 0)
     #expect(decoded.snapshots[0].strokeCandidateRegionCount == 0)
     #expect(decoded.snapshots[0].slideIdentityState == .unavailable)
@@ -290,6 +383,7 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].slideIdentitySampleCount == 0)
     #expect(decoded.snapshots[0].slideIdentityContinuityBreakCount == 0)
     #expect(decoded.snapshots[0].slideCanvasState == .unavailable)
+    #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
   }
 
   @Test func clampsFinishTimeAndClearsFailureFromCompletedRun() {
@@ -355,6 +449,18 @@ struct RuntimeVerificationReportTests {
       "presentationToken",
       "presentationSessionIdentifier",
       "presentationSessionToken",
+      "displayID",
+      "displayIdentifier",
+      "screenRect",
+      "contentRect",
+      "scaleFactor",
+      "contentScale",
+      "canvasRegion",
+      "targetRect",
+      "x",
+      "y",
+      "width",
+      "height",
     ]
 
     #expect(allKeys(in: object).isDisjoint(with: forbiddenKeys))
@@ -398,6 +504,7 @@ struct RuntimeVerificationReportTests {
         "matchedWindowCount",
         "selectedWindowID",
         "selectedBundleIdentifier",
+        "slideCanvasConfirmationMode",
         "runStatus",
         "failureCode",
         "failureMessage",
@@ -412,6 +519,7 @@ struct RuntimeVerificationReportTests {
         "captureState",
         "visionState",
         "slideCanvasState",
+        "slideCanvasOverlayState",
         "frameCount",
         "newFrameCount",
         "repeatedFrameCount",
@@ -432,6 +540,7 @@ struct RuntimeVerificationReportTests {
     )
     #expect(root["contentRevisionCount"] == nil)
     #expect(root["strokeCandidateRegionCount"] == nil)
+    #expect(root["slideCanvasConfirmationMode"] as? String == "noneRequested")
     #expect(encodedSnapshot["contentRevisionCount"] as? Int == 2)
     #expect(encodedSnapshot["strokeCandidateRegionCount"] as? Int == 1)
     #expect(encodedSnapshot["slideIdentityState"] as? String == "identified")
@@ -439,6 +548,23 @@ struct RuntimeVerificationReportTests {
     #expect(encodedSnapshot["slideIdentitySampleCount"] as? Int == 12)
     #expect(encodedSnapshot["slideIdentityContinuityBreakCount"] as? Int == 1)
     #expect(encodedSnapshot["slideCanvasState"] as? String == "confirmed")
+    #expect(encodedSnapshot["slideCanvasOverlayState"] as? String == "mapped")
+  }
+
+  @Test func canvasConfirmationModeRawValuesAreStableMetadata() throws {
+    let expected: [(RuntimeSlideCanvasConfirmationMode, String)] = [
+      (.noneRequested, "noneRequested"),
+      (.diagnosticFullFrame, "diagnosticFullFrame"),
+    ]
+
+    for (mode, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(mode)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(
+        try JSONDecoder().decode(RuntimeSlideCanvasConfirmationMode.self, from: encoded)
+          == mode
+      )
+    }
   }
 
   @Test func replacesUntrustedFailureDetailsWithFixedSafeMessages() throws {
@@ -452,6 +578,14 @@ struct RuntimeVerificationReportTests {
         "More than one PowerPoint window matched the requested selection."
       ),
       (.captureFailed, "PowerPoint window capture failed."),
+      (
+        .captureFrameUnavailable,
+        "No capturable PowerPoint frame was delivered."
+      ),
+      (
+        .slideCanvasConfirmationFailed,
+        "The requested slide canvas could not be confirmed."
+      ),
       (.outputWriteFailed, "The runtime verification report could not be written."),
       (.internalFailure, "Runtime verification failed."),
     ]
@@ -492,6 +626,7 @@ struct RuntimeVerificationReportTests {
       captureState: .capturing,
       visionState: .completed,
       slideCanvasState: .confirmed,
+      slideCanvasOverlayState: .mapped,
       frameCount: 10,
       newFrameCount: 1,
       repeatedFrameCount: 9,

@@ -89,6 +89,7 @@ struct AppSlideCanvasIntegrationTests {
     try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
     model.beginSlideCanvasSelection()
     #expect(model.confirmSlideCanvasSelection(region))
+    #expect(model.slideCanvasOverlayMappingState == .mapped)
 
     for sequenceNumber in 2...4 {
       await capture.emit(
@@ -152,6 +153,9 @@ struct AppSlideCanvasIntegrationTests {
     )
     try await waitUntil { model.capturedFrameCount == 7 }
     #expect(model.slideCanvasStatus == .confirmed)
+    #expect(
+      model.slideCanvasOverlayMappingState == .rejected(.screenGeometryUnavailable)
+    )
     #expect(!overlay.isVisible)
     #expect(overlay.hideCallCount > hidesBeforeMissingPosition)
 
@@ -164,6 +168,7 @@ struct AppSlideCanvasIntegrationTests {
       )
     )
     try await waitUntil { model.capturedFrameCount == 8 }
+    #expect(model.slideCanvasOverlayMappingState == .mapped)
     #expect(overlay.isVisible)
     #expect(
       rect(
@@ -173,6 +178,7 @@ struct AppSlideCanvasIntegrationTests {
     )
 
     await model.stopWindowCapture()
+    #expect(model.slideCanvasOverlayMappingState == .unavailable)
     #expect(!overlay.isVisible)
   }
 

@@ -16,6 +16,9 @@ enum RuntimeVerificationSnapshotProjector {
       captureState: captureState(for: model.captureStatus),
       visionState: visionState(for: model.slideAnalysisStatus),
       slideCanvasState: slideCanvasState(for: model.slideCanvasStatus),
+      slideCanvasOverlayState: slideCanvasOverlayState(
+        for: model.slideCanvasOverlayMappingState
+      ),
       frameCount: model.capturedFrameCount,
       newFrameCount: model.newCapturedFrameCount,
       repeatedFrameCount: model.repeatedCapturedFrameCount,
@@ -75,6 +78,44 @@ enum RuntimeVerificationSnapshotProjector {
       return .confirmed
     case .invalidated:
       return .invalidated
+    }
+  }
+
+  static func slideCanvasOverlayState(
+    for state: SlideCanvasOverlayMappingState
+  ) -> RuntimeSlideCanvasOverlayState {
+    switch state {
+    case .unavailable:
+      return .unavailable
+    case .mapped:
+      return .mapped
+    case .rejected(let reason):
+      switch reason {
+      case .captureContextMismatch:
+        return .captureContextMismatch
+      case .surfaceGeometryUnavailableOrMismatched:
+        return .surfaceGeometryUnavailableOrMismatched
+      case .screenGeometryUnavailable:
+        return .screenGeometryUnavailable
+      case .unsupportedSelectionProvenance:
+        return .unsupportedSelectionProvenance
+      case .invalidSurfaceGeometry:
+        return .invalidSurfaceGeometry
+      case .contentScaleMismatch:
+        return .contentScaleMismatch
+      case .invalidCanvasRegion:
+        return .invalidCanvasRegion
+      case .canvasOutsideCapturedContent:
+        return .canvasOutsideCapturedContent
+      case .invalidQuartzTarget:
+        return .invalidQuartzTarget
+      case .noContainingDisplay:
+        return .noContainingDisplay
+      case .ambiguousContainingDisplays:
+        return .ambiguousContainingDisplays
+      case .invalidAppKitTarget:
+        return .invalidAppKitTarget
+      }
     }
   }
 

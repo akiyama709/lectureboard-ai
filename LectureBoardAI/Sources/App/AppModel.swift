@@ -95,6 +95,8 @@ final class AppModel: ObservableObject {
   @Published private(set) var slideIdentityContinuityBreakCount = 0
   @Published private(set) var contentRevisionCount = 0
   @Published private(set) var slideCanvasStatus = SlideCanvasStatus.unavailable
+  @Published private(set) var slideCanvasOverlayMappingState =
+    SlideCanvasOverlayMappingState.unavailable
   @Published private(set) var latestCapturedWindowFrame: CGImage?
   @Published private(set) var slideCanvasCalibrationFrame: CGImage?
   @Published private(set) var confirmedSlideCanvasRegion: SlideCanvasRegion?
@@ -1105,20 +1107,23 @@ final class AppModel: ObservableObject {
     using frame: CapturedPowerPointFrame,
     sessionID: CaptureOperationID
   ) {
-    guard
-      let confirmedSlideCanvasSelection,
-      frame.captureScreenGeometry != nil
-    else {
+    guard let confirmedSlideCanvasSelection else {
       invalidateOverlayPlacement()
       return
     }
 
-    latestOverlayPlacement = SlideCanvasOverlayMapper.makePlacement(
+    switch SlideCanvasOverlayMapper.evaluatePlacement(
       selection: confirmedSlideCanvasSelection,
       frame: frame,
       captureOperationID: sessionID,
       displays: displayCoordinateSnapshotProvider.currentSnapshots()
-    )
+    ) {
+    case .mapped(let placement):
+      latestOverlayPlacement = placement
+      slideCanvasOverlayMappingState = .mapped
+    case .rejected(let reason):
+      invalidateOverlayPlacement(mappingState: .rejected(reason))
+    }
   }
 
   private func renderAlignedOverlayIfPossible(
@@ -1189,8 +1194,11 @@ final class AppModel: ObservableObject {
     renderedProductionOverlayState = renderState
   }
 
-  private func invalidateOverlayPlacement() {
+  private func invalidateOverlayPlacement(
+    mappingState: SlideCanvasOverlayMappingState = .unavailable
+  ) {
     latestOverlayPlacement = nil
+    slideCanvasOverlayMappingState = mappingState
     invalidateProductionOverlayLease()
   }
 

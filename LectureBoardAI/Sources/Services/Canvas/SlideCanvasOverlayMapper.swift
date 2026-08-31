@@ -115,6 +115,39 @@ struct SlideCanvasOverlayPlacement: Equatable, Sendable {
   }
 }
 
+/// Metadata-safe reasons why a current confirmed canvas could not be mapped.
+/// These cases deliberately retain no window title, coordinates, or captured
+/// content.
+enum SlideCanvasOverlayMappingRejection: String, Equatable, Sendable {
+  case captureContextMismatch
+  case surfaceGeometryUnavailableOrMismatched
+  case screenGeometryUnavailable
+  case unsupportedSelectionProvenance
+  case invalidSurfaceGeometry
+  case contentScaleMismatch
+  /// Defensive failure: current `SlideCanvasRegion` and positive image-size
+  /// invariants make this unreachable for constructible production input.
+  case invalidCanvasRegion
+  case canvasOutsideCapturedContent
+  /// Defensive failure: preceding containment and finite-geometry checks make
+  /// this unreachable for constructible production input.
+  case invalidQuartzTarget
+  case noContainingDisplay
+  case ambiguousContainingDisplays
+  case invalidAppKitTarget
+}
+
+enum SlideCanvasOverlayMappingResult: Equatable, Sendable {
+  case mapped(SlideCanvasOverlayPlacement)
+  case rejected(SlideCanvasOverlayMappingRejection)
+}
+
+enum SlideCanvasOverlayMappingState: Equatable, Sendable {
+  case unavailable
+  case mapped
+  case rejected(SlideCanvasOverlayMappingRejection)
+}
+
 /// Maps a confirmed output-surface canvas to the exact current onscreen window
 /// content rectangle. Every missing or ambiguous coordinate fact fails closed.
 enum SlideCanvasOverlayMapper {
@@ -126,16 +159,41 @@ enum SlideCanvasOverlayMapper {
     captureOperationID: CaptureOperationID,
     displays: [DisplayCoordinateSnapshot]
   ) -> SlideCanvasOverlayPlacement? {
+    switch evaluatePlacement(
+      selection: selection,
+      frame: frame,
+      captureOperationID: captureOperationID,
+      displays: displays
+    ) {
+    case .mapped(let placement):
+      return placement
+    case .rejected:
+      return nil
+    }
+  }
+
+  static func evaluatePlacement(
+    selection: ConfirmedSlideCanvasSelection,
+    frame: CapturedPowerPointFrame,
+    captureOperationID: CaptureOperationID,
+    displays: [DisplayCoordinateSnapshot]
+  ) -> SlideCanvasOverlayMappingResult {
     guard
       selection.captureOperationID == captureOperationID,
       selection.windowID == frame.windowID,
-      frame.windowID != 0,
+      frame.windowID != 0
+    else {
+      return .rejected(.captureContextMismatch)
+    }
+    guard
       let frameSurface = frame.captureSurfaceGeometry,
-      let screenGeometry = frame.captureScreenGeometry,
       frameSurface.outputPixelWidth == frame.image.width,
       frameSurface.outputPixelHeight == frame.image.height
     else {
-      return nil
+      return .rejected(.surfaceGeometryUnavailableOrMismatched)
+    }
+    guard let screenGeometry = frame.captureScreenGeometry else {
+      return .rejected(.screenGeometryUnavailable)
     }
 
     let selectedSurface: CaptureSurfaceGeometry
@@ -143,9 +201,11 @@ enum SlideCanvasOverlayMapper {
     case .screenCaptureKit(let surface):
       selectedSurface = surface
     case .testOnlyWholeFrame:
-      return nil
+      return .rejected(.unsupportedSelectionProvenance)
     }
-    guard selectedSurface == frameSurface else { return nil }
+    guard selectedSurface == frameSurface else {
+      return .rejected(.surfaceGeometryUnavailableOrMismatched)
+    }
 
     let scaleFactor = frameSurface.scaleFactor
     let contentScale = frameSurface.contentScale
@@ -184,7 +244,7 @@ enum SlideCanvasOverlayMapper {
       contentMaximumX <= outputWidth + outputPixelTolerance,
       contentMaximumY <= outputHeight + outputPixelTolerance
     else {
-      return nil
+      return .rejected(.invalidSurfaceGeometry)
     }
 
     // contentRect and contentScale describe the same captured content in
@@ -201,13 +261,17 @@ enum SlideCanvasOverlayMapper {
       widthDifferenceInOutputPixels.isFinite,
       heightDifferenceInOutputPixels.isFinite,
       widthDifferenceInOutputPixels <= outputPixelTolerance,
-      heightDifferenceInOutputPixels <= outputPixelTolerance,
+      heightDifferenceInOutputPixels <= outputPixelTolerance
+    else {
+      return .rejected(.contentScaleMismatch)
+    }
+    guard
       let canvasPixels = selection.region.pixelRect(
         sourcePixelWidth: frameSurface.outputPixelWidth,
         sourcePixelHeight: frameSurface.outputPixelHeight
       )
     else {
-      return nil
+      return .rejected(.invalidCanvasRegion)
     }
 
     let canvasMinimumX = Double(canvasPixels.x)
@@ -220,7 +284,7 @@ enum SlideCanvasOverlayMapper {
       canvasMaximumX <= contentMaximumX,
       canvasMaximumY <= contentMaximumY
     else {
-      return nil
+      return .rejected(.canvasOutsideCapturedContent)
     }
 
     let leftFraction = (canvasMinimumX - contentMinimumX) / contentPixelWidth
@@ -233,13 +297,18 @@ enum SlideCanvasOverlayMapper {
       width: (rightFraction - leftFraction) * Double(screenRect.width),
       height: (bottomFraction - topFraction) * Double(screenRect.height)
     )
-    guard isValidTargetFrame(quartzTargetFrame) else { return nil }
+    guard isValidTargetFrame(quartzTargetFrame) else {
+      return .rejected(.invalidQuartzTarget)
+    }
 
     let containingDisplays = displays.filter {
       fullyContains(quartzTargetFrame, in: $0.quartzGlobalFrame)
     }
+    guard !containingDisplays.isEmpty else {
+      return .rejected(.noContainingDisplay)
+    }
     guard containingDisplays.count == 1, let display = containingDisplays.first else {
-      return nil
+      return .rejected(.ambiguousContainingDisplays)
     }
 
     let quartzDisplay = display.quartzGlobalFrame
@@ -262,13 +331,17 @@ enum SlideCanvasOverlayMapper {
       width: (normalizedRight - normalizedLeft) * Double(appKitDisplay.width),
       height: (normalizedBottom - normalizedTop) * Double(appKitDisplay.height)
     )
-    guard isValidTargetFrame(appKitTargetFrame) else { return nil }
+    guard isValidTargetFrame(appKitTargetFrame) else {
+      return .rejected(.invalidAppKitTarget)
+    }
 
-    return SlideCanvasOverlayPlacement(
-      captureOperationID: captureOperationID,
-      windowID: frame.windowID,
-      frameSequenceNumber: frame.sequenceNumber,
-      appKitTargetFrame: appKitTargetFrame
+    return .mapped(
+      SlideCanvasOverlayPlacement(
+        captureOperationID: captureOperationID,
+        windowID: frame.windowID,
+        frameSequenceNumber: frame.sequenceNumber,
+        appKitTargetFrame: appKitTargetFrame
+      )
     )
   }
 
