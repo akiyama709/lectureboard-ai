@@ -12,7 +12,7 @@ public enum BoardIntentKind: String, Codable, CaseIterable, Sendable {
   case example
 }
 
-public enum BoardIntentState: String, Codable, Sendable {
+public enum BoardIntentState: String, Codable, CaseIterable, Sendable {
   case deferred
   case proposed
   case confirmed

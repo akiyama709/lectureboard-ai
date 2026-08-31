@@ -14,7 +14,7 @@ public struct BoardSceneComposer: Sendable {
   ) -> BoardScene {
     var result = scene
 
-    for intent in intents where intent.state != .dismissed && intent.state != .deferred {
+    for intent in intents where isAllowedInPublicScene(intent.state) {
       guard
         let region = layoutEngine.placement(
           for: intent,
@@ -27,6 +27,15 @@ public struct BoardSceneComposer: Sendable {
     }
 
     return result
+  }
+
+  private func isAllowedInPublicScene(_ state: BoardIntentState) -> Bool {
+    switch state {
+    case .confirmed, .pinned:
+      return true
+    case .deferred, .proposed, .dismissed:
+      return false
+    }
   }
 
   private func elements(for intent: BoardIntent, in region: NormalizedRect) -> [BoardElement] {

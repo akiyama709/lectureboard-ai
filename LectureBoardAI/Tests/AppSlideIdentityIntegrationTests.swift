@@ -119,8 +119,6 @@ struct AppSlideIdentityIntegrationTests {
     let secondSlide = try sample(slideID: 202, slideIndex: 2)
     let image = try #require(makeImage())
     let fingerprints = frameFingerprints()
-    let firstSlideDefinition = definitionSegment()
-
     await model.startWindowCapture()
     await provider.emit(sequenceNumber: 1, signal: .available(firstSlide))
     await provider.emit(sequenceNumber: 2, signal: .available(firstSlide))
@@ -146,7 +144,7 @@ struct AppSlideIdentityIntegrationTests {
       )
     }
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    model.receive(firstSlideDefinition)
+    receiveConfirmedDefinition(on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await provider.emit(sequenceNumber: 3, signal: .available(secondSlide))
@@ -188,15 +186,11 @@ struct AppSlideIdentityIntegrationTests {
     )
     #expect(model.boardScene.elements.isEmpty)
 
-    model.receive(
-      TranscriptSegment(
-        text: "Resilience means retaining function while conditions change.",
-        startTime: 9,
-        endTime: 14,
-        language: .englishUS,
-        confidence: 0.95,
-        emphasis: 0.8
-      )
+    receiveConfirmedDefinition(
+      text: "Resilience means retaining function while conditions change.",
+      startTime: 9,
+      endTime: 14,
+      on: model
     )
     #expect(!model.boardScene.elements.isEmpty)
 
@@ -274,6 +268,13 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.liveTranscript.isEmpty)
     #expect(model.boardScene.elements.isEmpty)
 
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: definitionSegment(),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
     transcriptionProvider.emit(
       startIndex: 1,
       observation: TranscriptionObservation(
@@ -709,7 +710,7 @@ struct AppSlideIdentityIntegrationTests {
     #expect(!SlideIdentityTranscriptBoundary.accepts(sourceMachTime: 100, after: 100))
     #expect(SlideIdentityTranscriptBoundary.accepts(sourceMachTime: 101, after: 100))
 
-    model.receive(definitionSegment)
+    receiveConfirmedDefinition(on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -1057,7 +1058,7 @@ struct AppSlideIdentityIntegrationTests {
     try await waitUntil { model.slideAnalysisStatus == .ready }
     #expect(await analyzer.analysisCount == 1)
 
-    model.receive(definitionSegment())
+    receiveConfirmedDefinition(on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -1115,7 +1116,7 @@ struct AppSlideIdentityIntegrationTests {
     }
     try await waitUntil { model.slideAnalysisStatus == .ready }
 
-    model.receive(definitionSegment())
+    receiveConfirmedDefinition(on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -1358,16 +1359,31 @@ struct AppSlideIdentityIntegrationTests {
     )
   }
 
-  private func definitionSegment() -> TranscriptSegment {
+  private func definitionSegment(
+    text: String =
+      "Sustainability means meeting present needs without undermining future possibilities.",
+    startTime: TimeInterval = 0,
+    endTime: TimeInterval = 6
+  ) -> TranscriptSegment {
     TranscriptSegment(
-      text:
-        "Sustainability means meeting present needs without undermining future possibilities.",
-      startTime: 0,
-      endTime: 6,
+      text: text,
+      startTime: startTime,
+      endTime: endTime,
       language: .englishUS,
       confidence: 0.95,
       emphasis: 0.8
     )
+  }
+
+  private func receiveConfirmedDefinition(
+    text: String =
+      "Sustainability means meeting present needs without undermining future possibilities.",
+    startTime: TimeInterval = 0,
+    endTime: TimeInterval = 6,
+    on model: AppModel
+  ) {
+    model.receive(definitionSegment(text: text, startTime: startTime, endTime: endTime))
+    model.receive(definitionSegment(text: text, startTime: startTime, endTime: endTime))
   }
 
   private func partialSegment(text: String) -> TranscriptSegment {

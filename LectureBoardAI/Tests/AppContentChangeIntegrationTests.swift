@@ -569,7 +569,10 @@ struct AppContentChangeIntegrationTests {
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    model.receive(proposalDefinition("Freshness means using the reanalyzed current frame."))
+    receiveConfirmedProposal(
+      "Freshness means using the reanalyzed current frame.",
+      on: model
+    )
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -631,7 +634,7 @@ struct AppContentChangeIntegrationTests {
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    model.receive(proposalDefinition("Current occupancy means proposals may resume."))
+    receiveConfirmedProposal("Current occupancy means proposals may resume.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -706,7 +709,7 @@ struct AppContentChangeIntegrationTests {
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    model.receive(proposalDefinition("Validated evidence means proposals may resume."))
+    receiveConfirmedProposal("Validated evidence means proposals may resume.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
@@ -987,6 +990,11 @@ struct AppContentChangeIntegrationTests {
       confidence: 0.95,
       emphasis: 0.9
     )
+  }
+
+  private func receiveConfirmedProposal(_ text: String, on model: AppModel) {
+    model.receive(proposalDefinition(text))
+    model.receive(proposalDefinition(text))
   }
 
   private func makeImage() -> CGImage? {

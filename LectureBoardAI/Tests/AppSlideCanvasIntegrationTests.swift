@@ -112,8 +112,9 @@ struct AppSlideCanvasIntegrationTests {
       )
     )
     try await waitUntil { model.capturedFrameCount == 5 }
-    model.receive(
-      boardProposalDefinition(text: "Sustainability means preserving options.")
+    receiveConfirmedBoardProposal(
+      "Sustainability means preserving options.",
+      on: model
     )
 
     #expect(!model.boardScene.elements.isEmpty)
@@ -218,7 +219,7 @@ struct AppSlideCanvasIntegrationTests {
       )
     )
     try await waitUntil { model.capturedFrameCount == 6 }
-    model.receive(boardProposalDefinition(text: "Resilience means retaining function."))
+    receiveConfirmedBoardProposal("Resilience means retaining function.", on: model)
     #expect(overlay.renderCallCount == 1)
     #expect(!overlay.isVisible)
 
@@ -292,8 +293,51 @@ struct AppSlideCanvasIntegrationTests {
     try await waitUntil { model.capturedFrameCount == 8 }
     #expect(overlay.renderCallCount == 3)
 
-    model.receive(boardProposalDefinition(text: "Resilience means retaining function."))
+    receiveConfirmedBoardProposal("Resilience means retaining function.", on: model)
     #expect(overlay.renderCallCount == 4)
+    await model.stopWindowCapture()
+  }
+
+  @Test func proposedIntentRemainsInternalUntilRepeatedEvidenceConfirmsIt() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let eligibility = MutableCanvasProductionOverlayEligibilityProvider()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display],
+      productionOverlayEligibilityProvider: eligibility
+    )
+
+    try await establishAnalyzedProductionOverlay(
+      model: model,
+      capture: capture,
+      geometry: geometry
+    )
+    let eligibilityCallsBeforeProposal = eligibility.callCount
+    let renderCallsBeforeProposal = overlay.renderCallCount
+    let hideCallsBeforeProposal = overlay.hideCallCount
+    let repeatedDefinition = "Sustainability means preserving options."
+
+    model.receive(boardProposalDefinition(text: repeatedDefinition))
+
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(eligibility.callCount == eligibilityCallsBeforeProposal)
+    #expect(overlay.renderCallCount == renderCallsBeforeProposal)
+    #expect(overlay.hideCallCount == hideCallsBeforeProposal)
+
+    model.receive(boardProposalDefinition(text: repeatedDefinition))
+
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(eligibility.callCount == eligibilityCallsBeforeProposal + 1)
+    #expect(overlay.renderCallCount == renderCallsBeforeProposal + 1)
+    #expect(overlay.isVisible)
+
     await model.stopWindowCapture()
   }
 
@@ -327,7 +371,7 @@ struct AppSlideCanvasIntegrationTests {
 
     scheduler.fireActive()
     #expect(!overlay.isVisible)
-    model.receive(boardProposalDefinition(text: "Resilience means retaining function."))
+    receiveConfirmedBoardProposal("Resilience means retaining function.", on: model)
     #expect(!overlay.isVisible)
     #expect(overlay.renderCallCount == rendersBeforeExpiry)
 
@@ -347,7 +391,10 @@ struct AppSlideCanvasIntegrationTests {
 
     safetyEvents.emitUnsafeEvent()
     #expect(!overlay.isVisible)
-    model.receive(boardProposalDefinition(text: "Adaptation means retaining options."))
+    receiveConfirmedBoardProposal(
+      "Adaptation means changing strategy under uncertainty.",
+      on: model
+    )
     #expect(!overlay.isVisible)
 
     await capture.emit(
@@ -454,6 +501,13 @@ struct AppSlideCanvasIntegrationTests {
       ),
       startIndex: 0
     )
+    transcription.emitRetained(
+      TranscriptionObservation(
+        segment: boardProposalDefinition(text: "Sustainability means preserving options."),
+        sourceMachTime: UInt64.max
+      ),
+      startIndex: 0
+    )
     #expect(!model.boardScene.elements.isEmpty)
     #expect(!overlay.isVisible)
     #expect(overlay.renderCallCount == rendersBeforeChange)
@@ -511,7 +565,7 @@ struct AppSlideCanvasIntegrationTests {
       )
     }
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    model.receive(boardProposalDefinition(text: "Sustainability means preserving options."))
+    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
     #expect(overlay.renderCallCount == 0)
     #expect(!overlay.isVisible)
@@ -541,7 +595,7 @@ struct AppSlideCanvasIntegrationTests {
       capture: capture,
       geometry: geometry
     )
-    model.receive(boardProposalDefinition(text: "Sustainability means preserving options."))
+    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
     #expect(overlay.renderCallCount == 0)
     #expect(!overlay.isVisible)
@@ -681,6 +735,13 @@ struct AppSlideCanvasIntegrationTests {
     try await waitUntil { model.capturedFrameCount == 11 }
 
     await model.startTranscription()
+    transcription.emitRetained(
+      TranscriptionObservation(
+        segment: boardProposalDefinition(text: "Resilience means retaining function."),
+        sourceMachTime: UInt64.max
+      ),
+      startIndex: 1
+    )
     transcription.emitRetained(
       TranscriptionObservation(
         segment: boardProposalDefinition(text: "Resilience means retaining function."),
@@ -952,7 +1013,7 @@ struct AppSlideCanvasIntegrationTests {
     }
     try await waitUntil { model.slideAnalysisStatus == .ready }
 
-    model.receive(boardProposalDefinition(text: "Sustainability means preserving options."))
+    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     model.beginSlideCanvasSelection()
@@ -966,7 +1027,7 @@ struct AppSlideCanvasIntegrationTests {
 
     model.receive(lowImportanceAside(startTime: 10))
     #expect(model.boardScene.elements.isEmpty)
-    model.receive(boardProposalDefinition(text: "Resilience means retaining function."))
+    receiveConfirmedBoardProposal("Resilience means retaining function.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -1560,7 +1621,7 @@ struct AppSlideCanvasIntegrationTests {
       capture: capture,
       geometry: geometry
     )
-    model.receive(boardProposalDefinition(text: "Sustainability means preserving options."))
+    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
   }
 
   private func frame(sequenceNumber: UInt64, image: CGImage) -> CapturedPowerPointFrame {
@@ -1736,6 +1797,11 @@ struct AppSlideCanvasIntegrationTests {
       confidence: 0.95,
       emphasis: 0.9
     )
+  }
+
+  private func receiveConfirmedBoardProposal(_ text: String, on model: AppModel) {
+    model.receive(boardProposalDefinition(text: text))
+    model.receive(boardProposalDefinition(text: text))
   }
 
   private func lowImportanceAside(startTime: TimeInterval) -> TranscriptSegment {

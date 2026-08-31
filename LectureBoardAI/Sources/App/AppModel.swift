@@ -641,11 +641,14 @@ final class AppModel: ObservableObject {
     guard !proposals.isEmpty else { return }
 
     boardCandidateContext.intents.append(contentsOf: proposals)
-    boardScene = sceneComposer.append(
+    let nextBoardScene = sceneComposer.append(
       intents: proposals,
       to: boardScene,
       slideOccupied: slide.occupiedRegions
     )
+    guard nextBoardScene != boardScene else { return }
+
+    boardScene = nextBoardScene
     boardSceneAnalysisGeneration = analysisGeneration
     renderAlignedOverlayIfPossible()
   }

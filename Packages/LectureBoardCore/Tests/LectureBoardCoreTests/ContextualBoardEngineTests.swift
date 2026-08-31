@@ -66,4 +66,23 @@ struct ContextualBoardEngineTests {
 
     #expect(result.isEmpty)
   }
+
+  @Test func keepsAThresholdPassingCandidateProposedUntilConfirmed() {
+    let segment = TranscriptSegment(
+      text: "Why does this happen?",
+      startTime: 0,
+      endTime: 4,
+      language: .englishUS,
+      confidence: 0.9,
+      emphasis: 0.5
+    )
+    let slide = SlideContext(slideNumber: 2, title: "Topic", dwellTime: 60)
+
+    let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+
+    #expect(intents.count == 1)
+    #expect(intents.first?.importance ?? 0 >= 0.58)
+    #expect(intents.first?.importance ?? 1 < 0.78)
+    #expect(intents.first?.state == .proposed)
+  }
 }
