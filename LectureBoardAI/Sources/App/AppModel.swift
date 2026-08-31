@@ -97,6 +97,7 @@ final class AppModel: ObservableObject {
   @Published private(set) var slideCanvasStatus = SlideCanvasStatus.unavailable
   @Published private(set) var slideCanvasOverlayMappingState =
     SlideCanvasOverlayMappingState.unavailable
+  @Published private(set) var slideCanvasInvalidationReason: SlideCanvasInvalidationReason?
   @Published private(set) var latestCapturedWindowFrame: CGImage?
   @Published private(set) var slideCanvasCalibrationFrame: CGImage?
   @Published private(set) var confirmedSlideCanvasRegion: SlideCanvasRegion?
@@ -286,6 +287,7 @@ final class AppModel: ObservableObject {
     slideCanvasCalibrationFrame = nil
     slideCanvasCalibrationRevision &+= 1
     slideCanvasStatus = .confirmed
+    slideCanvasInvalidationReason = nil
     resetCanvasVisualPipeline()
 
     if let latestEligibleWindowFrame {
@@ -293,17 +295,17 @@ final class AppModel: ObservableObject {
         using: latestEligibleWindowFrame,
         sessionID: activeCaptureSessionID
       )
-      guard
-        let canvasFrame = SlideCanvasFramePreparer.makeFrame(
-          from: latestEligibleWindowFrame,
-          captureOperationID: activeCaptureSessionID,
-          selection: selection
-        )
-      else {
-        invalidateConfirmedSlideCanvas()
+      switch SlideCanvasFramePreparer.evaluate(
+        latestEligibleWindowFrame,
+        captureOperationID: activeCaptureSessionID,
+        selection: selection
+      ) {
+      case .rejected(let reason):
+        invalidateConfirmedSlideCanvas(reason: reason)
         return false
+      case .prepared(let canvasFrame):
+        processVisualFrame(canvasFrame, sessionID: activeCaptureSessionID)
       }
-      processVisualFrame(canvasFrame, sessionID: activeCaptureSessionID)
     }
     return true
   }
@@ -686,19 +688,20 @@ final class AppModel: ObservableObject {
     }
     latestEligibleWindowFrame = frame
     observeWindowFrameForSlideCanvas(frame, sessionID: sessionID)
-    guard
-      let confirmedSlideCanvasSelection,
-      let canvasFrame = SlideCanvasFramePreparer.makeFrame(
-        from: frame,
-        captureOperationID: sessionID,
-        selection: confirmedSlideCanvasSelection
-      )
-    else {
-      if confirmedSlideCanvasSelection != nil {
-        invalidateConfirmedSlideCanvas()
-      } else {
-        invalidateOverlayPlacement()
-      }
+    guard let confirmedSlideCanvasSelection else {
+      invalidateOverlayPlacement()
+      return
+    }
+    let canvasFrame: CapturedSlideCanvasFrame
+    switch SlideCanvasFramePreparer.evaluate(
+      frame,
+      captureOperationID: sessionID,
+      selection: confirmedSlideCanvasSelection
+    ) {
+    case .prepared(let preparedFrame):
+      canvasFrame = preparedFrame
+    case .rejected(let reason):
+      invalidateConfirmedSlideCanvas(reason: reason)
       return
     }
     processVisualFrame(canvasFrame, sessionID: sessionID)
@@ -720,17 +723,24 @@ final class AppModel: ObservableObject {
         captureSurfaceGeometry.outputPixelWidth == frame.image.width,
         captureSurfaceGeometry.outputPixelHeight == frame.image.height
       else {
-        invalidateConfirmedSlideCanvas()
+        invalidateConfirmedSlideCanvas(
+          reason: .surfaceGeometryUnavailableOrMismatched(for: frame.deliveryKind)
+        )
         return
       }
       if slideCanvasStatus == .selecting {
         guard
           let source = slideCanvasCalibrationSource,
           source.captureOperationID == sessionID,
-          source.windowID == frame.windowID,
-          source.captureSurfaceGeometry == captureSurfaceGeometry
+          source.windowID == frame.windowID
         else {
-          invalidateConfirmedSlideCanvas()
+          invalidateConfirmedSlideCanvas(reason: .selectionContextMismatch)
+          return
+        }
+        guard source.captureSurfaceGeometry == captureSurfaceGeometry else {
+          invalidateConfirmedSlideCanvas(
+            reason: .surfaceGeometryUnavailableOrMismatched(for: frame.deliveryKind)
+          )
           return
         }
       } else if slideCanvasStatus == .waitingForFrame
@@ -752,12 +762,14 @@ final class AppModel: ObservableObject {
         )
       else {
         slideCanvasStatus = .invalidated
+        slideCanvasInvalidationReason = .confirmedFrameRejected
         return
       }
       slideCanvasGeneration &+= 1
       confirmedSlideCanvasSelection = selection
       confirmedSlideCanvasRegion = fullFrameRegion
       slideCanvasStatus = .confirmed
+      slideCanvasInvalidationReason = nil
       resetCanvasVisualPipeline()
     }
   }
@@ -776,6 +788,7 @@ final class AppModel: ObservableObject {
     latestEligibleWindowFrame = nil
     slideCanvasCalibrationRevision &+= 1
     slideCanvasStatus = .waitingForFrame
+    slideCanvasInvalidationReason = nil
   }
 
   private func invalidateSlideCanvasAfterCaptureEnd() {
@@ -792,6 +805,7 @@ final class AppModel: ObservableObject {
     latestStableFrame = nil
     slideCanvasCalibrationRevision &+= 1
     slideCanvasStatus = .unavailable
+    slideCanvasInvalidationReason = nil
     boardScene = BoardScene(slideNumber: boardScene.slideNumber)
     boardSceneAnalysisGeneration = nil
     invalidateOverlayPlacement()
@@ -808,12 +822,13 @@ final class AppModel: ObservableObject {
     }
   }
 
-  private func invalidateConfirmedSlideCanvas() {
+  private func invalidateConfirmedSlideCanvas(reason: SlideCanvasInvalidationReason) {
     clearConfirmedSlideCanvas(resetVisualPipeline: true)
     slideCanvasCalibrationSource = nil
     slideCanvasCalibrationFrame = nil
     slideCanvasCalibrationRevision &+= 1
     slideCanvasStatus = activeCaptureSessionID == nil ? .unavailable : .invalidated
+    slideCanvasInvalidationReason = activeCaptureSessionID == nil ? nil : reason
   }
 
   private func resetCanvasVisualPipeline() {

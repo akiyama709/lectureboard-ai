@@ -48,7 +48,7 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
 
 /// A metadata-only runtime verification record that excludes captured content and window titles.
 public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
-  public static let currentSchemaVersion = 8
+  public static let currentSchemaVersion = 9
 
   public let schemaVersion: Int
   public let startedAt: Date
@@ -67,6 +67,10 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
   public let runStatus: RuntimeVerificationRunStatus
   public let failureCode: RuntimeVerificationFailureCode?
   public let failureMessage: String?
+  /// `nil` for completed runs, non-canvas failures, and decoded schema 1
+  /// through schema 8 reports. A current failed canvas-confirmation report
+  /// always has one bounded reason.
+  public let slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason?
   public let snapshots: [RuntimeVerificationSnapshot]
 
   public init(
@@ -84,6 +88,7 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     slideCanvasConfirmationMode: RuntimeSlideCanvasConfirmationMode = .noneRequested,
     runStatus: RuntimeVerificationRunStatus,
     failureCode: RuntimeVerificationFailureCode?,
+    slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason? = nil,
     untrustedFailureDetail _: String?,
     snapshots: [RuntimeVerificationSnapshot]
   ) {
@@ -118,12 +123,104 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     if runStatus == .completed {
       self.failureCode = nil
       self.failureMessage = nil
+      self.slideCanvasFailureReason = nil
     } else {
       let resolvedFailureCode = failureCode ?? .internalFailure
       self.failureCode = resolvedFailureCode
       self.failureMessage = resolvedFailureCode.safeReportMessage
+      self.slideCanvasFailureReason =
+        resolvedFailureCode == .slideCanvasConfirmationFailed
+        ? slideCanvasFailureReason ?? .unclassifiedInvalidation
+        : nil
     }
     self.snapshots = snapshots
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+
+    schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+    startedAt = try container.decode(Date.self, forKey: .startedAt)
+    finishedAt = try container.decode(Date.self, forKey: .finishedAt)
+    requestedDurationSeconds = try container.decode(
+      TimeInterval.self,
+      forKey: .requestedDurationSeconds
+    )
+    permissionWasRequested = try container.decode(
+      Bool.self,
+      forKey: .permissionWasRequested
+    )
+    permissionRequestReturned = try container.decodeIfPresent(
+      Bool.self,
+      forKey: .permissionRequestReturned
+    )
+    preflightBefore = try container.decode(
+      ScreenRecordingPermissionState.self,
+      forKey: .preflightBefore
+    )
+    preflightAfter = try container.decode(
+      ScreenRecordingPermissionState.self,
+      forKey: .preflightAfter
+    )
+    matchedWindowCount = try container.decode(Int.self, forKey: .matchedWindowCount)
+    selectedWindowID = try container.decodeIfPresent(
+      UInt32.self,
+      forKey: .selectedWindowID
+    )
+    selectedBundleIdentifier = try container.decodeIfPresent(
+      String.self,
+      forKey: .selectedBundleIdentifier
+    )
+    slideCanvasConfirmationMode = try container.decodeIfPresent(
+      RuntimeSlideCanvasConfirmationMode.self,
+      forKey: .slideCanvasConfirmationMode
+    )
+    runStatus = try container.decode(
+      RuntimeVerificationRunStatus.self,
+      forKey: .runStatus
+    )
+    failureCode = try container.decodeIfPresent(
+      RuntimeVerificationFailureCode.self,
+      forKey: .failureCode
+    )
+    failureMessage = try container.decodeIfPresent(String.self, forKey: .failureMessage)
+    snapshots = try container.decode(
+      [RuntimeVerificationSnapshot].self,
+      forKey: .snapshots
+    )
+
+    let decodedCanvasFailureReason = try container.decodeIfPresent(
+      RuntimeSlideCanvasInvalidationReason.self,
+      forKey: .slideCanvasFailureReason
+    )
+    if schemaVersion >= 9,
+      runStatus == .failed,
+      failureCode == .slideCanvasConfirmationFailed
+    {
+      slideCanvasFailureReason = decodedCanvasFailureReason ?? .unclassifiedInvalidation
+    } else {
+      slideCanvasFailureReason = nil
+    }
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion
+    case startedAt
+    case finishedAt
+    case requestedDurationSeconds
+    case permissionWasRequested
+    case permissionRequestReturned
+    case preflightBefore
+    case preflightAfter
+    case matchedWindowCount
+    case selectedWindowID
+    case selectedBundleIdentifier
+    case slideCanvasConfirmationMode
+    case runStatus
+    case failureCode
+    case failureMessage
+    case slideCanvasFailureReason
+    case snapshots
   }
 
   private static func normalizedMetadata(_ value: String?) -> String? {

@@ -79,7 +79,7 @@ struct RuntimeVerificationReportTests {
       snapshots: []
     )
 
-    #expect(RuntimeVerificationReport.currentSchemaVersion == 8)
+    #expect(RuntimeVerificationReport.currentSchemaVersion == 9)
     #expect(report.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
   }
 
@@ -336,6 +336,54 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].slideCanvasOverlayState == .mapped)
   }
 
+  @Test func decodesSchemaOneThroughEightWithoutCanvasFailureMetadata() throws {
+    let report = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+      finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+      requestedDurationSeconds: 12,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 42,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .failed,
+      failureCode: .slideCanvasConfirmationFailed,
+      slideCanvasFailureReason: .selectionConfirmationRejected,
+      untrustedFailureDetail: nil,
+      snapshots: [
+        snapshot(
+          invalidationReason: .newFrameSurfaceGeometryUnavailableOrMismatched
+        )
+      ]
+    )
+
+    let encoded = try JSONEncoder().encode(report)
+    let currentObject = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+
+    for schemaVersion in 1...8 {
+      var legacyObject = currentObject
+      legacyObject["schemaVersion"] = schemaVersion
+      legacyObject.removeValue(forKey: "slideCanvasFailureReason")
+      var snapshots = try #require(legacyObject["snapshots"] as? [[String: Any]])
+      snapshots[0].removeValue(forKey: "slideCanvasInvalidationReason")
+      legacyObject["snapshots"] = snapshots
+
+      let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+      let decoded = try JSONDecoder().decode(
+        RuntimeVerificationReport.self,
+        from: legacyData
+      )
+
+      #expect(decoded.schemaVersion == schemaVersion)
+      #expect(decoded.slideCanvasFailureReason == nil)
+      #expect(decoded.snapshots[0].slideCanvasInvalidationReason == nil)
+    }
+  }
+
   @Test func decodesSchemaOneSnapshotsWithoutNewMetadataCounters() throws {
     let report = RuntimeVerificationReport(
       startedAt: Date(timeIntervalSince1970: 1_788_045_600),
@@ -401,6 +449,7 @@ struct RuntimeVerificationReportTests {
       selectedBundleIdentifier: nil,
       runStatus: .completed,
       failureCode: .captureFailed,
+      slideCanvasFailureReason: .confirmedFrameRejected,
       untrustedFailureDetail: "not retained",
       snapshots: []
     )
@@ -409,6 +458,59 @@ struct RuntimeVerificationReportTests {
     #expect(report.requestedDurationSeconds == 0)
     #expect(report.failureCode == nil)
     #expect(report.failureMessage == nil)
+    #expect(report.slideCanvasFailureReason == nil)
+  }
+
+  @Test func failedCanvasReportsAlwaysUseABoundedFailureReason() {
+    let explicit = makeFailedCanvasReport(
+      slideCanvasFailureReason: .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
+    let fallback = makeFailedCanvasReport(slideCanvasFailureReason: nil)
+    let unrelated = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 0),
+      finishedAt: Date(timeIntervalSince1970: 1),
+      requestedDurationSeconds: 1,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 7,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .failed,
+      failureCode: .captureFailed,
+      slideCanvasFailureReason: .confirmedFrameRejected,
+      untrustedFailureDetail: nil,
+      snapshots: []
+    )
+
+    #expect(
+      explicit.slideCanvasFailureReason
+        == .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
+    #expect(fallback.slideCanvasFailureReason == .unclassifiedInvalidation)
+    #expect(unrelated.slideCanvasFailureReason == nil)
+  }
+
+  @Test func decodesCurrentCanvasFailureWithoutReasonAsUnclassified() throws {
+    let report = makeFailedCanvasReport(
+      slideCanvasFailureReason: .confirmedFrameRejected
+    )
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object.removeValue(forKey: "slideCanvasFailureReason")
+
+    let data = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(
+      RuntimeVerificationReport.self,
+      from: data
+    )
+
+    #expect(decoded.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
+    #expect(decoded.failureCode == .slideCanvasConfirmationFailed)
+    #expect(decoded.slideCanvasFailureReason == .unclassifiedInvalidation)
   }
 
   @Test func encodedReportExcludesCapturedContentKeys() throws {
@@ -479,9 +581,10 @@ struct RuntimeVerificationReportTests {
       selectedWindowID: 7,
       selectedBundleIdentifier: "com.microsoft.Powerpoint",
       runStatus: .failed,
-      failureCode: .captureFailed,
+      failureCode: .slideCanvasConfirmationFailed,
+      slideCanvasFailureReason: .selectionConfirmationRejected,
       untrustedFailureDetail: nil,
-      snapshots: [snapshot()]
+      snapshots: [snapshot(invalidationReason: .confirmedFrameRejected)]
     )
 
     let data = try JSONEncoder().encode(report)
@@ -508,6 +611,7 @@ struct RuntimeVerificationReportTests {
         "runStatus",
         "failureCode",
         "failureMessage",
+        "slideCanvasFailureReason",
         "snapshots",
       ]
     )
@@ -520,6 +624,7 @@ struct RuntimeVerificationReportTests {
         "visionState",
         "slideCanvasState",
         "slideCanvasOverlayState",
+        "slideCanvasInvalidationReason",
         "frameCount",
         "newFrameCount",
         "repeatedFrameCount",
@@ -541,6 +646,9 @@ struct RuntimeVerificationReportTests {
     #expect(root["contentRevisionCount"] == nil)
     #expect(root["strokeCandidateRegionCount"] == nil)
     #expect(root["slideCanvasConfirmationMode"] as? String == "noneRequested")
+    #expect(
+      root["slideCanvasFailureReason"] as? String == "selectionConfirmationRejected"
+    )
     #expect(encodedSnapshot["contentRevisionCount"] as? Int == 2)
     #expect(encodedSnapshot["strokeCandidateRegionCount"] as? Int == 1)
     #expect(encodedSnapshot["slideIdentityState"] as? String == "identified")
@@ -549,6 +657,10 @@ struct RuntimeVerificationReportTests {
     #expect(encodedSnapshot["slideIdentityContinuityBreakCount"] as? Int == 1)
     #expect(encodedSnapshot["slideCanvasState"] as? String == "confirmed")
     #expect(encodedSnapshot["slideCanvasOverlayState"] as? String == "mapped")
+    #expect(
+      encodedSnapshot["slideCanvasInvalidationReason"] as? String
+        == "confirmedFrameRejected"
+    )
   }
 
   @Test func canvasConfirmationModeRawValuesAreStableMetadata() throws {
@@ -618,7 +730,9 @@ struct RuntimeVerificationReportTests {
     }
   }
 
-  private func snapshot() -> RuntimeVerificationSnapshot {
+  private func snapshot(
+    invalidationReason: RuntimeSlideCanvasInvalidationReason? = nil
+  ) -> RuntimeVerificationSnapshot {
     RuntimeVerificationSnapshot(
       timestamp: Date(timeIntervalSince1970: 1_788_045_601),
       elapsedMilliseconds: 1_000,
@@ -627,6 +741,7 @@ struct RuntimeVerificationReportTests {
       visionState: .completed,
       slideCanvasState: .confirmed,
       slideCanvasOverlayState: .mapped,
+      slideCanvasInvalidationReason: invalidationReason,
       frameCount: 10,
       newFrameCount: 1,
       repeatedFrameCount: 9,
@@ -643,6 +758,28 @@ struct RuntimeVerificationReportTests {
       occupiedRegionCount: 4,
       lastNewFrameAt: Date(timeIntervalSince1970: 1_788_045_601),
       latestDifferenceFromStableFrame: 0
+    )
+  }
+
+  private func makeFailedCanvasReport(
+    slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason?
+  ) -> RuntimeVerificationReport {
+    RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 0),
+      finishedAt: Date(timeIntervalSince1970: 1),
+      requestedDurationSeconds: 1,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 7,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .failed,
+      failureCode: .slideCanvasConfirmationFailed,
+      slideCanvasFailureReason: slideCanvasFailureReason,
+      untrustedFailureDetail: nil,
+      snapshots: []
     )
   }
 

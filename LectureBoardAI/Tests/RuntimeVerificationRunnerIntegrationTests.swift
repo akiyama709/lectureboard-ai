@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import LectureBoardCore
+import ScreenCaptureKit
 import Testing
 
 @testable import LectureBoard_AI
@@ -36,6 +37,7 @@ struct RuntimeVerificationRunnerIntegrationTests {
     let report = try decodeReport(atPath: outputPath)
     #expect(report.runStatus == .completed)
     #expect(report.failureCode == nil)
+    #expect(report.slideCanvasFailureReason == nil)
     #expect(report.slideCanvasConfirmationMode == .diagnosticFullFrame)
     #expect(report.snapshots.contains { $0.slideCanvasState == .confirmed })
   }
@@ -63,7 +65,46 @@ struct RuntimeVerificationRunnerIntegrationTests {
       })
   }
 
-  @Test func invalidationAfterDiagnosticConfirmationFailsTheRun() async throws {
+  @Test func metadataEmptyVerifiedIdleRepeatCompletesWithConfirmedCanvas() async throws {
+    let capture = RuntimeRunnerCapture()
+    let model = makeModel(capture: capture)
+    let outputPath = uniqueReportPath()
+    defer { try? FileManager.default.removeItem(atPath: outputPath) }
+    let runner = makeRunner()
+
+    let runTask = Task {
+      await runner.run(
+        configuration: configuration(
+          outputPath: outputPath,
+          observationDurationSeconds: 0.08
+        ),
+        model: model
+      )
+    }
+    try await capture.waitUntilStarted()
+    let firstFrame = makeFrame(sequenceNumber: 1)
+    await capture.emit(firstFrame)
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    await capture.emit(
+      CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: firstFrame,
+        sequenceNumber: 2,
+        capturedAt: Date(),
+        currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+      )
+    )
+    await runTask.value
+
+    let report = try decodeReport(atPath: outputPath)
+    #expect(report.runStatus == .completed)
+    #expect(report.failureCode == nil)
+    #expect(report.slideCanvasFailureReason == nil)
+    #expect(report.snapshots.last?.slideCanvasState == .confirmed)
+    #expect(report.snapshots.last?.slideCanvasInvalidationReason == nil)
+    #expect(report.snapshots.last?.repeatedFrameCount == 1)
+  }
+
+  @Test func idleRepeatGeometryInvalidationIsRetainedInTheFailedReport() async throws {
     let capture = RuntimeRunnerCapture()
     let model = makeModel(capture: capture)
     let outputPath = uniqueReportPath()
@@ -82,14 +123,102 @@ struct RuntimeVerificationRunnerIntegrationTests {
     try await capture.waitUntilStarted()
     await capture.emit(makeFrame(sequenceNumber: 1))
     try await waitUntil { model.slideCanvasStatus == .confirmed }
-    await capture.emit(makeFrame(sequenceNumber: 2, changesSurfaceGeometry: true))
+    await capture.emit(
+      makeFrame(
+        sequenceNumber: 2,
+        deliveryKind: .idleRepeat,
+        omitsSurfaceGeometry: true
+      )
+    )
     await runTask.value
 
     let report = try decodeReport(atPath: outputPath)
     #expect(report.runStatus == .failed)
     #expect(report.failureCode == .slideCanvasConfirmationFailed)
+    #expect(
+      report.slideCanvasFailureReason
+        == .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
     #expect(report.slideCanvasConfirmationMode == .diagnosticFullFrame)
-    #expect(report.snapshots.contains { $0.slideCanvasState == .invalidated })
+    #expect(report.snapshots.last?.slideCanvasState == .invalidated)
+    #expect(
+      report.snapshots.last?.slideCanvasInvalidationReason
+        == .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
+  }
+
+  @Test func rejectedSmallFrameReportsSelectionConfirmationFallback() async throws {
+    let capture = RuntimeRunnerCapture()
+    let model = makeModel(capture: capture)
+    let outputPath = uniqueReportPath()
+    defer { try? FileManager.default.removeItem(atPath: outputPath) }
+    let runner = makeRunner()
+
+    let runTask = Task {
+      await runner.run(configuration: configuration(outputPath: outputPath), model: model)
+    }
+    try await capture.waitUntilStarted()
+    await capture.emit(
+      makeFrame(
+        sequenceNumber: 1,
+        pixelWidth: 16,
+        pixelHeight: 16
+      )
+    )
+    await runTask.value
+
+    let report = try decodeReport(atPath: outputPath)
+    #expect(report.runStatus == .failed)
+    #expect(report.failureCode == .slideCanvasConfirmationFailed)
+    #expect(
+      report.failureMessage
+        == RuntimeVerificationFailureCode.slideCanvasConfirmationFailed.safeReportMessage
+    )
+    #expect(report.slideCanvasFailureReason == .selectionConfirmationRejected)
+    #expect(report.slideCanvasConfirmationMode == .diagnosticFullFrame)
+    #expect(report.snapshots.last?.captureState == .capturing)
+    #expect(report.snapshots.last?.slideCanvasState == .selecting)
+    #expect(report.snapshots.last?.slideCanvasInvalidationReason == nil)
+  }
+
+  @Test func captureEndAfterConfirmationReportsObservationLossFallback() async throws {
+    let capture = RuntimeRunnerCapture()
+    let model = makeModel(capture: capture)
+    let outputPath = uniqueReportPath()
+    defer { try? FileManager.default.removeItem(atPath: outputPath) }
+    let runner = makeRunner()
+
+    let runTask = Task {
+      await runner.run(
+        configuration: configuration(
+          outputPath: outputPath,
+          observationDurationSeconds: 0.08
+        ),
+        model: model
+      )
+    }
+    try await capture.waitUntilStarted()
+    await capture.emit(makeFrame(sequenceNumber: 1))
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    try await waitUntil { runner.state == .observing }
+    await model.stopWindowCapture()
+    try await waitUntil {
+      model.captureStatus == .stopped && model.slideCanvasStatus == .unavailable
+    }
+    await runTask.value
+
+    let report = try decodeReport(atPath: outputPath)
+    #expect(report.runStatus == .failed)
+    #expect(report.failureCode == .slideCanvasConfirmationFailed)
+    #expect(
+      report.failureMessage
+        == RuntimeVerificationFailureCode.slideCanvasConfirmationFailed.safeReportMessage
+    )
+    #expect(report.slideCanvasFailureReason == .confirmationLostDuringObservation)
+    #expect(report.slideCanvasConfirmationMode == .diagnosticFullFrame)
+    #expect(report.snapshots.last?.captureState == .stopped)
+    #expect(report.snapshots.last?.slideCanvasState == .unavailable)
+    #expect(report.snapshots.last?.slideCanvasInvalidationReason == nil)
   }
 
   @Test func captureErrorDuringCanvasWaitWritesCaptureFailure() async throws {
@@ -162,27 +291,31 @@ struct RuntimeVerificationRunnerIntegrationTests {
 
   private func makeFrame(
     sequenceNumber: UInt64,
-    changesSurfaceGeometry: Bool = false
+    changesSurfaceGeometry: Bool = false,
+    deliveryKind: CapturedFrameDeliveryKind = .new,
+    omitsSurfaceGeometry: Bool = false,
+    pixelWidth: Int = 64,
+    pixelHeight: Int = 48
   ) -> CapturedPowerPointFrame {
-    let image = makeImage(width: 64, height: 48)
+    let image = makeImage(width: pixelWidth, height: pixelHeight)
     let contentRect =
       changesSurfaceGeometry
-      ? CGRect(x: 1, y: 0, width: 63, height: 48)
-      : CGRect(x: 0, y: 0, width: 64, height: 48)
+      ? CGRect(x: 1, y: 0, width: pixelWidth - 1, height: pixelHeight)
+      : CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight)
     let surface = CaptureSurfaceGeometry(
       contentRect: contentRect,
       scaleFactor: 1,
       contentScale: 1,
-      outputPixelWidth: 64,
-      outputPixelHeight: 48
+      outputPixelWidth: pixelWidth,
+      outputPixelHeight: pixelHeight
     )!
     return CapturedPowerPointFrame(
       windowID: 42,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
       displayTime: UInt64.max,
-      deliveryKind: .new,
-      captureSurfaceGeometry: surface,
+      deliveryKind: deliveryKind,
+      captureSurfaceGeometry: omitsSurfaceGeometry ? nil : surface,
       captureScreenGeometry: nil,
       image: image,
       fingerprint: FrameFingerprint(

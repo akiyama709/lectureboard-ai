@@ -235,48 +235,372 @@ struct CGImageRasterizerTests {
     #expect(repeated.contentFingerprint == frame.contentFingerprint)
   }
 
-  @Test func idleRepeatDoesNotAttachChangedGeometryToReusedVisualPayload() throws {
+  @Test func idleRepeatRejectsEveryConflictingCurrentSurfaceField() throws {
     let frame = try makeFactoryTestFrame(
       geometryRect: CGRect(x: 0, y: 0, width: 320, height: 180)
     )
-    let changedRect = CGRect(x: 8, y: 5, width: 304, height: 170)
-    let expectedGeometry = try #require(
-      CaptureSurfaceGeometry(
-        contentRect: changedRect,
-        scaleFactor: 2,
-        contentScale: 0.75,
-        outputPixelWidth: 320,
-        outputPixelHeight: 180
+    let validRect = CGRect(x: 0, y: 0, width: 320, height: 180)
+    let conflicts: [(String, [SCStreamFrameInfo: Any])] = [
+      (
+        "contentRect",
+        makeSurfaceGeometryAttachments(
+          contentRect: CGRect(x: 8, y: 5, width: 304, height: 170)
+        )
+      ),
+      (
+        "scaleFactor",
+        [
+          .status: SCFrameStatus.idle.rawValue,
+          .contentRect: validRect,
+          .scaleFactor: Double(3),
+          .contentScale: Double(0.75),
+        ]
+      ),
+      (
+        "contentScale",
+        [
+          .status: SCFrameStatus.idle.rawValue,
+          .contentRect: validRect,
+          .scaleFactor: Double(2),
+          .contentScale: Double(0.8),
+        ]
+      ),
+    ]
+
+    for (name, attachments) in conflicts {
+      let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: frame,
+        sequenceNumber: 8,
+        capturedAt: Date(timeIntervalSince1970: 124),
+        currentAttachments: attachments
       )
-    )
 
-    let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
-      from: frame,
-      sequenceNumber: 8,
-      capturedAt: Date(timeIntervalSince1970: 124),
-      currentAttachments: makeSurfaceGeometryAttachments(contentRect: changedRect)
-    )
-
-    #expect(expectedGeometry != frame.captureSurfaceGeometry)
-    #expect(repeated.image === frame.image)
-    #expect(repeated.captureSurfaceGeometry == nil)
+      #expect(repeated.image === frame.image, "Unexpected payload for \(name)")
+      #expect(repeated.captureSurfaceGeometry == nil, "Accepted conflicting \(name)")
+      #expect(repeated.captureScreenGeometry == nil, "Accepted screenRect with \(name)")
+    }
   }
 
-  @Test func idleRepeatDoesNotReuseGeometryWhenCurrentGeometryIsMissing() throws {
+  @Test func idleRepeatReusesPriorGeometryWhenAllCurrentSurfaceMetadataIsAbsent() throws {
     let frame = try makeFactoryTestFrame(
       geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
     )
 
-    let missingAttachments = CapturedPowerPointFrameFactory.makeIdleRepeat(
+    let missingSurfaceMetadata = CapturedPowerPointFrameFactory.makeIdleRepeat(
       from: frame,
       sequenceNumber: 8,
       capturedAt: Date(timeIntervalSince1970: 124),
-      currentAttachments: nil
+      currentAttachments: [
+        .status: SCFrameStatus.idle.rawValue,
+        .screenRect: CGRect(x: -700, y: 50, width: 320, height: 180),
+      ]
     )
 
     #expect(frame.captureSurfaceGeometry != nil)
-    #expect(missingAttachments.image === frame.image)
-    #expect(missingAttachments.captureSurfaceGeometry == nil)
+    #expect(missingSurfaceMetadata.image === frame.image)
+    #expect(missingSurfaceMetadata.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(missingSurfaceMetadata.captureScreenGeometry == nil)
+  }
+
+  @Test func idleRepeatRejectsEveryProperSubsetOfCurrentSurfaceMetadata() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+    let rect = CGRect(x: 3, y: 4, width: 300, height: 160)
+    let properSubsets: [(String, [SCStreamFrameInfo: Any])] = [
+      ("contentRect", [.contentRect: rect]),
+      ("scaleFactor", [.scaleFactor: Double(2)]),
+      ("contentScale", [.contentScale: Double(0.75)]),
+      (
+        "contentRect+scaleFactor",
+        [.contentRect: rect, .scaleFactor: Double(2)]
+      ),
+      (
+        "contentRect+contentScale",
+        [.contentRect: rect, .contentScale: Double(0.75)]
+      ),
+      (
+        "scaleFactor+contentScale",
+        [.scaleFactor: Double(2), .contentScale: Double(0.75)]
+      ),
+    ]
+
+    for (name, surfaceAttachments) in properSubsets {
+      var attachments = surfaceAttachments
+      attachments[.status] = SCFrameStatus.idle.rawValue
+      attachments[.screenRect] = CGRect(x: 20, y: 30, width: 320, height: 180)
+      let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: frame,
+        sequenceNumber: 8,
+        capturedAt: Date(timeIntervalSince1970: 124),
+        currentAttachments: attachments
+      )
+
+      #expect(repeated.image === frame.image, "Unexpected payload for \(name)")
+      #expect(repeated.captureSurfaceGeometry == nil, "Accepted partial \(name)")
+      #expect(repeated.captureScreenGeometry == nil, "Accepted screenRect with \(name)")
+    }
+  }
+
+  @Test func idleRepeatRejectsMalformedOrNullCurrentSurfaceMetadata() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+    let rect = CGRect(x: 3, y: 4, width: 300, height: 160)
+    let malformedCases: [(String, [SCStreamFrameInfo: Any])] = [
+      (
+        "contentRect wrong type",
+        [
+          .contentRect: "invalid",
+          .scaleFactor: Double(2),
+          .contentScale: Double(0.75),
+        ]
+      ),
+      (
+        "scaleFactor Boolean",
+        [
+          .contentRect: rect,
+          .scaleFactor: NSNumber(value: true),
+          .contentScale: Double(0.75),
+        ]
+      ),
+      (
+        "contentScale nonfinite",
+        [
+          .contentRect: rect,
+          .scaleFactor: Double(2),
+          .contentScale: Double.infinity,
+        ]
+      ),
+      (
+        "contentRect null",
+        [
+          .contentRect: NSNull(),
+          .scaleFactor: Double(2),
+          .contentScale: Double(0.75),
+        ]
+      ),
+      (
+        "scaleFactor null",
+        [
+          .contentRect: rect,
+          .scaleFactor: NSNull(),
+          .contentScale: Double(0.75),
+        ]
+      ),
+      (
+        "contentScale null",
+        [
+          .contentRect: rect,
+          .scaleFactor: Double(2),
+          .contentScale: NSNull(),
+        ]
+      ),
+    ]
+
+    for (name, surfaceAttachments) in malformedCases {
+      var attachments = surfaceAttachments
+      attachments[.status] = SCFrameStatus.idle.rawValue
+      attachments[.screenRect] = CGRect(x: 20, y: 30, width: 320, height: 180)
+      let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: frame,
+        sequenceNumber: 8,
+        capturedAt: Date(timeIntervalSince1970: 124),
+        currentAttachments: attachments
+      )
+
+      #expect(repeated.image === frame.image, "Unexpected payload for \(name)")
+      #expect(repeated.captureSurfaceGeometry == nil, "Accepted malformed \(name)")
+      #expect(repeated.captureScreenGeometry == nil, "Accepted screenRect with \(name)")
+    }
+  }
+
+  @Test func idleRepeatRejectsAbsentSurfaceMetadataWithoutVerifiedIdleStatus() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+    let invalidStatuses: [(String, Any?)] = [
+      ("missing", nil),
+      ("complete", SCFrameStatus.complete.rawValue),
+      ("started", SCFrameStatus.started.rawValue),
+      ("blank", SCFrameStatus.blank.rawValue),
+      ("suspended", SCFrameStatus.suspended.rawValue),
+      ("stopped", SCFrameStatus.stopped.rawValue),
+      ("unknown", Int.max),
+      ("malformed", "idle"),
+      ("Boolean", NSNumber(value: true)),
+    ]
+
+    for (name, status) in invalidStatuses {
+      var attachments: [SCStreamFrameInfo: Any] = [:]
+      if let status {
+        attachments[.status] = status
+      }
+      let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: frame,
+        sequenceNumber: 8,
+        capturedAt: Date(timeIntervalSince1970: 124),
+        currentAttachments: attachments
+      )
+
+      #expect(repeated.captureSurfaceGeometry == nil, "Accepted \(name) status")
+      #expect(repeated.captureScreenGeometry == nil, "Accepted screenRect for \(name)")
+    }
+  }
+
+  @Test func idleRepeatRejectsAbsentSurfaceMetadataWhenEitherPriorOutputDimensionIsInconsistent()
+    throws
+  {
+    let image = try #require(makeSolidImage(width: 320, height: 180))
+    for (name, width, height) in [
+      ("width", 640, 180),
+      ("height", 320, 360),
+    ] {
+      let mismatchedGeometry = try #require(
+        CaptureSurfaceGeometry(
+          contentRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+          scaleFactor: 2,
+          contentScale: 0.75,
+          outputPixelWidth: width,
+          outputPixelHeight: height
+        )
+      )
+      let frame = CapturedPowerPointFrameFactory.makeNewFrame(
+        windowID: 42,
+        sequenceNumber: 7,
+        capturedAt: Date(timeIntervalSince1970: 123),
+        captureSurfaceGeometry: mismatchedGeometry,
+        image: image,
+        fingerprint: FrameFingerprint(
+          sampleColumns: 32,
+          sampleRows: 18,
+          luminance: Array(repeating: 42, count: 32 * 18)
+        )
+      )
+      let repeated = CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: frame,
+        sequenceNumber: 8,
+        capturedAt: Date(timeIntervalSince1970: 124),
+        currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+      )
+
+      #expect(repeated.captureSurfaceGeometry == nil, "Accepted mismatched \(name)")
+    }
+  }
+
+  @Test func productionFrameContinuityPoisonsInvalidIdleUntilNewFrameRecovery() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+    let invalidIdleCases: [(String, [SCStreamFrameInfo: Any])] = [
+      (
+        "partial",
+        [
+          .status: SCFrameStatus.idle.rawValue,
+          .contentRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+        ]
+      ),
+      (
+        "malformed",
+        [
+          .status: SCFrameStatus.idle.rawValue,
+          .contentRect: "invalid",
+          .scaleFactor: Double(2),
+          .contentScale: Double(0.75),
+        ]
+      ),
+      (
+        "conflicting",
+        makeSurfaceGeometryAttachments(
+          contentRect: CGRect(x: 8, y: 5, width: 304, height: 170)
+        )
+      ),
+    ]
+
+    for (name, invalidAttachments) in invalidIdleCases {
+      var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
+      continuity.acceptNewPayload(frame)
+      let invalid = try #require(
+        continuity.makeAndAcceptRepeatedPayload { lastFrame in
+          CapturedPowerPointFrameFactory.makeIdleRepeat(
+            from: lastFrame,
+            sequenceNumber: 8,
+            capturedAt: Date(timeIntervalSince1970: 124),
+            currentAttachments: invalidAttachments
+          )
+        }
+      )
+      let absentAfterInvalid = try #require(
+        continuity.makeAndAcceptRepeatedPayload { lastFrame in
+          CapturedPowerPointFrameFactory.makeIdleRepeat(
+            from: lastFrame,
+            sequenceNumber: 9,
+            capturedAt: Date(timeIntervalSince1970: 125),
+            currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+          )
+        }
+      )
+
+      #expect(invalid.captureSurfaceGeometry == nil, "Accepted \(name) idle")
+      #expect(absentAfterInvalid.captureSurfaceGeometry == nil, "Revived after \(name)")
+      #expect(absentAfterInvalid.captureScreenGeometry == nil, "Revived screen after \(name)")
+
+      let recoveredFrame = try makeFactoryTestFrame(
+        geometryRect: CGRect(x: 4, y: 5, width: 298, height: 158),
+        sequenceNumber: 10
+      )
+      continuity.acceptNewPayload(recoveredFrame)
+      let absentAfterNewFrame = try #require(
+        continuity.makeAndAcceptRepeatedPayload { lastFrame in
+          CapturedPowerPointFrameFactory.makeIdleRepeat(
+            from: lastFrame,
+            sequenceNumber: 11,
+            capturedAt: Date(timeIntervalSince1970: 127),
+            currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+          )
+        }
+      )
+      #expect(
+        absentAfterNewFrame.captureSurfaceGeometry == recoveredFrame.captureSurfaceGeometry,
+        "Did not recover after new frame for \(name)"
+      )
+      #expect(absentAfterNewFrame.captureScreenGeometry == nil)
+    }
+  }
+
+  @Test func validIdleGeometryRemainsLatchedAcrossMetadataEmptyIdleRepeats() throws {
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+    )
+    var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
+    continuity.acceptNewPayload(frame)
+
+    let matching = try #require(
+      continuity.makeAndAcceptRepeatedPayload { lastFrame in
+        CapturedPowerPointFrameFactory.makeIdleRepeat(
+          from: lastFrame,
+          sequenceNumber: 8,
+          capturedAt: Date(timeIntervalSince1970: 124),
+          currentAttachments: makeSurfaceGeometryAttachments(
+            contentRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+          )
+        )
+      }
+    )
+    let absent = try #require(
+      continuity.makeAndAcceptRepeatedPayload { lastFrame in
+        CapturedPowerPointFrameFactory.makeIdleRepeat(
+          from: lastFrame,
+          sequenceNumber: 9,
+          capturedAt: Date(timeIntervalSince1970: 125),
+          currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+        )
+      }
+    )
+
+    #expect(matching.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(absent.captureSurfaceGeometry == matching.captureSurfaceGeometry)
+    #expect(absent.captureScreenGeometry == nil)
   }
 
   @Test func idleRepeatDoesNotAdoptGeometryWhenPriorGeometryWasMissing() throws {
@@ -692,7 +1016,8 @@ struct CGImageRasterizerTests {
 
   private func makeFactoryTestFrame(
     geometryRect: CGRect?,
-    screenRect: CGRect? = nil
+    screenRect: CGRect? = nil,
+    sequenceNumber: UInt64 = 7
   ) throws -> CapturedPowerPointFrame {
     let image = try #require(makeSolidImage(width: 320, height: 180))
     let geometry: CaptureSurfaceGeometry?
@@ -717,7 +1042,7 @@ struct CGImageRasterizerTests {
     }
     return CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: 42,
-      sequenceNumber: 7,
+      sequenceNumber: sequenceNumber,
       capturedAt: Date(timeIntervalSince1970: 123),
       displayTime: 12_345,
       captureSurfaceGeometry: geometry,
@@ -736,6 +1061,7 @@ struct CGImageRasterizerTests {
     screenRect: CGRect? = nil
   ) -> [SCStreamFrameInfo: Any] {
     var attachments: [SCStreamFrameInfo: Any] = [
+      .status: SCFrameStatus.idle.rawValue,
       .contentRect: contentRect,
       .scaleFactor: Double(2),
       .contentScale: Double(0.75),

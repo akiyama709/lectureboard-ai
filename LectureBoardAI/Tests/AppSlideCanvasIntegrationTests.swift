@@ -3,6 +3,7 @@ import CoreGraphics
 import Darwin
 import Foundation
 import LectureBoardCore
+import ScreenCaptureKit
 import Testing
 
 @testable import LectureBoard_AI
@@ -1044,6 +1045,10 @@ struct AppSlideCanvasIntegrationTests {
       frameWithoutCaptureGeometry(sequenceNumber: 1, image: image)
     )
     try await waitUntil { model.slideCanvasStatus == .invalidated }
+    #expect(
+      model.slideCanvasInvalidationReason
+        == .newFrameSurfaceGeometryUnavailableOrMismatched
+    )
 
     model.beginSlideCanvasSelection()
     #expect(model.slideCanvasStatus == .invalidated)
@@ -1054,6 +1059,152 @@ struct AppSlideCanvasIntegrationTests {
 
     await capture.emit(frame(sequenceNumber: 2, image: image))
     try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    #expect(
+      model.slideCanvasInvalidationReason
+        == .newFrameSurfaceGeometryUnavailableOrMismatched
+    )
+
+    await model.stopWindowCapture()
+    #expect(model.slideCanvasInvalidationReason == nil)
+  }
+
+  @Test func idleRepeatWithoutCurrentGeometryRecordsDeliverySpecificInvalidation() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage(width: 80, height: 40))
+    let fullFrame = try #require(
+      SlideCanvasRegion(
+        NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+      )
+    )
+
+    await model.startWindowCapture()
+    await capture.emit(frame(sequenceNumber: 1, image: image))
+    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    model.beginSlideCanvasSelection()
+    #expect(model.confirmSlideCanvasSelection(fullFrame))
+    #expect(model.slideCanvasInvalidationReason == nil)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 2,
+        image: image,
+        captureSurfaceGeometry: nil,
+        deliveryKind: .idleRepeat
+      )
+    )
+    try await waitUntil { model.slideCanvasStatus == .invalidated }
+    #expect(
+      model.slideCanvasInvalidationReason
+        == .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
+    #expect(model.confirmedSlideCanvasRegion == nil)
+
+    await capture.emit(frame(sequenceNumber: 3, image: image))
+    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    #expect(
+      model.slideCanvasInvalidationReason
+        == .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
+
+    model.beginSlideCanvasSelection()
+    #expect(model.confirmSlideCanvasSelection(fullFrame))
+    #expect(model.slideCanvasStatus == .confirmed)
+    #expect(model.slideCanvasInvalidationReason == nil)
+
+    await model.stopWindowCapture()
+    #expect(model.slideCanvasInvalidationReason == nil)
+  }
+
+  @Test func metadataEmptyVerifiedIdleRepeatKeepsCanvasButHidesMappedOverlay()
+    async throws
+  {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display]
+    )
+
+    try await establishVisibleProductionOverlay(
+      model: model,
+      capture: capture,
+      geometry: geometry
+    )
+    #expect(model.slideCanvasOverlayMappingState == .mapped)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(overlay.isVisible)
+
+    let lastNewFrame = frame(
+      sequenceNumber: 5,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
+    )
+    let hidesBeforeIdle = overlay.hideCallCount
+
+    let repeatedFrame = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: lastNewFrame,
+      sequenceNumber: 6,
+      capturedAt: Date(),
+      currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+    )
+    await capture.emit(repeatedFrame)
+    try await waitUntil { model.repeatedCapturedFrameCount == 1 }
+
+    #expect(repeatedFrame.captureSurfaceGeometry == lastNewFrame.captureSurfaceGeometry)
+    #expect(repeatedFrame.captureScreenGeometry == nil)
+    #expect(model.slideCanvasStatus == .confirmed)
+    #expect(model.slideCanvasInvalidationReason == nil)
+    #expect(
+      model.slideCanvasOverlayMappingState == .rejected(.screenGeometryUnavailable)
+    )
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(!overlay.isVisible)
+    #expect(overlay.hideCallCount > hidesBeforeIdle)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func confirmedFramePayloadRejectionRecordsBoundedReason() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage(width: 80, height: 40))
+    let fullFrame = try #require(
+      SlideCanvasRegion(
+        NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+      )
+    )
+    let invalidFingerprint = FrameFingerprint(
+      sampleColumns: 32,
+      sampleRows: 18,
+      luminance: [128]
+    )
+
+    await model.startWindowCapture()
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: image,
+        captureSurfaceGeometry: captureGeometry(for: image),
+        fingerprint: invalidFingerprint
+      )
+    )
+    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    model.beginSlideCanvasSelection()
+
+    #expect(!model.confirmSlideCanvasSelection(fullFrame))
+    #expect(model.slideCanvasStatus == .invalidated)
+    #expect(model.slideCanvasInvalidationReason == .confirmedFrameRejected)
+    #expect(model.confirmedSlideCanvasRegion == nil)
 
     await model.stopWindowCapture()
   }
@@ -1094,6 +1245,10 @@ struct AppSlideCanvasIntegrationTests {
 
     await capture.emit(frame(sequenceNumber: 6, image: resizedImage))
     try await waitUntil { model.slideCanvasStatus == .invalidated }
+    #expect(
+      model.slideCanvasInvalidationReason
+        == .newFrameSurfaceGeometryUnavailableOrMismatched
+    )
     #expect(model.stableFrameCount == 0)
     #expect(model.contentRevisionCount == 0)
     #expect(model.latestStableFrame == nil)
@@ -1433,7 +1588,8 @@ struct AppSlideCanvasIntegrationTests {
     captureSurfaceGeometry: CaptureSurfaceGeometry?,
     captureScreenGeometry: CaptureScreenGeometry? = nil,
     deliveryKind: CapturedFrameDeliveryKind = .new,
-    contentCell: RGBContentCell = RGBContentCell(red: 255, green: 255, blue: 255)
+    contentCell: RGBContentCell = RGBContentCell(red: 255, green: 255, blue: 255),
+    fingerprint: FrameFingerprint? = nil
   ) -> CapturedPowerPointFrame {
     CapturedPowerPointFrame(
       windowID: 42,
@@ -1444,11 +1600,12 @@ struct AppSlideCanvasIntegrationTests {
       captureSurfaceGeometry: captureSurfaceGeometry,
       captureScreenGeometry: captureScreenGeometry,
       image: image,
-      fingerprint: FrameFingerprint(
-        sampleColumns: 32,
-        sampleRows: 18,
-        luminance: Array(repeating: 128, count: 32 * 18)
-      ),
+      fingerprint: fingerprint
+        ?? FrameFingerprint(
+          sampleColumns: 32,
+          sampleRows: 18,
+          luminance: Array(repeating: 128, count: 32 * 18)
+        ),
       contentFingerprint: ContentFingerprint(
         sampleColumns: 160,
         sampleRows: 90,

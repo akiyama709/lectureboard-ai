@@ -10,6 +10,25 @@ enum SlideCanvasStatus: Equatable, Sendable {
   case invalidated
 }
 
+/// A bounded, content-free reason for invalidating the slide-canvas boundary.
+enum SlideCanvasInvalidationReason: Equatable, Sendable {
+  case newFrameSurfaceGeometryUnavailableOrMismatched
+  case idleRepeatSurfaceGeometryUnavailableOrMismatched
+  case selectionContextMismatch
+  case confirmedFrameRejected
+
+  static func surfaceGeometryUnavailableOrMismatched(
+    for deliveryKind: CapturedFrameDeliveryKind
+  ) -> SlideCanvasInvalidationReason {
+    switch deliveryKind {
+    case .new:
+      return .newFrameSurfaceGeometryUnavailableOrMismatched
+    case .idleRepeat:
+      return .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    }
+  }
+}
+
 enum SlideCanvasConfirmationMode: Sendable {
   case userConfirmed
   /// Preserves deterministic whole-frame fixtures without weakening the app default.

@@ -78,6 +78,29 @@ struct RuntimeVerificationSnapshotProjectorTests {
     }
   }
 
+  @Test func mapsEveryCanvasInvalidationReasonWithoutCollapsingDeliveryKinds() {
+    let expectations: [(SlideCanvasInvalidationReason?, RuntimeSlideCanvasInvalidationReason?)] = [
+      (nil, nil),
+      (
+        .newFrameSurfaceGeometryUnavailableOrMismatched,
+        .newFrameSurfaceGeometryUnavailableOrMismatched
+      ),
+      (
+        .idleRepeatSurfaceGeometryUnavailableOrMismatched,
+        .idleRepeatSurfaceGeometryUnavailableOrMismatched
+      ),
+      (.selectionContextMismatch, .selectionContextMismatch),
+      (.confirmedFrameRejected, .confirmedFrameRejected),
+    ]
+
+    for (reason, expected) in expectations {
+      #expect(
+        RuntimeVerificationSnapshotProjector.slideCanvasInvalidationReason(for: reason)
+          == expected
+      )
+    }
+  }
+
   @Test func elapsedMillisecondsAreMonotonicAndClampedAtZero() {
     #expect(
       RuntimeVerificationSnapshotProjector.elapsedMilliseconds(
@@ -106,6 +129,7 @@ struct RuntimeVerificationSnapshotProjectorTests {
     #expect(snapshot.slideIdentityFrameSyncState == .notRequired)
     #expect(snapshot.slideCanvasState == .unavailable)
     #expect(snapshot.slideCanvasOverlayState == .unavailable)
+    #expect(snapshot.slideCanvasInvalidationReason == nil)
     #expect(snapshot.contentRevisionCount == model.contentRevisionCount)
     #expect(snapshot.strokeCandidateRegionCount == 0)
   }

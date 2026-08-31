@@ -120,6 +120,13 @@ struct SlideCanvasCropperTests {
         selection: selection
       ) == nil
     )
+    #expect(
+      SlideCanvasFramePreparer.invalidationReason(
+        for: frame,
+        captureOperationID: CaptureOperationID(rawValue: 9),
+        selection: selection
+      ) == .selectionContextMismatch
+    )
 
     let wrongWindow = makeFrame(image: image, windowID: 34)
     #expect(!selection.matches(wrongWindow, captureOperationID: CaptureOperationID(rawValue: 10)))
@@ -269,6 +276,54 @@ struct SlideCanvasCropperTests {
         selection: selection
       ) == nil
     )
+    #expect(
+      SlideCanvasFramePreparer.invalidationReason(
+        for: frame,
+        captureOperationID: CaptureOperationID(rawValue: 5),
+        selection: selection
+      ) == .confirmedFrameRejected
+    )
+  }
+
+  @Test func distinguishesNewAndIdleSurfaceGeometryRejections() throws {
+    let image = try #require(makeSolidImage(width: 4, height: 2, rgb: (1, 2, 3)))
+    let operationID = CaptureOperationID(rawValue: 13)
+    let region = try #require(SlideCanvasRegion(x: 0, y: 0, width: 1, height: 1))
+    let selection = try #require(
+      ConfirmedSlideCanvasSelection(
+        captureOperationID: operationID,
+        windowID: 33,
+        captureSurfaceGeometry: makeGeometry(width: 4, height: 2),
+        region: region
+      )
+    )
+    let newFrame = makeFrame(
+      image: image,
+      windowID: 33,
+      captureSurfaceGeometry: nil,
+      deliveryKind: .new
+    )
+    let idleRepeat = makeFrame(
+      image: image,
+      windowID: 33,
+      captureSurfaceGeometry: nil,
+      deliveryKind: .idleRepeat
+    )
+
+    #expect(
+      SlideCanvasFramePreparer.invalidationReason(
+        for: newFrame,
+        captureOperationID: operationID,
+        selection: selection
+      ) == .newFrameSurfaceGeometryUnavailableOrMismatched
+    )
+    #expect(
+      SlideCanvasFramePreparer.invalidationReason(
+        for: idleRepeat,
+        captureOperationID: operationID,
+        selection: selection
+      ) == .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    )
   }
 
   @Test func rejectsGeometryChangeWhenOutputPixelDimensionsStayTheSame() throws {
@@ -355,14 +410,15 @@ struct SlideCanvasCropperTests {
   private func makeFrame(
     image: CGImage,
     windowID: CGWindowID,
-    captureSurfaceGeometry: CaptureSurfaceGeometry?
+    captureSurfaceGeometry: CaptureSurfaceGeometry?,
+    deliveryKind: CapturedFrameDeliveryKind = .new
   ) -> CapturedPowerPointFrame {
     CapturedPowerPointFrame(
       windowID: windowID,
       sequenceNumber: 1,
       capturedAt: Date(timeIntervalSince1970: 1),
       displayTime: 2,
-      deliveryKind: .new,
+      deliveryKind: deliveryKind,
       captureSurfaceGeometry: captureSurfaceGeometry,
       image: image,
       fingerprint: FrameFingerprint(sampleColumns: 1, sampleRows: 1, luminance: [0]),

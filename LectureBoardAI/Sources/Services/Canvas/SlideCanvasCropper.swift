@@ -74,22 +74,41 @@ struct ConfirmedSlideCanvasSelection: Equatable, Sendable {
     _ frame: CapturedPowerPointFrame,
     captureOperationID: CaptureOperationID
   ) -> Bool {
+    invalidationReason(for: frame, captureOperationID: captureOperationID) == nil
+  }
+
+  func invalidationReason(
+    for frame: CapturedPowerPointFrame,
+    captureOperationID: CaptureOperationID
+  ) -> SlideCanvasInvalidationReason? {
     guard
       self.captureOperationID == captureOperationID,
       windowID == frame.windowID
     else {
-      return false
+      return .selectionContextMismatch
     }
 
     switch provenance {
     case .screenCaptureKit(let geometry):
-      return frame.captureSurfaceGeometry == geometry
-        && geometry.outputPixelWidth == frame.image.width
-        && geometry.outputPixelHeight == frame.image.height
+      guard
+        frame.captureSurfaceGeometry == geometry,
+        geometry.outputPixelWidth == frame.image.width,
+        geometry.outputPixelHeight == frame.image.height
+      else {
+        return SlideCanvasInvalidationReason.surfaceGeometryUnavailableOrMismatched(
+          for: frame.deliveryKind
+        )
+      }
+      return nil
     case .testOnlyWholeFrame(let pixelWidth, let pixelHeight):
-      return region.isFullFrame
-        && pixelWidth == frame.image.width
-        && pixelHeight == frame.image.height
+      guard
+        region.isFullFrame,
+        pixelWidth == frame.image.width,
+        pixelHeight == frame.image.height
+      else {
+        return .selectionContextMismatch
+      }
+      return nil
     }
   }
 }
@@ -107,13 +126,55 @@ struct CapturedSlideCanvasFrame: @unchecked Sendable {
 }
 
 enum SlideCanvasFramePreparer {
+  enum Outcome {
+    case prepared(CapturedSlideCanvasFrame)
+    case rejected(SlideCanvasInvalidationReason)
+  }
+
   static func makeFrame(
     from frame: CapturedPowerPointFrame,
     captureOperationID: CaptureOperationID,
     selection: ConfirmedSlideCanvasSelection
   ) -> CapturedSlideCanvasFrame? {
-    guard selection.matches(frame, captureOperationID: captureOperationID) else {
+    switch evaluate(
+      frame,
+      captureOperationID: captureOperationID,
+      selection: selection
+    ) {
+    case .prepared(let canvasFrame):
+      return canvasFrame
+    case .rejected:
       return nil
+    }
+  }
+
+  static func invalidationReason(
+    for frame: CapturedPowerPointFrame,
+    captureOperationID: CaptureOperationID,
+    selection: ConfirmedSlideCanvasSelection
+  ) -> SlideCanvasInvalidationReason? {
+    switch evaluate(
+      frame,
+      captureOperationID: captureOperationID,
+      selection: selection
+    ) {
+    case .prepared:
+      return nil
+    case .rejected(let reason):
+      return reason
+    }
+  }
+
+  static func evaluate(
+    _ frame: CapturedPowerPointFrame,
+    captureOperationID: CaptureOperationID,
+    selection: ConfirmedSlideCanvasSelection
+  ) -> Outcome {
+    if let reason = selection.invalidationReason(
+      for: frame,
+      captureOperationID: captureOperationID
+    ) {
+      return .rejected(reason)
     }
 
     let canvasImage: CGImage
@@ -121,8 +182,10 @@ enum SlideCanvasFramePreparer {
     let contentFingerprint: ContentFingerprint?
 
     if selection.region.isFullFrame {
-      guard frame.fingerprint.isValid else { return nil }
-      guard frame.contentFingerprint?.isValid != false else { return nil }
+      guard frame.fingerprint.isValid else { return .rejected(.confirmedFrameRejected) }
+      guard frame.contentFingerprint?.isValid != false else {
+        return .rejected(.confirmedFrameRejected)
+      }
       canvasImage = frame.image
       fingerprint = frame.fingerprint
       contentFingerprint = frame.contentFingerprint
@@ -140,22 +203,24 @@ enum SlideCanvasFramePreparer {
           from: croppedImage
         )
       else {
-        return nil
+        return .rejected(.confirmedFrameRejected)
       }
       canvasImage = croppedImage
       fingerprint = croppedFingerprint
       contentFingerprint = croppedContentFingerprint
     }
 
-    return CapturedSlideCanvasFrame(
-      windowID: frame.windowID,
-      sequenceNumber: frame.sequenceNumber,
-      capturedAt: frame.capturedAt,
-      displayTime: frame.displayTime,
-      deliveryKind: frame.deliveryKind,
-      image: canvasImage,
-      fingerprint: fingerprint,
-      contentFingerprint: contentFingerprint
+    return .prepared(
+      CapturedSlideCanvasFrame(
+        windowID: frame.windowID,
+        sequenceNumber: frame.sequenceNumber,
+        capturedAt: frame.capturedAt,
+        displayTime: frame.displayTime,
+        deliveryKind: frame.deliveryKind,
+        image: canvasImage,
+        fingerprint: fingerprint,
+        contentFingerprint: contentFingerprint
+      )
     )
   }
 

@@ -51,6 +51,20 @@ public enum RuntimeSlideCanvasOverlayState: String, Codable, Equatable, Sendable
   case invalidAppKitTarget
 }
 
+/// A bounded metadata-only explanation for a fail-closed slide-canvas
+/// invalidation or verifier-side confirmation failure. It records no geometry,
+/// display identifiers, captured content, or untrusted provider detail.
+public enum RuntimeSlideCanvasInvalidationReason: String, Codable, Equatable, Sendable {
+  case newFrameSurfaceGeometryUnavailableOrMismatched
+  case idleRepeatSurfaceGeometryUnavailableOrMismatched
+  case selectionContextMismatch
+  case confirmedFrameRejected
+  case selectionStartRejected
+  case selectionConfirmationRejected
+  case confirmationLostDuringObservation
+  case unclassifiedInvalidation
+}
+
 /// A metadata-only observation. It deliberately carries no frame image or recognized slide text.
 public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let timestamp: Date
@@ -60,6 +74,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let visionState: RuntimeVisionState
   public let slideCanvasState: RuntimeSlideCanvasState
   public let slideCanvasOverlayState: RuntimeSlideCanvasOverlayState
+  public let slideCanvasInvalidationReason: RuntimeSlideCanvasInvalidationReason?
   public let frameCount: Int
   public let newFrameCount: Int
   public let repeatedFrameCount: Int
@@ -85,6 +100,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     visionState: RuntimeVisionState,
     slideCanvasState: RuntimeSlideCanvasState = .unavailable,
     slideCanvasOverlayState: RuntimeSlideCanvasOverlayState = .unavailable,
+    slideCanvasInvalidationReason: RuntimeSlideCanvasInvalidationReason? = nil,
     frameCount: Int,
     newFrameCount: Int,
     repeatedFrameCount: Int,
@@ -112,6 +128,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.visionState = visionState
     self.slideCanvasState = slideCanvasState
     self.slideCanvasOverlayState = slideCanvasOverlayState
+    self.slideCanvasInvalidationReason = slideCanvasInvalidationReason
     self.frameCount = max(frameCount, 0)
     self.newFrameCount = max(newFrameCount, 0)
     self.repeatedFrameCount = max(repeatedFrameCount, 0)
@@ -142,6 +159,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case visionState
     case slideCanvasState
     case slideCanvasOverlayState
+    case slideCanvasInvalidationReason
     case frameCount
     case newFrameCount
     case repeatedFrameCount
@@ -179,6 +197,10 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
         RuntimeSlideCanvasOverlayState.self,
         forKey: .slideCanvasOverlayState
       ) ?? .unavailable,
+      slideCanvasInvalidationReason: try container.decodeIfPresent(
+        RuntimeSlideCanvasInvalidationReason.self,
+        forKey: .slideCanvasInvalidationReason
+      ),
       frameCount: try container.decode(Int.self, forKey: .frameCount),
       newFrameCount: try container.decode(Int.self, forKey: .newFrameCount),
       repeatedFrameCount: try container.decode(Int.self, forKey: .repeatedFrameCount),

@@ -13,6 +13,7 @@ struct RuntimeVerificationSnapshotTests {
       visionState: .completed,
       slideCanvasState: .confirmed,
       slideCanvasOverlayState: .mapped,
+      slideCanvasInvalidationReason: .idleRepeatSurfaceGeometryUnavailableOrMismatched,
       frameCount: 120,
       newFrameCount: 4,
       repeatedFrameCount: 116,
@@ -47,6 +48,10 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["slideIdentityContinuityBreakCount"] as? Int == 1)
     #expect(object["slideCanvasState"] as? String == "confirmed")
     #expect(object["slideCanvasOverlayState"] as? String == "mapped")
+    #expect(
+      object["slideCanvasInvalidationReason"] as? String
+        == "idleRepeatSurfaceGeometryUnavailableOrMismatched"
+    )
     #expect(object["slideID"] == nil)
     #expect(object["slideIndex"] == nil)
     #expect(object["presentationSessionToken"] == nil)
@@ -61,6 +66,7 @@ struct RuntimeVerificationSnapshotTests {
       visionState: .idle,
       slideCanvasState: .invalidated,
       slideCanvasOverlayState: .ambiguousContainingDisplays,
+      slideCanvasInvalidationReason: .selectionContextMismatch,
       frameCount: -1,
       newFrameCount: -2,
       repeatedFrameCount: -3,
@@ -91,6 +97,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.slideIdentityContinuityBreakCount == 0)
     #expect(snapshot.slideCanvasState == .invalidated)
     #expect(snapshot.slideCanvasOverlayState == .ambiguousContainingDisplays)
+    #expect(snapshot.slideCanvasInvalidationReason == .selectionContextMismatch)
     #expect(snapshot.contentRevisionCount == 0)
     #expect(snapshot.recognizedTextCount == 0)
     #expect(snapshot.detectedRectangleCount == 0)
@@ -152,6 +159,34 @@ struct RuntimeVerificationSnapshotTests {
       #expect(
         try JSONDecoder().decode(RuntimeSlideCanvasOverlayState.self, from: encoded)
           == state
+      )
+    }
+  }
+
+  @Test func slideCanvasInvalidationReasonRawValuesAreStableMetadata() throws {
+    let expected: [(RuntimeSlideCanvasInvalidationReason, String)] = [
+      (
+        .newFrameSurfaceGeometryUnavailableOrMismatched,
+        "newFrameSurfaceGeometryUnavailableOrMismatched"
+      ),
+      (
+        .idleRepeatSurfaceGeometryUnavailableOrMismatched,
+        "idleRepeatSurfaceGeometryUnavailableOrMismatched"
+      ),
+      (.selectionContextMismatch, "selectionContextMismatch"),
+      (.confirmedFrameRejected, "confirmedFrameRejected"),
+      (.selectionStartRejected, "selectionStartRejected"),
+      (.selectionConfirmationRejected, "selectionConfirmationRejected"),
+      (.confirmationLostDuringObservation, "confirmationLostDuringObservation"),
+      (.unclassifiedInvalidation, "unclassifiedInvalidation"),
+    ]
+
+    for (reason, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(reason)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(
+        try JSONDecoder().decode(RuntimeSlideCanvasInvalidationReason.self, from: encoded)
+          == reason
       )
     }
   }

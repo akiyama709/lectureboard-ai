@@ -19,6 +19,9 @@ enum RuntimeVerificationSnapshotProjector {
       slideCanvasOverlayState: slideCanvasOverlayState(
         for: model.slideCanvasOverlayMappingState
       ),
+      slideCanvasInvalidationReason: slideCanvasInvalidationReason(
+        for: model.slideCanvasInvalidationReason
+      ),
       frameCount: model.capturedFrameCount,
       newFrameCount: model.newCapturedFrameCount,
       repeatedFrameCount: model.repeatedCapturedFrameCount,
@@ -116,6 +119,22 @@ enum RuntimeVerificationSnapshotProjector {
       case .invalidAppKitTarget:
         return .invalidAppKitTarget
       }
+    }
+  }
+
+  static func slideCanvasInvalidationReason(
+    for reason: SlideCanvasInvalidationReason?
+  ) -> RuntimeSlideCanvasInvalidationReason? {
+    guard let reason else { return nil }
+    switch reason {
+    case .newFrameSurfaceGeometryUnavailableOrMismatched:
+      return .newFrameSurfaceGeometryUnavailableOrMismatched
+    case .idleRepeatSurfaceGeometryUnavailableOrMismatched:
+      return .idleRepeatSurfaceGeometryUnavailableOrMismatched
+    case .selectionContextMismatch:
+      return .selectionContextMismatch
+    case .confirmedFrameRejected:
+      return .confirmedFrameRejected
     }
   }
 

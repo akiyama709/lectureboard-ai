@@ -180,7 +180,7 @@ ScreenCaptureKitを使用し，ユーザーが明示的に選択したPowerPoint
 
 Visionと画像解析を組み合わせて，現在スライドの占有領域を生成する．
 
-　現行試作は，正確な取得operationから得たwindow previewを固定し，利用者が表示中のスライド面だけをdragで囲んで明示的に確定する．切出しはsource上で幅32 pixel，高さ24 pixel及び面積1,024平方pixelを全て満たさなければならない．確定結果はcapture operation，正確なScreenCaptureKit window ID，source pixel寸法及び検証済みScreenCaptureKit surface geometryへ固定する．capture再開，window不一致，pixel寸法不一致，surface geometry欠落，又は`contentRect`，scale factor若しくはcontent scaleの変更時には，確定結果，安定判定，内容更新，解析結果及び板書sceneを無効化する．idle repeatのvisual payloadにgeometry provenanceを付与するのは，current sample attachmentのgeometryが直前のvisual payload geometryと完全一致する場合だけである．current geometryの変更・欠落・不正，又は直前geometryの欠落時には，geometryなしのrepeatとしてdelivery件数だけを記録し，視覚処理前にcanvasを無効化する．image bufferがないidle sampleでは，固定stream surface寸法だけを直前frameから継承する．title，window列挙順，概略座標，aspect ratio又は画像heuristicによる自動確定は行わない．実ScreenCaptureKitのidle attachment挙動は未検証である．
+　現行試作は，正確な取得operationから得たwindow previewを固定し，利用者が表示中のスライド面だけをdragで囲んで明示的に確定する．切出しはsource上で幅32 pixel，高さ24 pixel及び面積1,024平方pixelを全て満たさなければならない．確定結果はcapture operation，正確なScreenCaptureKit window ID，source pixel寸法及び検証済みScreenCaptureKit surface geometryへ固定する．capture再開，window不一致，pixel寸法不一致，限定idle policy適用後も利用可能なsurface geometryがない場合，又は`contentRect`，scale factor若しくはcontent scaleの変更時には，確定結果，安定判定，内容更新，解析結果及び板書sceneを無効化する．idle surfaceの扱いはApple保証ではなく，live attachment観測前の暫定application policyである．検証済み`.idle`で`contentRect`，`scaleFactor`及び`contentScale`の3 keyが全て欠落する場合だけ，直前にlatchしたsurface geometryを不変visual payloadの切出しへ再利用する．3 keyが全て揃う場合は，直前geometryとの完全一致をcurrent geometryとして受理する．一部欠落，不正形式，矛盾，non-idle，直前geometry欠落，又は直前output寸法とpayload寸法の不一致はfail closedとし，後続の`.new` frameまでrepeat geometryのpoisonをlatchする．3 key全欠落branchでは`screenRect`を継承も利用もせず，overlay mappingを閉じる．title，window列挙順，概略座標，aspect ratio又は画像heuristicによる自動確定は行わない．修正前schema 9 live reportは`idleRepeatSurfaceGeometryUnavailableOrMismatched`を限定確認したが，attachmentの全欠落と不一致を区別せず，修正後のlive回復及び実attachment形状は未検証である．
 
 　スライド面が未確定の間もcapture delivery件数は記録するが，安定frame判定，160×90 RGB内容指紋，Vision，raster候補，占有領域及び板書配置は開始しない．確定後は，top-left正規化矩形をsource pixelへ外向きに丸めて範囲内へ収め，各frameを切り出す．安定・内容指紋，Vision入力及び長辺640 pixel以下のRGB rasterは，全てこの切出し画像から生成する．
 
@@ -558,6 +558,8 @@ LectureBoard Sessions/
 - フルスクリーンとウィンドウ表示
 - 利用者によるスライド面のdrag確定，取消し及び再選択
 - capture再開，window不一致，source pixel寸法変更及びScreenCaptureKit surface geometry変更による確定無効化
+- verified `.idle`のsurface 3 key全欠落時だけのlatched geometry再利用，complete tuple完全一致，partial・malformed・conflict・non-idle・prior欠落・output不一致のfail-closed化及び`.new` frameまでのpoison latch
+- surface 3 key全欠落branchで`screenRect`を継承・利用せずoverlay mappingを閉じること
 - ScreenCaptureKit surface padding，`contentRect`，display scale及びoverlay座標変換
 - production overlayのfrontmost application，正確なCore Graphics window，bounds一致，occlusion，手動非表示，content unavailable及びlease失効によるfail-closedな表示停止
 

@@ -43,6 +43,17 @@ final class RuntimeVerificationRunner: ObservableObject {
   private struct Failure: Error {
     let code: RuntimeVerificationFailureCode
     let message: String
+    let slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason?
+
+    init(
+      code: RuntimeVerificationFailureCode,
+      message: String,
+      slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason? = nil
+    ) {
+      self.code = code
+      self.message = message
+      self.slideCanvasFailureReason = slideCanvasFailureReason
+    }
   }
 
   private struct RunContext {
@@ -89,6 +100,7 @@ final class RuntimeVerificationRunner: ObservableObject {
     var runStatus = RuntimeVerificationRunStatus.completed
     var failureCode: RuntimeVerificationFailureCode?
     var failureMessage: String?
+    var slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason?
 
     do {
       try await execute(
@@ -101,6 +113,7 @@ final class RuntimeVerificationRunner: ObservableObject {
       runStatus = .failed
       failureCode = failure.code
       failureMessage = failure.message
+      slideCanvasFailureReason = failure.slideCanvasFailureReason
     } catch is CancellationError {
       runStatus = .failed
       failureCode = .internalFailure
@@ -129,6 +142,7 @@ final class RuntimeVerificationRunner: ObservableObject {
       ),
       runStatus: runStatus,
       failureCode: failureCode,
+      slideCanvasFailureReason: slideCanvasFailureReason,
       untrustedFailureDetail: failureMessage,
       snapshots: context.snapshots
     )
@@ -254,7 +268,11 @@ final class RuntimeVerificationRunner: ObservableObject {
     if configuration.canvasSelection == .confirmFullFrame,
       model.slideCanvasStatus != .confirmed
     {
-      throw canvasConfirmationFailure(for: model)
+      appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
+      throw canvasConfirmationFailure(
+        for: model,
+        fallbackReason: .confirmationLostDuringObservation
+      )
     }
   }
 
@@ -283,7 +301,10 @@ final class RuntimeVerificationRunner: ObservableObject {
         let remaining = deadline.timeIntervalSinceNow
         guard remaining > 0 else {
           appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
-          throw canvasConfirmationFailure(for: model)
+          throw canvasConfirmationFailure(
+            for: model,
+            fallbackReason: .unclassifiedInvalidation
+          )
         }
         try await Task.sleep(
           nanoseconds: UInt64(
@@ -294,7 +315,10 @@ final class RuntimeVerificationRunner: ObservableObject {
         model.beginSlideCanvasSelection()
         guard model.slideCanvasStatus == .selecting else {
           appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
-          throw canvasConfirmationFailure(for: model)
+          throw canvasConfirmationFailure(
+            for: model,
+            fallbackReason: .selectionStartRejected
+          )
         }
       case .confirmFullFrame:
         guard
@@ -305,21 +329,40 @@ final class RuntimeVerificationRunner: ObservableObject {
           model.slideCanvasStatus == .confirmed
         else {
           appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
-          throw canvasConfirmationFailure(for: model)
+          throw canvasConfirmationFailure(
+            for: model,
+            fallbackReason: .selectionConfirmationRejected
+          )
         }
       case .failClosed:
         appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
-        throw canvasConfirmationFailure(for: model)
+        throw canvasConfirmationFailure(
+          for: model,
+          fallbackReason: .unclassifiedInvalidation
+        )
       }
     }
   }
 
-  private func canvasConfirmationFailure(for model: AppModel) -> Failure {
+  private func canvasConfirmationFailure(
+    for model: AppModel,
+    fallbackReason: RuntimeSlideCanvasInvalidationReason
+  ) -> Failure {
     let code = RuntimeVerificationCanvasConfirmationPolicy.failureCode(
       for: model.slideCanvasStatus,
       capturedFrameCount: model.capturedFrameCount
     )
-    return Failure(code: code, message: code.safeReportMessage)
+    let reason =
+      code == .slideCanvasConfirmationFailed
+      ? RuntimeVerificationSnapshotProjector.slideCanvasInvalidationReason(
+        for: model.slideCanvasInvalidationReason
+      ) ?? fallbackReason
+      : nil
+    return Failure(
+      code: code,
+      message: code.safeReportMessage,
+      slideCanvasFailureReason: reason
+    )
   }
 
   private func findWindow(

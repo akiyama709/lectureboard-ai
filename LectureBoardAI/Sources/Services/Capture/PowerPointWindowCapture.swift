@@ -55,6 +55,15 @@ struct CaptureOutputContinuity<Payload> {
     repeatablePayload = payload
   }
 
+  mutating func makeAndAcceptRepeatedPayload(
+    _ transform: (Payload) -> Payload
+  ) -> Payload? {
+    guard let repeatablePayload else { return nil }
+    let repeatedPayload = transform(repeatablePayload)
+    self.repeatablePayload = repeatedPayload
+    return repeatedPayload
+  }
+
   mutating func markContentUnavailable() {
     repeatablePayload = nil
   }
@@ -186,27 +195,59 @@ enum CaptureFrameRectParser {
 }
 
 enum CaptureSurfaceGeometryParser {
+  enum AttachmentState: Equatable {
+    case absent
+    case valid(CaptureSurfaceGeometry)
+    case invalid
+  }
+
   static func parse(
     _ attachments: [SCStreamFrameInfo: Any]?,
     outputPixelWidth: Int,
     outputPixelHeight: Int
   ) -> CaptureSurfaceGeometry? {
     guard
-      let attachments,
-      let contentRect = CaptureFrameRectParser.parse(attachments[.contentRect]),
-      let scaleFactor = parsePositiveDouble(attachments[.scaleFactor]),
-      let contentScale = parsePositiveDouble(attachments[.contentScale])
+      case .valid(let geometry) = attachmentState(
+        attachments,
+        outputPixelWidth: outputPixelWidth,
+        outputPixelHeight: outputPixelHeight
+      )
     else {
       return nil
     }
+    return geometry
+  }
 
-    return CaptureSurfaceGeometry(
-      contentRect: contentRect,
-      scaleFactor: scaleFactor,
-      contentScale: contentScale,
-      outputPixelWidth: outputPixelWidth,
-      outputPixelHeight: outputPixelHeight
-    )
+  static func attachmentState(
+    _ attachments: [SCStreamFrameInfo: Any]?,
+    outputPixelWidth: Int,
+    outputPixelHeight: Int
+  ) -> AttachmentState {
+    let surfaceKeys: [SCStreamFrameInfo] = [.contentRect, .scaleFactor, .contentScale]
+    let presentKeyCount = surfaceKeys.reduce(into: 0) { count, key in
+      if attachments?[key] != nil {
+        count += 1
+      }
+    }
+    guard presentKeyCount > 0 else { return .absent }
+    guard
+      presentKeyCount == surfaceKeys.count,
+      let attachments,
+      let contentRect = CaptureFrameRectParser.parse(attachments[.contentRect]),
+      let scaleFactor = parsePositiveDouble(attachments[.scaleFactor]),
+      let contentScale = parsePositiveDouble(attachments[.contentScale]),
+      let geometry = CaptureSurfaceGeometry(
+        contentRect: contentRect,
+        scaleFactor: scaleFactor,
+        contentScale: contentScale,
+        outputPixelWidth: outputPixelWidth,
+        outputPixelHeight: outputPixelHeight
+      )
+    else {
+      return .invalid
+    }
+
+    return .valid(geometry)
   }
 
   private static func parsePositiveDouble(_ value: Any?) -> Double? {
@@ -305,26 +346,47 @@ enum CapturedPowerPointFrameFactory {
     capturedAt: Date,
     currentAttachments: [SCStreamFrameInfo: Any]?
   ) -> CapturedPowerPointFrame {
-    // The stream surface size is fixed for this capture. An idle sample may omit
-    // its image buffer, but its geometry must still come from its own attachments.
-    let parsedCurrentSurfaceGeometry = CaptureSurfaceGeometryParser.parse(
-      currentAttachments,
-      outputPixelWidth: lastFrame.image.width,
-      outputPixelHeight: lastFrame.image.height
-    )
-    let repeatedSurfaceGeometry: CaptureSurfaceGeometry?
-    if let lastSurfaceGeometry = lastFrame.captureSurfaceGeometry,
-      let parsedCurrentSurfaceGeometry,
-      parsedCurrentSurfaceGeometry == lastSurfaceGeometry
-    {
-      repeatedSurfaceGeometry = parsedCurrentSurfaceGeometry
+    // ScreenCaptureKit defines idle as no newly generated frame because the
+    // display did not change, but Apple does not document geometry attachment
+    // presence for idle samples. As a provisional application policy, treat a
+    // verified idle with all three surface keys absent as continuity of the
+    // unchanged visual surface. Partial, malformed, or conflicting current
+    // evidence remains fail closed and requires a later new frame to recover.
+    let currentSurfaceGeometryState: CaptureSurfaceGeometryParser.AttachmentState
+    if CaptureFrameDeliveryDecisionResolver.resolve(
+      statusValue: currentAttachments?[.status]
+    ) == .idleRepeat {
+      currentSurfaceGeometryState = CaptureSurfaceGeometryParser.attachmentState(
+        currentAttachments,
+        outputPixelWidth: lastFrame.image.width,
+        outputPixelHeight: lastFrame.image.height
+      )
     } else {
+      currentSurfaceGeometryState = .invalid
+    }
+    let repeatedSurfaceGeometry: CaptureSurfaceGeometry?
+    let repeatedScreenGeometry: CaptureScreenGeometry?
+    switch (lastFrame.captureSurfaceGeometry, currentSurfaceGeometryState) {
+    case (.some(let lastSurfaceGeometry), .absent)
+    where lastSurfaceGeometry.outputPixelWidth == lastFrame.image.width
+      && lastSurfaceGeometry.outputPixelHeight == lastFrame.image.height:
+      repeatedSurfaceGeometry = lastSurfaceGeometry
+      // Apply the latched geometry only to crop the reused visual payload. It is
+      // not current coordinate evidence: keep production overlay mapping closed
+      // even if this idle sample carries a screenRect.
+      repeatedScreenGeometry = nil
+    case (.some(let lastSurfaceGeometry), .valid(let currentSurfaceGeometry))
+    where currentSurfaceGeometry == lastSurfaceGeometry:
+      repeatedSurfaceGeometry = currentSurfaceGeometry
+      repeatedScreenGeometry = CaptureScreenGeometryParser.parse(currentAttachments)
+    default:
       repeatedSurfaceGeometry = nil
+      repeatedScreenGeometry = nil
     }
 
     // Idle means no new visual content: reuse only the prior visual payload and
-    // display time. Geometry remains valid only when current attachments attest
-    // that the reused payload still has exactly the same surface placement.
+    // display time. Screen position is never inherited: absent or invalid
+    // current screen-position evidence keeps production overlay mapping closed.
     return CapturedPowerPointFrame(
       windowID: lastFrame.windowID,
       sequenceNumber: sequenceNumber,
@@ -332,7 +394,7 @@ enum CapturedPowerPointFrameFactory {
       displayTime: lastFrame.displayTime,
       deliveryKind: .idleRepeat,
       captureSurfaceGeometry: repeatedSurfaceGeometry,
-      captureScreenGeometry: CaptureScreenGeometryParser.parse(currentAttachments),
+      captureScreenGeometry: repeatedScreenGeometry,
       image: lastFrame.image,
       fingerprint: lastFrame.fingerprint,
       contentFingerprint: lastFrame.contentFingerprint
@@ -699,18 +761,25 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     from sampleBuffer: CMSampleBuffer,
     sequenceNumber: UInt64
   ) {
-    guard let lastFrame = continuity.repeatablePayload else {
+    let currentAttachments = frameAttachments(in: sampleBuffer)
+    guard
+      let repeatedFrame = continuity.makeAndAcceptRepeatedPayload({ lastFrame in
+        CapturedPowerPointFrameFactory.makeIdleRepeat(
+          from: lastFrame,
+          sequenceNumber: sequenceNumber,
+          capturedAt: Date(),
+          currentAttachments: currentAttachments
+        )
+      })
+    else {
       reportContentUnavailable(sequenceNumber: sequenceNumber)
       return
     }
-    frameHandler(
-      CapturedPowerPointFrameFactory.makeIdleRepeat(
-        from: lastFrame,
-        sequenceNumber: sequenceNumber,
-        capturedAt: Date(),
-        currentAttachments: frameAttachments(in: sampleBuffer)
-      )
-    )
+    // Preserve fail-closed gaps. Once an idle delivery supplies partial,
+    // malformed, or conflicting geometry, a later metadata-empty idle delivery
+    // cannot revive geometry from the older new frame; only a later new frame
+    // can re-establish it.
+    frameHandler(repeatedFrame)
   }
 
   private func emitNewFrame(
