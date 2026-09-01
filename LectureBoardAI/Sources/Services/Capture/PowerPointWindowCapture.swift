@@ -4,6 +4,7 @@ import CoreVideo
 import Foundation
 import LectureBoardCore
 import ScreenCaptureKit
+import Synchronization
 
 enum CapturedFrameDeliveryKind: Equatable, Sendable {
   case new
@@ -469,6 +470,189 @@ struct CaptureSessionLifecycle: Sendable {
 typealias CaptureFrameHandler = @Sendable (CapturedPowerPointFrame) -> Void
 typealias CaptureContentUnavailableHandler = @Sendable (UInt64) -> Void
 typealias CaptureErrorHandler = @Sendable (String) -> Void
+typealias CaptureFailureHandler = @Sendable (CaptureFailureEvent) -> Void
+
+struct CaptureFailureEvent: Equatable, Sendable {
+  let message: String
+  let source: RuntimeCaptureFailureSource
+  let scStreamErrorCode: RuntimeSCStreamErrorCode?
+}
+
+final class CaptureTerminalFailureGate: Sendable {
+  private let hasReportedFailure = Mutex(false)
+
+  @discardableResult
+  func report(
+    _ event: CaptureFailureEvent,
+    to failureHandler: CaptureFailureHandler
+  ) -> Bool {
+    let accepted = hasReportedFailure.withLock { hasReportedFailure in
+      guard !hasReportedFailure else { return false }
+      hasReportedFailure = true
+      return true
+    }
+    guard accepted else { return false }
+    failureHandler(event)
+    return true
+  }
+}
+
+final class CaptureTerminalFailureRouter: Sendable {
+  private let failureHandler: CaptureFailureHandler
+  private let gate = CaptureTerminalFailureGate()
+
+  init(failureHandler: @escaping CaptureFailureHandler) {
+    self.failureHandler = failureHandler
+  }
+
+  @discardableResult
+  func reportSampleStatusStopped(message: String) -> Bool {
+    gate.report(
+      CaptureFailureEventFactory.sampleStatusStopped(message: message),
+      to: failureHandler
+    )
+  }
+
+  @discardableResult
+  func reportDelegateStopped(error: any Error) -> Bool {
+    gate.report(
+      CaptureFailureEventFactory.delegateStopped(error: error),
+      to: failureHandler
+    )
+  }
+
+  @discardableResult
+  func reportDelegateBecameInactive(message: String) -> Bool {
+    gate.report(
+      CaptureFailureEventFactory.delegateBecameInactive(message: message),
+      to: failureHandler
+    )
+  }
+}
+
+enum CaptureFailureEventFactory {
+  static func sampleStatusStopped(message: String) -> CaptureFailureEvent {
+    CaptureFailureEvent(
+      message: message,
+      source: .sampleStatusStopped,
+      scStreamErrorCode: nil
+    )
+  }
+
+  static func delegateStopped(error: any Error) -> CaptureFailureEvent {
+    event(
+      error: error,
+      knownSource: .delegateStoppedWithKnownSCError,
+      unknownSCSource: .delegateStoppedWithUnknownSCError,
+      unknownSource: .delegateStoppedWithUnknownError
+    )
+  }
+
+  static func delegateBecameInactive(message: String) -> CaptureFailureEvent {
+    CaptureFailureEvent(
+      message: message,
+      source: .delegateBecameInactive,
+      scStreamErrorCode: nil
+    )
+  }
+
+  static func startFailed(error: any Error) -> CaptureFailureEvent {
+    event(
+      error: error,
+      knownSource: .startFailedWithKnownSCError,
+      unknownSCSource: .startFailedWithUnknownSCError,
+      unknownSource: .startFailedWithUnknownError
+    )
+  }
+
+  static func unclassified(message: String) -> CaptureFailureEvent {
+    CaptureFailureEvent(
+      message: message,
+      source: .unclassifiedCaptureFailure,
+      scStreamErrorCode: nil
+    )
+  }
+
+  private static func event(
+    error: any Error,
+    knownSource: RuntimeCaptureFailureSource,
+    unknownSCSource: RuntimeCaptureFailureSource,
+    unknownSource: RuntimeCaptureFailureSource
+  ) -> CaptureFailureEvent {
+    let nsError = error as NSError
+    guard nsError.domain == SCStreamErrorDomain else {
+      return CaptureFailureEvent(
+        message: error.localizedDescription,
+        source: unknownSource,
+        scStreamErrorCode: nil
+      )
+    }
+    guard let code = RuntimeSCStreamErrorCodeNormalizer.normalize(nsError.code) else {
+      return CaptureFailureEvent(
+        message: error.localizedDescription,
+        source: unknownSCSource,
+        scStreamErrorCode: nil
+      )
+    }
+    return CaptureFailureEvent(
+      message: error.localizedDescription,
+      source: knownSource,
+      scStreamErrorCode: code
+    )
+  }
+}
+
+enum RuntimeSCStreamErrorCodeNormalizer {
+  static func normalize(_ rawCode: Int) -> RuntimeSCStreamErrorCode? {
+    guard let code = SCStreamError.Code(rawValue: rawCode) else { return nil }
+    switch code {
+    case .userDeclined:
+      return .userDeclined
+    case .failedToStart:
+      return .failedToStart
+    case .missingEntitlements:
+      return .missingEntitlements
+    case .failedApplicationConnectionInvalid:
+      return .failedApplicationConnectionInvalid
+    case .failedApplicationConnectionInterrupted:
+      return .failedApplicationConnectionInterrupted
+    case .failedNoMatchingApplicationContext:
+      return .failedNoMatchingApplicationContext
+    case .attemptToStartStreamState:
+      return .attemptToStartStreamState
+    case .attemptToStopStreamState:
+      return .attemptToStopStreamState
+    case .attemptToUpdateFilterState:
+      return .attemptToUpdateFilterState
+    case .attemptToConfigState:
+      return .attemptToConfigState
+    case .internalError:
+      return .internalError
+    case .invalidParameter:
+      return .invalidParameter
+    case .noWindowList:
+      return .noWindowList
+    case .noDisplayList:
+      return .noDisplayList
+    case .noCaptureSource:
+      return .noCaptureSource
+    case .removingStream:
+      return .removingStream
+    case .userStopped:
+      return .userStopped
+    case .failedToStartAudioCapture:
+      return .failedToStartAudioCapture
+    case .failedToStopAudioCapture:
+      return .failedToStopAudioCapture
+    case .failedToStartMicrophoneCapture:
+      return .failedToStartMicrophoneCapture
+    case .systemStoppedStream:
+      return .systemStoppedStream
+    @unknown default:
+      return nil
+    }
+  }
+}
 
 protocol PowerPointWindowCapturing: Sendable {
   func start(
@@ -486,10 +670,36 @@ protocol PowerPointWindowCapturing: Sendable {
     onError: @escaping CaptureErrorHandler
   ) async throws
 
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onFailure: @escaping CaptureFailureHandler
+  ) async throws
+
   func stop(operationID: CaptureOperationID) async
 }
 
 extension PowerPointWindowCapturing {
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onFailure: @escaping CaptureFailureHandler
+  ) async throws {
+    try await start(
+      operationID: operationID,
+      identity: identity,
+      onFrame: onFrame,
+      onContentUnavailable: onContentUnavailable,
+      onError: { message in
+        onFailure(CaptureFailureEventFactory.unclassified(message: message))
+      }
+    )
+  }
+
   func start(
     operationID: CaptureOperationID,
     identity: PowerPointWindowIdentity,
@@ -556,7 +766,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
       identity: identity,
       onFrame: onFrame,
       onContentUnavailable: { _ in },
-      onError: onError
+      onFailure: { event in onError(event.message) }
     )
   }
 
@@ -566,6 +776,22 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     onFrame: @escaping CaptureFrameHandler,
     onContentUnavailable: @escaping CaptureContentUnavailableHandler,
     onError: @escaping CaptureErrorHandler
+  ) async throws {
+    try await start(
+      operationID: operationID,
+      identity: identity,
+      onFrame: onFrame,
+      onContentUnavailable: onContentUnavailable,
+      onFailure: { event in onError(event.message) }
+    )
+  }
+
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onFailure: @escaping CaptureFailureHandler
   ) async throws {
     guard lifecycle.acceptStart(operationID) else {
       throw CancellationError()
@@ -624,7 +850,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
       windowID: identity.windowID,
       frameHandler: onFrame,
       contentUnavailableHandler: onContentUnavailable,
-      errorHandler: onError
+      failureHandler: onFailure
     )
     let stream = SCStream(
       filter: filter,
@@ -698,7 +924,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   private let windowID: CGWindowID
   private let frameHandler: CaptureFrameHandler
   private let contentUnavailableHandler: CaptureContentUnavailableHandler
-  private let errorHandler: CaptureErrorHandler
+  private let terminalFailureRouter: CaptureTerminalFailureRouter
   private let imageContext = CIContext(options: [.cacheIntermediates: false])
   private var sequenceNumber: UInt64 = 0
   private var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
@@ -707,12 +933,12 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     windowID: CGWindowID,
     frameHandler: @escaping CaptureFrameHandler,
     contentUnavailableHandler: @escaping CaptureContentUnavailableHandler,
-    errorHandler: @escaping CaptureErrorHandler
+    failureHandler: @escaping CaptureFailureHandler
   ) {
     self.windowID = windowID
     self.frameHandler = frameHandler
     self.contentUnavailableHandler = contentUnavailableHandler
-    self.errorHandler = errorHandler
+    terminalFailureRouter = CaptureTerminalFailureRouter(failureHandler: failureHandler)
   }
 
   func stream(
@@ -742,7 +968,9 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
       )
     case .terminalFailure:
       continuity.markContentUnavailable()
-      errorHandler(NSLocalizedString("error.captureWindowInactive", comment: ""))
+      terminalFailureRouter.reportSampleStatusStopped(
+        message: NSLocalizedString("error.captureWindowInactive", comment: "")
+      )
     case .drop:
       reportContentUnavailable(sequenceNumber: deliverySequenceNumber)
       return
@@ -750,11 +978,13 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   }
 
   func stream(_ stream: SCStream, didStopWithError error: any Error) {
-    errorHandler(error.localizedDescription)
+    terminalFailureRouter.reportDelegateStopped(error: error)
   }
 
   func streamDidBecomeInactive(_ stream: SCStream) {
-    errorHandler(NSLocalizedString("error.captureWindowInactive", comment: ""))
+    terminalFailureRouter.reportDelegateBecameInactive(
+      message: NSLocalizedString("error.captureWindowInactive", comment: "")
+    )
   }
 
   private func emitRepeatedFrameIfAvailable(

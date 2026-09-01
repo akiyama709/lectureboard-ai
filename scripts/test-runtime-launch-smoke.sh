@@ -6,7 +6,7 @@ repository_root="$(cd -- "$script_directory/.." && pwd)"
 source "$script_directory/runtime-launch-preflight.sh"
 runtime_app="$repository_root/DerivedData/RuntimeBuild/Build/Products/Debug/LectureBoard AI.app"
 runtime_executable="$runtime_app/Contents/MacOS/LectureBoard AI"
-expected_schema_version="9"
+expected_schema_version="10"
 temporary_parent="${TMPDIR:-/tmp}"
 temporary_directory="$(mktemp -d "$temporary_parent/lectureboard-runtime-smoke.XXXXXX")"
 invalid_report_path="$temporary_directory/invalid-runtime-report.json"
@@ -235,6 +235,8 @@ allowed_root_report_keys="$(
     runStatus \
     failureCode \
     failureMessage \
+    captureFailureSource \
+    captureSCStreamErrorCode \
     slideCanvasFailureReason \
     snapshots
 )"

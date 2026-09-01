@@ -79,8 +79,26 @@ struct RuntimeVerificationReportTests {
       snapshots: []
     )
 
-    #expect(RuntimeVerificationReport.currentSchemaVersion == 9)
+    #expect(RuntimeVerificationReport.currentSchemaVersion == 10)
     #expect(report.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
+  }
+
+  @Test func roundTripsBoundedCaptureFailureTelemetry() throws {
+    let report = makeFailedCaptureReport(
+      source: .delegateStoppedWithKnownSCError,
+      code: .systemStoppedStream
+    )
+
+    let data = try JSONEncoder().encode(report)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: data)
+
+    #expect(decoded == report)
+    #expect(decoded.schemaVersion == 10)
+    #expect(decoded.captureFailureSource == .delegateStoppedWithKnownSCError)
+    #expect(decoded.captureSCStreamErrorCode == .systemStoppedStream)
+    #expect(
+      decoded.failureMessage == RuntimeVerificationFailureCode.captureFailed.safeReportMessage
+    )
   }
 
   @Test func decodesSchemaTwoWithoutRelabelingItsLegacyCounterSemantics() throws {
@@ -384,6 +402,48 @@ struct RuntimeVerificationReportTests {
     }
   }
 
+  @Test func decodesSchemaOneThroughNineWithoutCaptureFailureMetadata() throws {
+    let report = makeFailedCaptureReport(
+      source: .delegateStoppedWithKnownSCError,
+      code: .userStopped
+    )
+    let encoded = try JSONEncoder().encode(report)
+    let currentObject = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+
+    for schemaVersion in 1...9 {
+      var legacyObjectWithoutFields = currentObject
+      legacyObjectWithoutFields["schemaVersion"] = schemaVersion
+      legacyObjectWithoutFields.removeValue(forKey: "captureFailureSource")
+      legacyObjectWithoutFields.removeValue(forKey: "captureSCStreamErrorCode")
+
+      let legacyDataWithoutFields = try JSONSerialization.data(
+        withJSONObject: legacyObjectWithoutFields
+      )
+      let decodedWithoutFields = try JSONDecoder().decode(
+        RuntimeVerificationReport.self,
+        from: legacyDataWithoutFields
+      )
+      #expect(decodedWithoutFields.schemaVersion == schemaVersion)
+      #expect(decodedWithoutFields.captureFailureSource == nil)
+      #expect(decodedWithoutFields.captureSCStreamErrorCode == nil)
+
+      var legacyObjectWithInjectedFields = currentObject
+      legacyObjectWithInjectedFields["schemaVersion"] = schemaVersion
+      let legacyDataWithInjectedFields = try JSONSerialization.data(
+        withJSONObject: legacyObjectWithInjectedFields
+      )
+      let decodedWithInjectedFields = try JSONDecoder().decode(
+        RuntimeVerificationReport.self,
+        from: legacyDataWithInjectedFields
+      )
+      #expect(decodedWithInjectedFields.schemaVersion == schemaVersion)
+      #expect(decodedWithInjectedFields.captureFailureSource == nil)
+      #expect(decodedWithInjectedFields.captureSCStreamErrorCode == nil)
+    }
+  }
+
   @Test func decodesSchemaOneSnapshotsWithoutNewMetadataCounters() throws {
     let report = RuntimeVerificationReport(
       startedAt: Date(timeIntervalSince1970: 1_788_045_600),
@@ -449,6 +509,8 @@ struct RuntimeVerificationReportTests {
       selectedBundleIdentifier: nil,
       runStatus: .completed,
       failureCode: .captureFailed,
+      captureFailureSource: .delegateStoppedWithKnownSCError,
+      captureSCStreamErrorCode: .userStopped,
       slideCanvasFailureReason: .confirmedFrameRejected,
       untrustedFailureDetail: "not retained",
       snapshots: []
@@ -458,7 +520,180 @@ struct RuntimeVerificationReportTests {
     #expect(report.requestedDurationSeconds == 0)
     #expect(report.failureCode == nil)
     #expect(report.failureMessage == nil)
+    #expect(report.captureFailureSource == nil)
+    #expect(report.captureSCStreamErrorCode == nil)
     #expect(report.slideCanvasFailureReason == nil)
+  }
+
+  @Test func failedCaptureReportsAlwaysUseBoundedConsistentTelemetry() {
+    let explicitKnown = makeFailedCaptureReport(
+      source: .delegateStoppedWithKnownSCError,
+      code: .failedApplicationConnectionInterrupted
+    )
+    let explicitUnknown = makeFailedCaptureReport(
+      source: .delegateStoppedWithUnknownError,
+      code: nil
+    )
+    let missing = makeFailedCaptureReport(source: nil, code: nil)
+    let knownWithoutCode = makeFailedCaptureReport(
+      source: .delegateStoppedWithKnownSCError,
+      code: nil
+    )
+    let unknownWithCode = makeFailedCaptureReport(
+      source: .delegateStoppedWithUnknownError,
+      code: .internalError
+    )
+    let unrelated = makeFailedCanvasReport(
+      slideCanvasFailureReason: .confirmedFrameRejected
+    )
+
+    #expect(explicitKnown.captureFailureSource == .delegateStoppedWithKnownSCError)
+    #expect(explicitKnown.captureSCStreamErrorCode == .failedApplicationConnectionInterrupted)
+    #expect(explicitUnknown.captureFailureSource == .delegateStoppedWithUnknownError)
+    #expect(explicitUnknown.captureSCStreamErrorCode == nil)
+    #expect(missing.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(missing.captureSCStreamErrorCode == nil)
+    #expect(knownWithoutCode.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(knownWithoutCode.captureSCStreamErrorCode == nil)
+    #expect(unknownWithCode.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(unknownWithCode.captureSCStreamErrorCode == nil)
+    #expect(unrelated.captureFailureSource == nil)
+    #expect(unrelated.captureSCStreamErrorCode == nil)
+  }
+
+  @Test func decodesCurrentCaptureFailureWithoutTelemetryAsUnclassified() throws {
+    let report = makeFailedCaptureReport(
+      source: .sampleStatusStopped,
+      code: nil
+    )
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object.removeValue(forKey: "captureFailureSource")
+
+    let data = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(
+      RuntimeVerificationReport.self,
+      from: data
+    )
+
+    #expect(decoded.schemaVersion == 10)
+    #expect(decoded.failureCode == .captureFailed)
+    #expect(decoded.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(decoded.captureSCStreamErrorCode == nil)
+  }
+
+  @Test func decodesInconsistentCurrentCaptureTelemetryAsUnclassified() throws {
+    let knownWithoutCode = try decodedCaptureReport(
+      source: RuntimeCaptureFailureSource.delegateStoppedWithKnownSCError.rawValue,
+      code: nil
+    )
+    let unknownWithCode = try decodedCaptureReport(
+      source: RuntimeCaptureFailureSource.delegateStoppedWithUnknownError.rawValue,
+      code: RuntimeSCStreamErrorCode.userStopped.rawValue
+    )
+
+    #expect(knownWithoutCode.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(knownWithoutCode.captureSCStreamErrorCode == nil)
+    #expect(unknownWithCode.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(unknownWithCode.captureSCStreamErrorCode == nil)
+  }
+
+  @Test func ignoresMalformedCaptureTelemetryWhenItDoesNotApply() throws {
+    let report = makeFailedCaptureReport(
+      source: .delegateStoppedWithKnownSCError,
+      code: .userStopped
+    )
+    let encoded = try JSONEncoder().encode(report)
+    let currentObject = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+
+    var legacyObject = currentObject
+    legacyObject["schemaVersion"] = 9
+    legacyObject["captureFailureSource"] = ["future": "PRIVATE_LEGACY_SENTINEL"]
+    legacyObject["captureSCStreamErrorCode"] = 9_999
+
+    var completedObject = currentObject
+    completedObject["runStatus"] = RuntimeVerificationRunStatus.completed.rawValue
+    completedObject["captureFailureSource"] = "futureCompletedSource"
+    completedObject["captureSCStreamErrorCode"] = ["private": "PRIVATE_COMPLETED_SENTINEL"]
+
+    var nonCaptureFailureObject = currentObject
+    nonCaptureFailureObject["failureCode"] = RuntimeVerificationFailureCode.windowNotFound.rawValue
+    nonCaptureFailureObject["captureFailureSource"] = ["future": "PRIVATE_FAILURE_SENTINEL"]
+    nonCaptureFailureObject["captureSCStreamErrorCode"] = false
+
+    for object in [legacyObject, completedObject, nonCaptureFailureObject] {
+      let data = try JSONSerialization.data(withJSONObject: object)
+      let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: data)
+      #expect(decoded.captureFailureSource == nil)
+      #expect(decoded.captureSCStreamErrorCode == nil)
+    }
+  }
+
+  @Test func malformedCurrentCaptureTelemetryNormalizesWithoutRetainingIt() throws {
+    let report = makeFailedCaptureReport(source: .sampleStatusStopped, code: nil)
+    let encoded = try JSONEncoder().encode(report)
+    let currentObject = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+
+    var malformedSourceObject = currentObject
+    malformedSourceObject["captureFailureSource"] = "futurePrivateSource"
+    malformedSourceObject["captureSCStreamErrorCode"] = ["private": "PRIVATE_CODE_SENTINEL"]
+
+    var malformedCodeObject = currentObject
+    malformedCodeObject["captureFailureSource"] =
+      RuntimeCaptureFailureSource.sampleStatusStopped.rawValue
+    malformedCodeObject["captureSCStreamErrorCode"] = ["private": "PRIVATE_TYPE_SENTINEL"]
+
+    for object in [malformedSourceObject, malformedCodeObject] {
+      let data = try JSONSerialization.data(withJSONObject: object)
+      let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: data)
+      let reencoded = try JSONEncoder().encode(decoded)
+      let reencodedText = try #require(String(data: reencoded, encoding: .utf8))
+
+      #expect(decoded.captureFailureSource == .unclassifiedCaptureFailure)
+      #expect(decoded.captureSCStreamErrorCode == nil)
+      #expect(!reencodedText.contains("PRIVATE_"))
+      #expect(!reencodedText.contains("futurePrivateSource"))
+    }
+  }
+
+  @Test func captureFailureNormalizationCoversEverySourceRule() {
+    let codeRequiredSources: [RuntimeCaptureFailureSource] = [
+      .delegateStoppedWithKnownSCError,
+      .startFailedWithKnownSCError,
+    ]
+    let codeForbiddenSources: [RuntimeCaptureFailureSource] = [
+      .sampleStatusStopped,
+      .delegateStoppedWithUnknownSCError,
+      .delegateStoppedWithUnknownError,
+      .delegateBecameInactive,
+      .startFailedWithUnknownSCError,
+      .startFailedWithUnknownError,
+      .unclassifiedCaptureFailure,
+    ]
+
+    for source in codeRequiredSources {
+      let consistent = makeFailedCaptureReport(source: source, code: .systemStoppedStream)
+      let missingCode = makeFailedCaptureReport(source: source, code: nil)
+      #expect(consistent.captureFailureSource == source)
+      #expect(consistent.captureSCStreamErrorCode == .systemStoppedStream)
+      #expect(missingCode.captureFailureSource == .unclassifiedCaptureFailure)
+      #expect(missingCode.captureSCStreamErrorCode == nil)
+    }
+
+    for source in codeForbiddenSources {
+      let consistent = makeFailedCaptureReport(source: source, code: nil)
+      let unexpectedCode = makeFailedCaptureReport(source: source, code: .systemStoppedStream)
+      #expect(consistent.captureFailureSource == source)
+      #expect(consistent.captureSCStreamErrorCode == nil)
+      #expect(unexpectedCode.captureFailureSource == .unclassifiedCaptureFailure)
+      #expect(unexpectedCode.captureSCStreamErrorCode == nil)
+    }
   }
 
   @Test func failedCanvasReportsAlwaysUseABoundedFailureReason() {
@@ -559,6 +794,11 @@ struct RuntimeVerificationReportTests {
       "contentScale",
       "canvasRegion",
       "targetRect",
+      "errorDomain",
+      "rawErrorCode",
+      "localizedDescription",
+      "userInfo",
+      "underlyingError",
       "x",
       "y",
       "width",
@@ -649,6 +889,8 @@ struct RuntimeVerificationReportTests {
     #expect(
       root["slideCanvasFailureReason"] as? String == "selectionConfirmationRejected"
     )
+    #expect(root["captureFailureSource"] == nil)
+    #expect(root["captureSCStreamErrorCode"] == nil)
     #expect(encodedSnapshot["contentRevisionCount"] as? Int == 2)
     #expect(encodedSnapshot["strokeCandidateRegionCount"] as? Int == 1)
     #expect(encodedSnapshot["slideIdentityState"] as? String == "identified")
@@ -663,6 +905,49 @@ struct RuntimeVerificationReportTests {
     )
   }
 
+  @Test func encodesExactBoundedCaptureFailureMetadataShape() throws {
+    let report = makeFailedCaptureReport(
+      source: .delegateStoppedWithKnownSCError,
+      code: .systemStoppedStream,
+      untrustedFailureDetail:
+        "SCStreamErrorDomain=-3821 /Users/person/Documents/Unpublished Lecture.pptx"
+    )
+
+    let data = try JSONEncoder().encode(report)
+    let root = try #require(
+      JSONSerialization.jsonObject(with: data) as? [String: Any]
+    )
+    let encodedText = try #require(String(data: data, encoding: .utf8))
+
+    #expect(
+      Set(root.keys) == [
+        "schemaVersion",
+        "startedAt",
+        "finishedAt",
+        "requestedDurationSeconds",
+        "permissionWasRequested",
+        "preflightBefore",
+        "preflightAfter",
+        "matchedWindowCount",
+        "selectedWindowID",
+        "selectedBundleIdentifier",
+        "slideCanvasConfirmationMode",
+        "runStatus",
+        "failureCode",
+        "failureMessage",
+        "captureFailureSource",
+        "captureSCStreamErrorCode",
+        "snapshots",
+      ]
+    )
+    #expect(root["captureFailureSource"] as? String == "delegateStoppedWithKnownSCError")
+    #expect(root["captureSCStreamErrorCode"] as? String == "systemStoppedStream")
+    #expect(root["slideCanvasFailureReason"] == nil)
+    #expect(!encodedText.contains("SCStreamErrorDomain"))
+    #expect(!encodedText.contains("-3821"))
+    #expect(!encodedText.contains("Unpublished Lecture.pptx"))
+  }
+
   @Test func canvasConfirmationModeRawValuesAreStableMetadata() throws {
     let expected: [(RuntimeSlideCanvasConfirmationMode, String)] = [
       (.noneRequested, "noneRequested"),
@@ -675,6 +960,63 @@ struct RuntimeVerificationReportTests {
       #expect(
         try JSONDecoder().decode(RuntimeSlideCanvasConfirmationMode.self, from: encoded)
           == mode
+      )
+    }
+  }
+
+  @Test func captureFailureSourceRawValuesAreStableBoundedMetadata() throws {
+    let expected: [(RuntimeCaptureFailureSource, String)] = [
+      (.sampleStatusStopped, "sampleStatusStopped"),
+      (.delegateStoppedWithKnownSCError, "delegateStoppedWithKnownSCError"),
+      (.delegateStoppedWithUnknownSCError, "delegateStoppedWithUnknownSCError"),
+      (.delegateStoppedWithUnknownError, "delegateStoppedWithUnknownError"),
+      (.delegateBecameInactive, "delegateBecameInactive"),
+      (.startFailedWithKnownSCError, "startFailedWithKnownSCError"),
+      (.startFailedWithUnknownSCError, "startFailedWithUnknownSCError"),
+      (.startFailedWithUnknownError, "startFailedWithUnknownError"),
+      (.unclassifiedCaptureFailure, "unclassifiedCaptureFailure"),
+    ]
+
+    for (source, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(source)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(
+        try JSONDecoder().decode(RuntimeCaptureFailureSource.self, from: encoded)
+          == source
+      )
+    }
+  }
+
+  @Test func scStreamErrorCodeRawValuesAreStableBoundedMetadata() throws {
+    let expected: [(RuntimeSCStreamErrorCode, String)] = [
+      (.userDeclined, "userDeclined"),
+      (.failedToStart, "failedToStart"),
+      (.missingEntitlements, "missingEntitlements"),
+      (.failedApplicationConnectionInvalid, "failedApplicationConnectionInvalid"),
+      (.failedApplicationConnectionInterrupted, "failedApplicationConnectionInterrupted"),
+      (.failedNoMatchingApplicationContext, "failedNoMatchingApplicationContext"),
+      (.attemptToStartStreamState, "attemptToStartStreamState"),
+      (.attemptToStopStreamState, "attemptToStopStreamState"),
+      (.attemptToUpdateFilterState, "attemptToUpdateFilterState"),
+      (.attemptToConfigState, "attemptToConfigState"),
+      (.internalError, "internalError"),
+      (.invalidParameter, "invalidParameter"),
+      (.noWindowList, "noWindowList"),
+      (.noDisplayList, "noDisplayList"),
+      (.noCaptureSource, "noCaptureSource"),
+      (.removingStream, "removingStream"),
+      (.userStopped, "userStopped"),
+      (.failedToStartAudioCapture, "failedToStartAudioCapture"),
+      (.failedToStopAudioCapture, "failedToStopAudioCapture"),
+      (.failedToStartMicrophoneCapture, "failedToStartMicrophoneCapture"),
+      (.systemStoppedStream, "systemStoppedStream"),
+    ]
+
+    for (code, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(code)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(
+        try JSONDecoder().decode(RuntimeSCStreamErrorCode.self, from: encoded) == code
       )
     }
   }
@@ -781,6 +1123,57 @@ struct RuntimeVerificationReportTests {
       untrustedFailureDetail: nil,
       snapshots: []
     )
+  }
+
+  private func makeFailedCaptureReport(
+    source: RuntimeCaptureFailureSource?,
+    code: RuntimeSCStreamErrorCode?,
+    untrustedFailureDetail: String? = nil
+  ) -> RuntimeVerificationReport {
+    RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 0),
+      finishedAt: Date(timeIntervalSince1970: 1),
+      requestedDurationSeconds: 1,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 7,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .failed,
+      failureCode: .captureFailed,
+      captureFailureSource: source,
+      captureSCStreamErrorCode: code,
+      untrustedFailureDetail: untrustedFailureDetail,
+      snapshots: []
+    )
+  }
+
+  private func decodedCaptureReport(
+    source: String?,
+    code: String?
+  ) throws -> RuntimeVerificationReport {
+    let report = makeFailedCaptureReport(
+      source: .sampleStatusStopped,
+      code: nil
+    )
+    let encoded = try JSONEncoder().encode(report)
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    if let source {
+      object["captureFailureSource"] = source
+    } else {
+      object.removeValue(forKey: "captureFailureSource")
+    }
+    if let code {
+      object["captureSCStreamErrorCode"] = code
+    } else {
+      object.removeValue(forKey: "captureSCStreamErrorCode")
+    }
+    let data = try JSONSerialization.data(withJSONObject: object)
+    return try JSONDecoder().decode(RuntimeVerificationReport.self, from: data)
   }
 
   private func allKeys(in value: Any) -> Set<String> {

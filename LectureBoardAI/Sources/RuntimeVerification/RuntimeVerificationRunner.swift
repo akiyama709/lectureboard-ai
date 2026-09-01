@@ -44,15 +44,21 @@ final class RuntimeVerificationRunner: ObservableObject {
     let code: RuntimeVerificationFailureCode
     let message: String
     let slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason?
+    let captureFailureSource: RuntimeCaptureFailureSource?
+    let captureSCStreamErrorCode: RuntimeSCStreamErrorCode?
 
     init(
       code: RuntimeVerificationFailureCode,
       message: String,
-      slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason? = nil
+      slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason? = nil,
+      captureFailureSource: RuntimeCaptureFailureSource? = nil,
+      captureSCStreamErrorCode: RuntimeSCStreamErrorCode? = nil
     ) {
       self.code = code
       self.message = message
       self.slideCanvasFailureReason = slideCanvasFailureReason
+      self.captureFailureSource = captureFailureSource
+      self.captureSCStreamErrorCode = captureSCStreamErrorCode
     }
   }
 
@@ -101,6 +107,8 @@ final class RuntimeVerificationRunner: ObservableObject {
     var failureCode: RuntimeVerificationFailureCode?
     var failureMessage: String?
     var slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason?
+    var captureFailureSource: RuntimeCaptureFailureSource?
+    var captureSCStreamErrorCode: RuntimeSCStreamErrorCode?
 
     do {
       try await execute(
@@ -114,6 +122,8 @@ final class RuntimeVerificationRunner: ObservableObject {
       failureCode = failure.code
       failureMessage = failure.message
       slideCanvasFailureReason = failure.slideCanvasFailureReason
+      captureFailureSource = failure.captureFailureSource
+      captureSCStreamErrorCode = failure.captureSCStreamErrorCode
     } catch is CancellationError {
       runStatus = .failed
       failureCode = .internalFailure
@@ -142,6 +152,8 @@ final class RuntimeVerificationRunner: ObservableObject {
       ),
       runStatus: runStatus,
       failureCode: failureCode,
+      captureFailureSource: captureFailureSource,
+      captureSCStreamErrorCode: captureSCStreamErrorCode,
       slideCanvasFailureReason: slideCanvasFailureReason,
       untrustedFailureDetail: failureMessage,
       snapshots: context.snapshots
@@ -214,15 +226,15 @@ final class RuntimeVerificationRunner: ObservableObject {
         startedUptime: startedUptime,
         to: &context
       )
-      throw Failure(code: .captureFailed, message: message)
+      throw captureFailure(for: model, message: message)
     case .starting, .stopped:
       appendSnapshot(
         from: model,
         startedUptime: startedUptime,
         to: &context
       )
-      throw Failure(
-        code: .captureFailed,
+      throw captureFailure(
+        for: model,
         message: "The selected PowerPoint window did not enter the capturing state."
       )
     }
@@ -252,7 +264,7 @@ final class RuntimeVerificationRunner: ObservableObject {
       )
 
       if case .error(let message) = model.captureStatus {
-        throw Failure(code: .captureFailed, message: message)
+        throw captureFailure(for: model, message: message)
       }
 
       let elapsed = currentUptime - observationStartedUptime
@@ -288,7 +300,7 @@ final class RuntimeVerificationRunner: ObservableObject {
     while true {
       if case .error(let message) = model.captureStatus {
         appendSnapshot(from: model, startedUptime: startedUptime, to: &context)
-        throw Failure(code: .captureFailed, message: message)
+        throw captureFailure(for: model, message: message)
       }
 
       switch RuntimeVerificationCanvasConfirmationPolicy.action(
@@ -362,6 +374,15 @@ final class RuntimeVerificationRunner: ObservableObject {
       code: code,
       message: code.safeReportMessage,
       slideCanvasFailureReason: reason
+    )
+  }
+
+  private func captureFailure(for model: AppModel, message: String) -> Failure {
+    Failure(
+      code: .captureFailed,
+      message: message,
+      captureFailureSource: model.captureFailureSource ?? .unclassifiedCaptureFailure,
+      captureSCStreamErrorCode: model.captureSCStreamErrorCode
     )
   }
 

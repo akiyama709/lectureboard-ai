@@ -46,9 +46,58 @@ public enum RuntimeVerificationFailureCode: String, Codable, Equatable, Sendable
   }
 }
 
+/// Identifies the bounded lifecycle observation that ended capture without
+/// retaining an error domain, localized description, or other untrusted data.
+public enum RuntimeCaptureFailureSource: String, Codable, Equatable, Sendable {
+  case sampleStatusStopped
+  case delegateStoppedWithKnownSCError
+  case delegateStoppedWithUnknownSCError
+  case delegateStoppedWithUnknownError
+  case delegateBecameInactive
+  case startFailedWithKnownSCError
+  case startFailedWithUnknownSCError
+  case startFailedWithUnknownError
+  case unclassifiedCaptureFailure
+
+  fileprivate var requiresSCStreamErrorCode: Bool {
+    switch self {
+    case .delegateStoppedWithKnownSCError, .startFailedWithKnownSCError:
+      true
+    default:
+      false
+    }
+  }
+}
+
+/// A privacy-bounded representation of the public ScreenCaptureKit stream
+/// error codes known to the SDK used to build the producer.
+public enum RuntimeSCStreamErrorCode: String, Codable, Equatable, Sendable {
+  case userDeclined
+  case failedToStart
+  case missingEntitlements
+  case failedApplicationConnectionInvalid
+  case failedApplicationConnectionInterrupted
+  case failedNoMatchingApplicationContext
+  case attemptToStartStreamState
+  case attemptToStopStreamState
+  case attemptToUpdateFilterState
+  case attemptToConfigState
+  case internalError
+  case invalidParameter
+  case noWindowList
+  case noDisplayList
+  case noCaptureSource
+  case removingStream
+  case userStopped
+  case failedToStartAudioCapture
+  case failedToStopAudioCapture
+  case failedToStartMicrophoneCapture
+  case systemStoppedStream
+}
+
 /// A metadata-only runtime verification record that excludes captured content and window titles.
 public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
-  public static let currentSchemaVersion = 9
+  public static let currentSchemaVersion = 10
 
   public let schemaVersion: Int
   public let startedAt: Date
@@ -67,6 +116,13 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
   public let runStatus: RuntimeVerificationRunStatus
   public let failureCode: RuntimeVerificationFailureCode?
   public let failureMessage: String?
+  /// `nil` for completed runs, non-capture failures, and decoded schema 1
+  /// through schema 9 reports. A current failed capture report always has one
+  /// bounded source.
+  public let captureFailureSource: RuntimeCaptureFailureSource?
+  /// Present only when `captureFailureSource` identifies a known
+  /// ScreenCaptureKit error. Raw numeric codes are never retained.
+  public let captureSCStreamErrorCode: RuntimeSCStreamErrorCode?
   /// `nil` for completed runs, non-canvas failures, and decoded schema 1
   /// through schema 8 reports. A current failed canvas-confirmation report
   /// always has one bounded reason.
@@ -88,6 +144,8 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     slideCanvasConfirmationMode: RuntimeSlideCanvasConfirmationMode = .noneRequested,
     runStatus: RuntimeVerificationRunStatus,
     failureCode: RuntimeVerificationFailureCode?,
+    captureFailureSource: RuntimeCaptureFailureSource? = nil,
+    captureSCStreamErrorCode: RuntimeSCStreamErrorCode? = nil,
     slideCanvasFailureReason: RuntimeSlideCanvasInvalidationReason? = nil,
     untrustedFailureDetail _: String?,
     snapshots: [RuntimeVerificationSnapshot]
@@ -123,11 +181,24 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     if runStatus == .completed {
       self.failureCode = nil
       self.failureMessage = nil
+      self.captureFailureSource = nil
+      self.captureSCStreamErrorCode = nil
       self.slideCanvasFailureReason = nil
     } else {
       let resolvedFailureCode = failureCode ?? .internalFailure
       self.failureCode = resolvedFailureCode
       self.failureMessage = resolvedFailureCode.safeReportMessage
+      if resolvedFailureCode == .captureFailed {
+        let captureFailureTelemetry = Self.normalizedCaptureFailureTelemetry(
+          source: captureFailureSource,
+          code: captureSCStreamErrorCode
+        )
+        self.captureFailureSource = captureFailureTelemetry.source
+        self.captureSCStreamErrorCode = captureFailureTelemetry.code
+      } else {
+        self.captureFailureSource = nil
+        self.captureSCStreamErrorCode = nil
+      }
       self.slideCanvasFailureReason =
         resolvedFailureCode == .slideCanvasConfirmationFailed
         ? slideCanvasFailureReason ?? .unclassifiedInvalidation
@@ -184,6 +255,46 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
       forKey: .failureCode
     )
     failureMessage = try container.decodeIfPresent(String.self, forKey: .failureMessage)
+    if schemaVersion >= 10,
+      runStatus == .failed,
+      failureCode == .captureFailed
+    {
+      var malformedTelemetry = false
+      let decodedCaptureFailureSource: RuntimeCaptureFailureSource?
+      do {
+        decodedCaptureFailureSource = try container.decodeIfPresent(
+          RuntimeCaptureFailureSource.self,
+          forKey: .captureFailureSource
+        )
+      } catch {
+        malformedTelemetry = true
+        decodedCaptureFailureSource = nil
+      }
+      let decodedCaptureSCStreamErrorCode: RuntimeSCStreamErrorCode?
+      do {
+        decodedCaptureSCStreamErrorCode = try container.decodeIfPresent(
+          RuntimeSCStreamErrorCode.self,
+          forKey: .captureSCStreamErrorCode
+        )
+      } catch {
+        malformedTelemetry = true
+        decodedCaptureSCStreamErrorCode = nil
+      }
+      if malformedTelemetry {
+        captureFailureSource = .unclassifiedCaptureFailure
+        captureSCStreamErrorCode = nil
+      } else {
+        let captureFailureTelemetry = Self.normalizedCaptureFailureTelemetry(
+          source: decodedCaptureFailureSource,
+          code: decodedCaptureSCStreamErrorCode
+        )
+        captureFailureSource = captureFailureTelemetry.source
+        captureSCStreamErrorCode = captureFailureTelemetry.code
+      }
+    } else {
+      captureFailureSource = nil
+      captureSCStreamErrorCode = nil
+    }
     snapshots = try container.decode(
       [RuntimeVerificationSnapshot].self,
       forKey: .snapshots
@@ -219,6 +330,8 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
     case runStatus
     case failureCode
     case failureMessage
+    case captureFailureSource
+    case captureSCStreamErrorCode
     case slideCanvasFailureReason
     case snapshots
   }
@@ -230,5 +343,26 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
       .replacingOccurrences(of: "\0", with: "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
     return normalized.isEmpty ? nil : normalized
+  }
+
+  private static func normalizedCaptureFailureTelemetry(
+    source: RuntimeCaptureFailureSource?,
+    code: RuntimeSCStreamErrorCode?
+  ) -> (source: RuntimeCaptureFailureSource, code: RuntimeSCStreamErrorCode?) {
+    guard let source else {
+      return (.unclassifiedCaptureFailure, nil)
+    }
+
+    if source.requiresSCStreamErrorCode {
+      guard let code else {
+        return (.unclassifiedCaptureFailure, nil)
+      }
+      return (source, code)
+    }
+
+    guard code == nil else {
+      return (.unclassifiedCaptureFailure, nil)
+    }
+    return (source, nil)
   }
 }

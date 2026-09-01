@@ -37,6 +37,8 @@ struct RuntimeVerificationRunnerIntegrationTests {
     let report = try decodeReport(atPath: outputPath)
     #expect(report.runStatus == .completed)
     #expect(report.failureCode == nil)
+    #expect(report.captureFailureSource == nil)
+    #expect(report.captureSCStreamErrorCode == nil)
     #expect(report.slideCanvasFailureReason == nil)
     #expect(report.slideCanvasConfirmationMode == .diagnosticFullFrame)
     #expect(report.snapshots.contains { $0.slideCanvasState == .confirmed })
@@ -238,12 +240,90 @@ struct RuntimeVerificationRunnerIntegrationTests {
     let report = try decodeReport(atPath: outputPath)
     #expect(report.runStatus == .failed)
     #expect(report.failureCode == .captureFailed)
+    #expect(report.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(report.captureSCStreamErrorCode == nil)
     #expect(
       report.failureMessage == RuntimeVerificationFailureCode.captureFailed.safeReportMessage
     )
     #expect(report.slideCanvasConfirmationMode == .diagnosticFullFrame)
     let encoded = try String(contentsOfFile: outputPath, encoding: .utf8)
     #expect(!encoded.contains("private provider detail"))
+  }
+
+  @Test func boundedCaptureFailureTelemetryExcludesPrivateProviderDetail() async throws {
+    let capture = RuntimeRunnerCapture()
+    let model = makeModel(capture: capture)
+    let outputPath = uniqueReportPath()
+    defer { try? FileManager.default.removeItem(atPath: outputPath) }
+    let runner = makeRunner()
+    let privateSentinel = "private provider detail from NSError userInfo"
+
+    let runTask = Task {
+      await runner.run(
+        configuration: configuration(
+          outputPath: outputPath,
+          observationDurationSeconds: 0.08
+        ),
+        model: model
+      )
+    }
+    try await capture.waitUntilStarted()
+    await capture.emit(makeFrame(sequenceNumber: 1))
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    try await waitUntil { runner.state == .observing }
+    await capture.emitFailure(
+      CaptureFailureEvent(
+        message: privateSentinel,
+        source: .delegateStoppedWithKnownSCError,
+        scStreamErrorCode: .internalError
+      )
+    )
+    await runTask.value
+
+    let report = try decodeReport(atPath: outputPath)
+    #expect(report.runStatus == .failed)
+    #expect(report.failureCode == .captureFailed)
+    #expect(report.captureFailureSource == .delegateStoppedWithKnownSCError)
+    #expect(report.captureSCStreamErrorCode == .internalError)
+    #expect(
+      report.failureMessage == RuntimeVerificationFailureCode.captureFailed.safeReportMessage
+    )
+    let encoded = try String(contentsOfFile: outputPath, encoding: .utf8)
+    #expect(!encoded.contains(privateSentinel))
+    #expect(!encoded.contains("NSError"))
+    #expect(!encoded.contains("userInfo"))
+    #expect(model.captureFailureSource == nil)
+    #expect(model.captureSCStreamErrorCode == nil)
+  }
+
+  @Test func knownSCStartFailureWritesBoundedTelemetryWithoutPrivateDetail() async throws {
+    let privateSentinel = "PRIVATE_START_FAILURE /Users/person/Unpublished Lecture.pptx"
+    let capture = RuntimeRunnerStartFailingCapture(
+      error: NSError(
+        domain: SCStreamErrorDomain,
+        code: SCStreamError.Code.failedToStart.rawValue,
+        userInfo: [NSLocalizedDescriptionKey: privateSentinel]
+      )
+    )
+    let model = makeModel(capture: capture)
+    let outputPath = uniqueReportPath()
+    defer { try? FileManager.default.removeItem(atPath: outputPath) }
+    let runner = makeRunner()
+
+    await runner.run(configuration: configuration(outputPath: outputPath), model: model)
+
+    let report = try decodeReport(atPath: outputPath)
+    #expect(report.runStatus == .failed)
+    #expect(report.failureCode == .captureFailed)
+    #expect(report.captureFailureSource == .startFailedWithKnownSCError)
+    #expect(report.captureSCStreamErrorCode == .failedToStart)
+    #expect(
+      report.failureMessage == RuntimeVerificationFailureCode.captureFailed.safeReportMessage
+    )
+    let encoded = try String(contentsOfFile: outputPath, encoding: .utf8)
+    #expect(!encoded.contains(privateSentinel))
+    #expect(!encoded.contains("Unpublished Lecture.pptx"))
+    #expect(!encoded.contains(SCStreamErrorDomain))
   }
 
   private func makeRunner() -> RuntimeVerificationRunner {
@@ -270,7 +350,7 @@ struct RuntimeVerificationRunnerIntegrationTests {
     )
   }
 
-  private func makeModel(capture: RuntimeRunnerCapture) -> AppModel {
+  private func makeModel(capture: any PowerPointWindowCapturing) -> AppModel {
     let window = PowerPointWindowDescriptor(
       id: 42,
       title: "Synthetic runtime verifier window",
@@ -368,6 +448,25 @@ struct RuntimeVerificationRunnerIntegrationTests {
   }
 }
 
+private actor RuntimeRunnerStartFailingCapture: PowerPointWindowCapturing {
+  let error: NSError
+
+  init(error: NSError) {
+    self.error = error
+  }
+
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onError: @escaping CaptureErrorHandler
+  ) async throws {
+    throw error
+  }
+
+  func stop(operationID: CaptureOperationID) async {}
+}
+
 private enum RuntimeRunnerTestError: Error {
   case timedOut
 }
@@ -375,6 +474,7 @@ private enum RuntimeRunnerTestError: Error {
 private actor RuntimeRunnerCapture: PowerPointWindowCapturing {
   private var frameHandler: CaptureFrameHandler?
   private var errorHandler: CaptureErrorHandler?
+  private var failureHandler: CaptureFailureHandler?
 
   func start(
     operationID: CaptureOperationID,
@@ -386,9 +486,21 @@ private actor RuntimeRunnerCapture: PowerPointWindowCapturing {
     errorHandler = onError
   }
 
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onFailure: @escaping CaptureFailureHandler
+  ) async throws {
+    frameHandler = onFrame
+    failureHandler = onFailure
+  }
+
   func stop(operationID: CaptureOperationID) async {
     frameHandler = nil
     errorHandler = nil
+    failureHandler = nil
   }
 
   func waitUntilStarted() async throws {
@@ -404,7 +516,15 @@ private actor RuntimeRunnerCapture: PowerPointWindowCapturing {
   }
 
   func emitError(_ message: String) {
-    errorHandler?(message)
+    if let failureHandler {
+      failureHandler(CaptureFailureEventFactory.unclassified(message: message))
+    } else {
+      errorHandler?(message)
+    }
+  }
+
+  func emitFailure(_ event: CaptureFailureEvent) {
+    failureHandler?(event)
   }
 }
 

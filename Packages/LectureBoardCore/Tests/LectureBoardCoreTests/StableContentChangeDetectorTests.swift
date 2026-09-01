@@ -65,6 +65,84 @@ struct StableContentChangeDetectorTests {
     #expect(detector.ingest(changed).state == .unchanged)
   }
 
+  @Test func defaultConfigurationKeepsSmallVisualStatePendingForFirstTwoDeliveries() {
+    let productionConfiguration = StableContentChangeDetectorConfiguration()
+    #expect(productionConfiguration.cellDifferenceThreshold == 0.08)
+    #expect(productionConfiguration.minimumChangedCellRate == 0.001)
+    #expect(productionConfiguration.maximumCandidateChangedCellRate == 0)
+    #expect(productionConfiguration.requiredConsecutiveFrames == 3)
+
+    var detector = StableContentChangeDetector()
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let changed = changingCells(in: baseline, indices: Array(0..<15))
+    let acceptedBaseline = detector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+
+    let firstDelivery = detector.ingest(changed)
+    let secondDelivery = detector.ingest(changed)
+
+    #expect(firstDelivery.state == .contentChangePending(consecutiveFrames: 1))
+    #expect(secondDelivery.state == .contentChangePending(consecutiveFrames: 2))
+    #expect(firstDelivery.comparisonFromBaseline?.changedCellCount == 15)
+    #expect(
+      firstDelivery.comparisonFromBaseline?.changedCellRate
+        == Double(15) / Double(160 * 90)
+    )
+    #expect(firstDelivery.baselineFingerprint == baseline)
+    #expect(secondDelivery.baselineFingerprint == baseline)
+  }
+
+  @Test func defaultConfigurationResetsCandidateAndConfirmsOnlyLaterPersistentState() {
+    var detector = StableContentChangeDetector()
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let firstVisualState = changingCells(in: baseline, indices: Array(0..<15))
+    let laterVisualState = changingCells(in: baseline, indices: Array(15..<30))
+    let acceptedBaseline = detector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+
+    let observations = [
+      detector.ingest(firstVisualState),
+      detector.ingest(firstVisualState),
+      detector.ingest(laterVisualState),
+      detector.ingest(laterVisualState),
+      detector.ingest(laterVisualState),
+      detector.ingest(laterVisualState),
+    ]
+
+    #expect(observations[0].state == .contentChangePending(consecutiveFrames: 1))
+    #expect(observations[1].state == .contentChangePending(consecutiveFrames: 2))
+    #expect(observations[2].state == .contentChangePending(consecutiveFrames: 1))
+    #expect(observations[3].state == .contentChangePending(consecutiveFrames: 2))
+    #expect(observations[4].state == .contentChanged)
+    #expect(observations[4].baselineFingerprint == laterVisualState)
+    #expect(observations[5].state == .unchanged)
+    #expect(observations.filter { $0.state == .contentChanged }.count == 1)
+  }
+
+  @Test func defaultConfigurationConfirmsEraseBackToBaselineOnThirdDelivery() {
+    var detector = StableContentChangeDetector()
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let inked = changingCells(in: baseline, indices: Array(30..<45))
+    let acceptedBaseline = detector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+    #expect(detector.ingest(inked).state == .contentChangePending(consecutiveFrames: 1))
+    #expect(detector.ingest(inked).state == .contentChangePending(consecutiveFrames: 2))
+    #expect(detector.ingest(inked).state == .contentChanged)
+
+    let firstEraseDelivery = detector.ingest(baseline)
+    let secondEraseDelivery = detector.ingest(baseline)
+    let thirdEraseDelivery = detector.ingest(baseline)
+
+    #expect(firstEraseDelivery.state == .contentChangePending(consecutiveFrames: 1))
+    #expect(secondEraseDelivery.state == .contentChangePending(consecutiveFrames: 2))
+    #expect(firstEraseDelivery.baselineFingerprint == inked)
+    #expect(secondEraseDelivery.baselineFingerprint == inked)
+    #expect(thirdEraseDelivery.state == .contentChanged)
+    #expect(thirdEraseDelivery.comparisonFromBaseline?.changedCellCount == 15)
+    #expect(thirdEraseDelivery.baselineFingerprint == baseline)
+    #expect(detector.ingest(baseline).state == .unchanged)
+  }
+
   @Test func confirmsPersistentErasureBackToOriginalBaseline() {
     var detector = StableContentChangeDetector(configuration: configuration)
     let baseline = fingerprint(columns: 10, rows: 10)

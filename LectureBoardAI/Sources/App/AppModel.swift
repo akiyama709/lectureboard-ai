@@ -80,6 +80,8 @@ final class AppModel: ObservableObject {
   @Published var boardScene = BoardScene(slideNumber: 1)
   @Published var digitalInkStyle = DigitalInkStyle.clean
   @Published private(set) var captureStatus: CaptureStatus = .stopped
+  @Published private(set) var captureFailureSource: RuntimeCaptureFailureSource?
+  @Published private(set) var captureSCStreamErrorCode: RuntimeSCStreamErrorCode?
   @Published private(set) var capturedFrameCount = 0
   @Published private(set) var newCapturedFrameCount = 0
   @Published private(set) var repeatedCapturedFrameCount = 0
@@ -375,9 +377,12 @@ final class AppModel: ObservableObject {
 
   func startWindowCapture() async {
     guard let selectedWindow, let selectedIdentity = selectedWindow.identity else {
-      captureStatus = .error(
-        NSLocalizedString("error.captureWindowUnavailable", comment: "")
+      let event = CaptureFailureEventFactory.unclassified(
+        message: NSLocalizedString("error.captureWindowUnavailable", comment: "")
       )
+      captureFailureSource = event.source
+      captureSCStreamErrorCode = event.scStreamErrorCode
+      captureStatus = .error(event.message)
       return
     }
     let selectedPowerPointWindowID = selectedIdentity.windowID
@@ -392,6 +397,8 @@ final class AppModel: ObservableObject {
     }
 
     let operationID = nextCaptureOperationID()
+    captureFailureSource = nil
+    captureSCStreamErrorCode = nil
     productionOverlayIsManuallySuppressed = false
     activeCaptureSessionID = operationID
     activeCaptureWindowID = selectedPowerPointWindowID
@@ -433,9 +440,9 @@ final class AppModel: ObservableObject {
             )
           }
         },
-        onError: { [weak self] message in
+        onFailure: { [weak self] event in
           Task { @MainActor [weak self] in
-            await self?.handleCaptureError(message, sessionID: operationID)
+            await self?.handleCaptureFailure(event, sessionID: operationID)
           }
         }
       )
@@ -467,12 +474,15 @@ final class AppModel: ObservableObject {
       )
     } catch {
       guard activeCaptureSessionID == operationID else { return }
+      let event = CaptureFailureEventFactory.startFailed(error: error)
       let failedIdentityState = slideIdentityStateAfterCaptureFailure
       activeCaptureSessionID = nil
       activeCaptureWindowID = nil
       activeCaptureIdentity = nil
       invalidateSlideIdentityAfterCaptureEnd(state: failedIdentityState)
-      captureStatus = .error(error.localizedDescription)
+      captureFailureSource = event.source
+      captureSCStreamErrorCode = event.scStreamErrorCode
+      captureStatus = .error(event.message)
       stableFrameDetector.reset()
       stableContentChangeDetector.reset()
       lastAcceptedCaptureSequenceNumber = nil
@@ -507,6 +517,8 @@ final class AppModel: ObservableObject {
     stableContentChangeDetector.reset()
     lastAcceptedCaptureSequenceNumber = nil
     captureContentRequiresNewFrame = false
+    captureFailureSource = nil
+    captureSCStreamErrorCode = nil
     invalidateSlideCanvasAfterCaptureEnd()
     resetSlideAnalysis()
     captureStatus = .stopped
@@ -879,8 +891,8 @@ final class AppModel: ObservableObject {
     }
   }
 
-  private func handleCaptureError(
-    _ message: String,
+  private func handleCaptureFailure(
+    _ event: CaptureFailureEvent,
     sessionID: CaptureOperationID
   ) async {
     guard sessionID == activeCaptureSessionID else { return }
@@ -895,7 +907,9 @@ final class AppModel: ObservableObject {
     lastAcceptedCaptureSequenceNumber = nil
     invalidateSlideCanvasAfterCaptureEnd()
     resetSlideAnalysis()
-    captureStatus = .error(message)
+    captureFailureSource = event.source
+    captureSCStreamErrorCode = event.scStreamErrorCode
+    captureStatus = .error(event.message)
     await stopCaptureProviders(operationID: stopOperationID)
   }
 

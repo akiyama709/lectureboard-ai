@@ -1,8 +1,199 @@
 import CoreGraphics
 import Foundation
+import LectureBoardCore
+import ScreenCaptureKit
+import Synchronization
 import Testing
 
 @testable import LectureBoard_AI
+
+struct CaptureFailureEventFactoryTests {
+  @Test func mapsOnlyTheNamedSDKStreamErrorCodes() {
+    let cases: [(SCStreamError.Code, RuntimeSCStreamErrorCode)] = [
+      (.userDeclined, .userDeclined),
+      (.failedToStart, .failedToStart),
+      (.missingEntitlements, .missingEntitlements),
+      (.failedApplicationConnectionInvalid, .failedApplicationConnectionInvalid),
+      (.failedApplicationConnectionInterrupted, .failedApplicationConnectionInterrupted),
+      (.failedNoMatchingApplicationContext, .failedNoMatchingApplicationContext),
+      (.attemptToStartStreamState, .attemptToStartStreamState),
+      (.attemptToStopStreamState, .attemptToStopStreamState),
+      (.attemptToUpdateFilterState, .attemptToUpdateFilterState),
+      (.attemptToConfigState, .attemptToConfigState),
+      (.internalError, .internalError),
+      (.invalidParameter, .invalidParameter),
+      (.noWindowList, .noWindowList),
+      (.noDisplayList, .noDisplayList),
+      (.noCaptureSource, .noCaptureSource),
+      (.removingStream, .removingStream),
+      (.userStopped, .userStopped),
+      (.failedToStartAudioCapture, .failedToStartAudioCapture),
+      (.failedToStopAudioCapture, .failedToStopAudioCapture),
+      (.failedToStartMicrophoneCapture, .failedToStartMicrophoneCapture),
+      (.systemStoppedStream, .systemStoppedStream),
+    ]
+
+    #expect(cases.count == 21)
+    for (sdkCode, reportCode) in cases {
+      #expect(RuntimeSCStreamErrorCodeNormalizer.normalize(sdkCode.rawValue) == reportCode)
+    }
+    #expect(RuntimeSCStreamErrorCodeNormalizer.normalize(-99_999) == nil)
+  }
+
+  @Test func classifiesDelegateAndStartErrorsWithoutRetainingUnboundedMetadata() {
+    let privateSentinel = "private-provider-detail"
+    let known = NSError(
+      domain: SCStreamErrorDomain,
+      code: SCStreamError.Code.internalError.rawValue,
+      userInfo: [NSLocalizedDescriptionKey: privateSentinel, "private-key": privateSentinel]
+    )
+    let unknownSC = NSError(
+      domain: SCStreamErrorDomain,
+      code: -99_999,
+      userInfo: [NSLocalizedDescriptionKey: privateSentinel]
+    )
+    let other = NSError(
+      domain: "private.example.error",
+      code: SCStreamError.Code.internalError.rawValue,
+      userInfo: [NSLocalizedDescriptionKey: privateSentinel]
+    )
+
+    let knownDelegate = CaptureFailureEventFactory.delegateStopped(error: known)
+    #expect(knownDelegate.source == .delegateStoppedWithKnownSCError)
+    #expect(knownDelegate.scStreamErrorCode == .internalError)
+    #expect(knownDelegate.message == privateSentinel)
+
+    let unknownSCDelegate = CaptureFailureEventFactory.delegateStopped(error: unknownSC)
+    #expect(unknownSCDelegate.source == .delegateStoppedWithUnknownSCError)
+    #expect(unknownSCDelegate.scStreamErrorCode == nil)
+
+    let otherDelegate = CaptureFailureEventFactory.delegateStopped(error: other)
+    #expect(otherDelegate.source == .delegateStoppedWithUnknownError)
+    #expect(otherDelegate.scStreamErrorCode == nil)
+
+    let knownStart = CaptureFailureEventFactory.startFailed(error: known)
+    #expect(knownStart.source == .startFailedWithKnownSCError)
+    #expect(knownStart.scStreamErrorCode == .internalError)
+
+    let unknownSCStart = CaptureFailureEventFactory.startFailed(error: unknownSC)
+    #expect(unknownSCStart.source == .startFailedWithUnknownSCError)
+    #expect(unknownSCStart.scStreamErrorCode == nil)
+
+    let otherStart = CaptureFailureEventFactory.startFailed(error: other)
+    #expect(otherStart.source == .startFailedWithUnknownError)
+    #expect(otherStart.scStreamErrorCode == nil)
+  }
+
+  @Test func classifiesBoundedTerminalSignalsWithoutAnErrorCode() {
+    let stopped = CaptureFailureEventFactory.sampleStatusStopped(message: "stopped")
+    #expect(stopped.source == .sampleStatusStopped)
+    #expect(stopped.scStreamErrorCode == nil)
+
+    let inactive = CaptureFailureEventFactory.delegateBecameInactive(message: "inactive")
+    #expect(inactive.source == .delegateBecameInactive)
+    #expect(inactive.scStreamErrorCode == nil)
+
+    let unclassified = CaptureFailureEventFactory.unclassified(message: "unknown")
+    #expect(unclassified.source == .unclassifiedCaptureFailure)
+    #expect(unclassified.scStreamErrorCode == nil)
+  }
+}
+
+struct CaptureTerminalFailureGateTests {
+  @Test func firstTerminalCallbackWinsSynchronouslyForEveryBackToBackOrdering() {
+    let events = terminalFailureEvents()
+
+    for firstIndex in events.indices {
+      let gate = CaptureTerminalFailureGate()
+      let recorder = CaptureFailureEventRecorder()
+      let remainingEvents = events.enumerated().compactMap { index, event in
+        index == firstIndex ? nil : event
+      }
+      let orderedEvents = [events[firstIndex]] + remainingEvents
+
+      let accepted = orderedEvents.map { event in
+        gate.report(event, to: recorder.record)
+      }
+
+      #expect(accepted == [true, false, false])
+      #expect(recorder.events == [events[firstIndex]])
+    }
+  }
+
+  @Test func routerSharesOneGateAcrossEveryCaptureOutputTerminalEntry() {
+    let delegateError = NSError(
+      domain: SCStreamErrorDomain,
+      code: SCStreamError.Code.internalError.rawValue,
+      userInfo: [NSLocalizedDescriptionKey: "delegate stopped"]
+    )
+    let expectedEvents = [
+      CaptureFailureEventFactory.sampleStatusStopped(message: "sample stopped"),
+      CaptureFailureEventFactory.delegateStopped(error: delegateError),
+      CaptureFailureEventFactory.delegateBecameInactive(message: "inactive"),
+    ]
+
+    for firstIndex in expectedEvents.indices {
+      let recorder = CaptureFailureEventRecorder()
+      let router = CaptureTerminalFailureRouter(failureHandler: recorder.record)
+      let actions: [() -> Bool] = [
+        { router.reportSampleStatusStopped(message: "sample stopped") },
+        { router.reportDelegateStopped(error: delegateError) },
+        { router.reportDelegateBecameInactive(message: "inactive") },
+      ]
+      let remainingIndices = expectedEvents.indices.filter { $0 != firstIndex }
+      let orderedIndices = [firstIndex] + remainingIndices
+
+      let accepted = orderedIndices.map { actions[$0]() }
+
+      #expect(accepted == [true, false, false])
+      #expect(recorder.events == [expectedEvents[firstIndex]])
+    }
+  }
+
+  @Test func exactlyOneConcurrentTerminalCallbackPassesTheSynchronousBoundary() async {
+    for _ in 0..<100 {
+      let events = terminalFailureEvents()
+      let gate = CaptureTerminalFailureGate()
+      let recorder = CaptureFailureEventRecorder()
+      let barrier = CaptureFailureAsyncBarrier(participantCount: events.count)
+
+      let acceptedCount = await withTaskGroup(of: Bool.self) { group in
+        for event in events {
+          group.addTask {
+            await barrier.arriveAndWait()
+            return gate.report(event, to: recorder.record)
+          }
+        }
+
+        var count = 0
+        for await accepted in group where accepted {
+          count += 1
+        }
+        return count
+      }
+
+      #expect(acceptedCount == 1)
+      #expect(recorder.events.count == 1)
+      if let recordedEvent = recorder.events.first {
+        #expect(events.contains(recordedEvent))
+      }
+    }
+  }
+
+  private func terminalFailureEvents() -> [CaptureFailureEvent] {
+    [
+      CaptureFailureEventFactory.sampleStatusStopped(message: "sample stopped"),
+      CaptureFailureEventFactory.delegateStopped(
+        error: NSError(
+          domain: SCStreamErrorDomain,
+          code: SCStreamError.Code.internalError.rawValue,
+          userInfo: [NSLocalizedDescriptionKey: "delegate stopped"]
+        )
+      ),
+      CaptureFailureEventFactory.delegateBecameInactive(message: "inactive"),
+    ]
+  }
+}
 
 struct CaptureSessionLifecycleTests {
   @Test func rejectsAStartThatArrivesAfterANewerStop() {
@@ -284,12 +475,31 @@ struct AppModelCaptureLifecycleTests {
     let errorStop = try await capture.stopInvocation(at: 0)
 
     #expect(model.captureStatus == .error("controlled capture failure"))
+    #expect(model.captureFailureSource == .unclassifiedCaptureFailure)
+    #expect(model.captureSCStreamErrorCode == nil)
 
     let recoveryTask = Task { await model.startWindowCapture() }
     let recoveryStart = try await capture.startInvocation(at: 1)
+    #expect(model.captureFailureSource == nil)
+    #expect(model.captureSCStreamErrorCode == nil)
     await capture.resumeStart(recoveryStart.operationID)
     await recoveryTask.value
     #expect(model.captureStatus == .capturing)
+    #expect(model.captureFailureSource == nil)
+    #expect(model.captureSCStreamErrorCode == nil)
+
+    await capture.emitFailure(
+      CaptureFailureEvent(
+        message: "stale private provider detail",
+        source: .delegateStoppedWithKnownSCError,
+        scStreamErrorCode: .internalError
+      ),
+      for: start.operationID
+    )
+    await waitForMainActorQueueDrain()
+    #expect(model.captureStatus == .capturing)
+    #expect(model.captureFailureSource == nil)
+    #expect(model.captureSCStreamErrorCode == nil)
 
     await capture.resumeStop(errorStop)
     #expect(model.captureStatus == .capturing)
@@ -298,6 +508,87 @@ struct AppModelCaptureLifecycleTests {
     let cleanupStop = try await capture.stopInvocation(at: 1)
     await capture.resumeStop(cleanupStop)
     await cleanupTask.value
+  }
+
+  @Test func firstDetailedTerminalFailureWinsAndManualStopClearsTelemetry() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let model = makeModel(capture: capture)
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+
+    await capture.emitFailure(
+      CaptureFailureEvent(
+        message: "first failure",
+        source: .delegateStoppedWithKnownSCError,
+        scStreamErrorCode: .internalError
+      ),
+      for: start.operationID
+    )
+    _ = try await capture.stopInvocation(at: 0)
+    #expect(model.captureStatus == .error("first failure"))
+    #expect(model.captureFailureSource == .delegateStoppedWithKnownSCError)
+    #expect(model.captureSCStreamErrorCode == .internalError)
+
+    await capture.emitFailure(
+      CaptureFailureEvent(
+        message: "later failure",
+        source: .delegateBecameInactive,
+        scStreamErrorCode: nil
+      ),
+      for: start.operationID
+    )
+    await waitForMainActorQueueDrain()
+    #expect(model.captureStatus == .error("first failure"))
+    #expect(model.captureFailureSource == .delegateStoppedWithKnownSCError)
+    #expect(model.captureSCStreamErrorCode == .internalError)
+
+    await model.stopWindowCapture()
+    #expect(model.captureStatus == .stopped)
+    #expect(model.captureFailureSource == nil)
+    #expect(model.captureSCStreamErrorCode == nil)
+  }
+
+  @Test func manualStopClearsTelemetryBeforeProviderShutdownCompletes() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: true)
+    let model = makeModel(capture: capture)
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+
+    await capture.emitFailure(
+      CaptureFailureEvent(
+        message: "controlled detailed failure",
+        source: .delegateStoppedWithKnownSCError,
+        scStreamErrorCode: .internalError
+      ),
+      for: start.operationID
+    )
+    let failureStop = try await capture.stopInvocation(at: 0)
+    #expect(model.captureFailureSource == .delegateStoppedWithKnownSCError)
+    #expect(model.captureSCStreamErrorCode == .internalError)
+
+    let manualStopTask = Task { await model.stopWindowCapture() }
+    let manualStop = try await capture.stopInvocation(at: 1)
+    #expect(model.captureStatus == .stopped)
+    #expect(model.captureFailureSource == nil)
+    #expect(model.captureSCStreamErrorCode == nil)
+
+    await capture.resumeStop(manualStop)
+    await manualStopTask.value
+    await capture.resumeStop(failureStop)
+  }
+
+  private func waitForMainActorQueueDrain() async {
+    await withCheckedContinuation { continuation in
+      DispatchQueue.main.async {
+        continuation.resume()
+      }
+    }
   }
 
   @Test func refreshCannotChangeSelectionAfterANewerCaptureStarts() async throws {
@@ -368,6 +659,45 @@ struct AppModelCaptureLifecycleTests {
   }
 }
 
+private final class CaptureFailureEventRecorder: Sendable {
+  private let storage = Mutex<[CaptureFailureEvent]>([])
+
+  var events: [CaptureFailureEvent] {
+    storage.withLock { $0 }
+  }
+
+  func record(_ event: CaptureFailureEvent) {
+    storage.withLock { events in
+      events.append(event)
+    }
+  }
+}
+
+private actor CaptureFailureAsyncBarrier {
+  private let participantCount: Int
+  private var continuations: [CheckedContinuation<Void, Never>] = []
+  private var isOpen = false
+
+  init(participantCount: Int) {
+    precondition(participantCount > 0)
+    self.participantCount = participantCount
+  }
+
+  func arriveAndWait() async {
+    guard !isOpen else { return }
+    await withCheckedContinuation { continuation in
+      continuations.append(continuation)
+      guard continuations.count == participantCount else { return }
+      isOpen = true
+      let continuations = self.continuations
+      self.continuations.removeAll(keepingCapacity: false)
+      for continuation in continuations {
+        continuation.resume()
+      }
+    }
+  }
+}
+
 private struct CaptureInvocation: Sendable {
   let operationID: CaptureOperationID
   let identity: PowerPointWindowIdentity
@@ -387,6 +717,7 @@ private actor ControllableWindowCapture: PowerPointWindowCapturing {
   private var pendingStarts: [CaptureOperationID: CheckedContinuation<Void, any Error>] = [:]
   private var pendingStops: [CaptureOperationID: CheckedContinuation<Void, Never>] = [:]
   private var errorHandlers: [CaptureOperationID: CaptureErrorHandler] = [:]
+  private var failureHandlers: [CaptureOperationID: CaptureFailureHandler] = [:]
 
   init(suspendsStops: Bool) {
     self.suspendsStops = suspendsStops
@@ -407,6 +738,22 @@ private actor ControllableWindowCapture: PowerPointWindowCapturing {
     onError: @escaping CaptureErrorHandler
   ) async throws {
     errorHandlers[operationID] = onError
+    startInvocations.append(
+      CaptureInvocation(operationID: operationID, identity: identity)
+    )
+    try await withCheckedThrowingContinuation { continuation in
+      pendingStarts[operationID] = continuation
+    }
+  }
+
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onFailure: @escaping CaptureFailureHandler
+  ) async throws {
+    failureHandlers[operationID] = onFailure
     startInvocations.append(
       CaptureInvocation(operationID: operationID, identity: identity)
     )
@@ -452,7 +799,15 @@ private actor ControllableWindowCapture: PowerPointWindowCapturing {
   }
 
   func emitError(_ message: String, for operationID: CaptureOperationID) {
-    errorHandlers[operationID]?(message)
+    if let failureHandler = failureHandlers[operationID] {
+      failureHandler(CaptureFailureEventFactory.unclassified(message: message))
+    } else {
+      errorHandlers[operationID]?(message)
+    }
+  }
+
+  func emitFailure(_ event: CaptureFailureEvent, for operationID: CaptureOperationID) {
+    failureHandlers[operationID]?(event)
   }
 }
 
