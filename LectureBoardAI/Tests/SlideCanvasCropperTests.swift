@@ -835,6 +835,7 @@ struct SlideCanvasCropperTests {
       requestID: requestID,
       captureOperationID: operationID,
       identity: identity,
+      requestStartedMachAbsoluteTime: 1,
       capturedAt: Date(timeIntervalSince1970: 2),
       captureSurfaceGeometry: geometry,
       image: image

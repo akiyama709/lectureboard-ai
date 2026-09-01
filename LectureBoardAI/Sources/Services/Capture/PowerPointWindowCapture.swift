@@ -1,6 +1,7 @@
 import CoreImage
 import CoreMedia
 import CoreVideo
+import Darwin
 import Foundation
 import LectureBoardCore
 import ScreenCaptureKit
@@ -424,6 +425,11 @@ enum FreshPowerPointWindowSampleError: Error, Equatable, Sendable {
 
 enum CaptureFrameDisplayTimeParser {
   static func parse(_ value: Any?) -> UInt64? {
+    if let number = value as? NSNumber,
+      CFGetTypeID(number) == CFBooleanGetTypeID()
+    {
+      return nil
+    }
     if let value = value as? UInt64, value > 0 {
       return value
     }
@@ -1004,6 +1010,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
 
     let filter = SCContentFilter(desktopIndependentWindow: window)
     let configuration = makeConfiguration(for: filter)
+    let requestStartedMachAbsoluteTime = mach_absolute_time()
     let surface = try await captureFreshSurface(
       contentFilter: filter,
       configuration: configuration
@@ -1025,6 +1032,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
       requestID: requestID,
       captureOperationID: operationID,
       identity: identity,
+      requestStartedMachAbsoluteTime: requestStartedMachAbsoluteTime,
       capturedAt: surface.capturedAt,
       captureSurfaceGeometry: surface.captureSurfaceGeometry,
       image: surface.image

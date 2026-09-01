@@ -61,19 +61,45 @@ public enum FrameStability: Equatable, Sendable {
   case significantVisualChange
 }
 
+/// Identifies one coarse stable-frame candidate without exposing its
+/// fingerprint or internal identity.
+public struct StableFrameCandidateToken: Hashable, Sendable {
+  private let identity: StableFrameCandidateIdentity
+
+  fileprivate init() {
+    identity = StableFrameCandidateIdentity()
+  }
+
+  public static func == (
+    lhs: StableFrameCandidateToken,
+    rhs: StableFrameCandidateToken
+  ) -> Bool {
+    lhs.identity === rhs.identity
+  }
+
+  public func hash(into hasher: inout Hasher) {
+    hasher.combine(ObjectIdentifier(identity))
+  }
+}
+
+private final class StableFrameCandidateIdentity: Sendable {}
+
 public struct StableFrameObservation: Equatable, Sendable {
   public let stability: FrameStability
   public let differenceFromStableFrame: Double?
   public let stableFrame: FrameFingerprint?
+  public let candidateToken: StableFrameCandidateToken?
 
   public init(
     stability: FrameStability,
     differenceFromStableFrame: Double?,
-    stableFrame: FrameFingerprint?
+    stableFrame: FrameFingerprint?,
+    candidateToken: StableFrameCandidateToken? = nil
   ) {
     self.stability = stability
     self.differenceFromStableFrame = differenceFromStableFrame
     self.stableFrame = stableFrame
+    self.candidateToken = candidateToken
   }
 }
 
@@ -83,6 +109,7 @@ public struct StableFrameDetector: Sendable {
   private var stableFrame: FrameFingerprint?
   private var candidateFrame: FrameFingerprint?
   private var candidateCount = 0
+  private var candidateToken: StableFrameCandidateToken?
 
   public init(configuration: StableFrameDetectorConfiguration = .init()) {
     self.configuration = configuration
@@ -90,12 +117,12 @@ public struct StableFrameDetector: Sendable {
 
   public mutating func reset() {
     stableFrame = nil
-    candidateFrame = nil
-    candidateCount = 0
+    clearCandidate()
   }
 
   public mutating func ingest(_ frame: FrameFingerprint) -> StableFrameObservation {
     guard frame.isValid else {
+      clearCandidate()
       return StableFrameObservation(
         stability: .invalid,
         differenceFromStableFrame: nil,
@@ -107,8 +134,7 @@ public struct StableFrameDetector: Sendable {
     if let differenceFromStable,
       differenceFromStable <= configuration.stableDifferenceThreshold
     {
-      candidateFrame = nil
-      candidateCount = 0
+      clearCandidate()
       return StableFrameObservation(
         stability: .unchanged,
         differenceFromStableFrame: differenceFromStable,
@@ -124,8 +150,43 @@ public struct StableFrameDetector: Sendable {
     } else {
       candidateFrame = frame
       candidateCount = 1
+      candidateToken = StableFrameCandidateToken()
     }
 
+    return candidateObservation(
+      confirmingWith: frame,
+      differenceFromStable: differenceFromStable
+    )
+  }
+
+  /// Counts one independently captured confirmation toward the exact pending
+  /// coarse candidate. Rejected evidence never replaces or advances the
+  /// detector's current candidate.
+  public mutating func confirmPendingFrame(
+    _ frame: FrameFingerprint,
+    token: StableFrameCandidateToken
+  ) -> StableFrameObservation? {
+    guard
+      frame.isValid,
+      candidateToken == token,
+      let candidateFrame,
+      frame.normalizedDifference(from: candidateFrame)
+        <= configuration.stableDifferenceThreshold
+    else {
+      return nil
+    }
+
+    candidateCount += 1
+    return candidateObservation(
+      confirmingWith: frame,
+      differenceFromStable: stableFrame.map { frame.normalizedDifference(from: $0) }
+    )
+  }
+
+  private mutating func candidateObservation(
+    confirmingWith frame: FrameFingerprint,
+    differenceFromStable: Double?
+  ) -> StableFrameObservation {
     guard candidateCount >= configuration.requiredConsecutiveFrames else {
       let isTransitioning =
         differenceFromStable.map {
@@ -136,7 +197,8 @@ public struct StableFrameDetector: Sendable {
           ? .transitioning
           : .collecting(consecutiveFrames: candidateCount),
         differenceFromStableFrame: differenceFromStable,
-        stableFrame: stableFrame
+        stableFrame: stableFrame,
+        candidateToken: candidateToken
       )
     }
 
@@ -144,14 +206,21 @@ public struct StableFrameDetector: Sendable {
       differenceFromStable.map {
         $0 >= configuration.significantChangeThreshold
       } ?? false
+    let confirmedCandidateToken = candidateToken
     stableFrame = frame
-    candidateFrame = nil
-    candidateCount = 0
+    clearCandidate()
 
     return StableFrameObservation(
       stability: isSignificantChange ? .significantVisualChange : .stable,
       differenceFromStableFrame: differenceFromStable,
-      stableFrame: frame
+      stableFrame: frame,
+      candidateToken: confirmedCandidateToken
     )
+  }
+
+  private mutating func clearCandidate() {
+    candidateFrame = nil
+    candidateCount = 0
+    candidateToken = nil
   }
 }

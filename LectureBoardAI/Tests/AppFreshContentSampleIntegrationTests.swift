@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import Foundation
 import LectureBoardCore
 import Testing
@@ -25,6 +26,7 @@ struct AppFreshContentSampleIntegrationTests {
       requestID: requestID,
       captureOperationID: operationID,
       identity: identity,
+      requestStartedMachAbsoluteTime: 1,
       capturedAt: Date(timeIntervalSince1970: 1),
       captureSurfaceGeometry: captureGeometry(for: images.firstCandidate),
       image: images.firstCandidate
@@ -112,9 +114,234 @@ struct AppFreshContentSampleIntegrationTests {
     #expect(await capture.freshInvocationCount == 2)
     #expect(await analyzer.invocationCount == 2)
     #expect(await analyzer.latestOriginIsBoundedFreshSample)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 4_000)
+    #expect(
+      (model.latestContentRevisionEvent?.confirmedMachAbsoluteTime ?? 0) >= 4_000
+    )
+    #expect(model.latestContentRevisionEvent?.source == .boundedFreshSample)
     #expect(StreamProvenanceSnapshot(model: model) == streamMetrics)
     #expect(overlay.snapshot == overlayCallsBeforeFresh)
     #expect(leaseScheduler.snapshot == leaseCallsBeforeFresh)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func twoBoundedSamplesConfirmOneCoarseStreamCandidateWithoutChangingProvenance()
+    async throws
+  {
+    let capture = ControllableFreshSampleCapture()
+    let analyzer = FreshSampleRecordingAnalyzer()
+    let overlay = FreshSampleRecordingOverlayController()
+    let leaseScheduler = FreshSampleRecordingLeaseScheduler()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      leaseScheduler: leaseScheduler
+    )
+    let images = try makeImages()
+    let coarseCandidate = try #require(
+      makeImage(changedPixelIndices: [], baseChannel: 251)
+    )
+    let coarseContent = try #require(
+      CGImageRasterizer.makeContentFingerprint(from: coarseCandidate)
+    )
+
+    try await establishBaseline(model: model, capture: capture, analyzer: analyzer, images: images)
+    await capture.emit(
+      streamFrame(sequenceNumber: 4, image: coarseCandidate, content: coarseContent)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 1)
+
+    let streamMetrics = StreamProvenanceSnapshot(model: model)
+    let overlayCallsBeforeFresh = overlay.snapshot
+    let leaseCallsBeforeFresh = leaseScheduler.snapshot
+
+    try await capture.succeedFresh(
+      at: 0,
+      image: coarseCandidate,
+      geometry: captureGeometry(for: coarseCandidate)
+    )
+    try await waitForFreshReturnCount(capture, expected: 1)
+    try await waitForFreshInvocationCount(capture, expected: 2)
+    #expect(model.contentRevisionCount == 0)
+
+    try await capture.succeedFresh(
+      at: 1,
+      image: coarseCandidate,
+      geometry: captureGeometry(for: coarseCandidate)
+    )
+    try await waitUntil {
+      model.contentRevisionCount == 1 && model.slideAnalysisStatus == .ready
+    }
+    try await analyzer.waitForInvocationCount(2)
+    await settleAsyncWork()
+
+    #expect(await capture.freshInvocationCount == 2)
+    #expect(model.contentRevisionCount == 1)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 4_000)
+    #expect(
+      (model.latestContentRevisionEvent?.confirmedMachAbsoluteTime ?? 0) >= 4_000
+    )
+    #expect(model.latestContentRevisionEvent?.source == .boundedFreshSample)
+    #expect(await analyzer.latestOriginIsBoundedFreshSample)
+    #expect(StreamProvenanceSnapshot(model: model) == streamMetrics)
+    #expect(overlay.snapshot == overlayCallsBeforeFresh)
+    #expect(leaseScheduler.snapshot == leaseCallsBeforeFresh)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func staleCoarseResultsAfterCandidateReplacementAndResetRecordNoRevision()
+    async throws
+  {
+    let capture = ControllableFreshSampleCapture()
+    let analyzer = FreshSampleRecordingAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let images = try makeImages()
+    let firstCoarseCandidate = try #require(
+      makeImage(changedPixelIndices: [], baseChannel: 251)
+    )
+    let replacementCoarseCandidate = try #require(
+      makeImage(changedPixelIndices: [], baseChannel: 247)
+    )
+    let firstCoarseContent = try #require(
+      CGImageRasterizer.makeContentFingerprint(from: firstCoarseCandidate)
+    )
+    let replacementCoarseContent = try #require(
+      CGImageRasterizer.makeContentFingerprint(from: replacementCoarseCandidate)
+    )
+
+    try await establishBaseline(model: model, capture: capture, analyzer: analyzer, images: images)
+    await capture.emit(
+      streamFrame(
+        sequenceNumber: 4,
+        image: firstCoarseCandidate,
+        content: firstCoarseContent
+      )
+    )
+    try await waitForFreshInvocationCount(capture, expected: 1)
+
+    await capture.emit(
+      streamFrame(
+        sequenceNumber: 5,
+        image: replacementCoarseCandidate,
+        content: replacementCoarseContent
+      )
+    )
+    try await waitForFreshInvocationCount(capture, expected: 2)
+
+    try await capture.succeedFresh(
+      at: 0,
+      image: firstCoarseCandidate,
+      geometry: captureGeometry(for: firstCoarseCandidate)
+    )
+    try await waitForFreshReturnCount(capture, expected: 1)
+    #expect(await capture.returnCancellationStates == [true])
+    #expect(model.contentRevisionCount == 0)
+
+    await model.stopWindowCapture()
+    try await capture.succeedFresh(
+      at: 1,
+      image: replacementCoarseCandidate,
+      geometry: captureGeometry(for: replacementCoarseCandidate)
+    )
+    try await waitForFreshReturnCount(capture, expected: 2)
+    await settleAsyncWork()
+
+    #expect(await capture.freshInvocationCount == 2)
+    #expect(await capture.returnCancellationStates == [true, true])
+    #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
+  }
+
+  @Test func boundedFreshSamplesRecordRoundTripRevisionOrdinalsAndSource() async throws {
+    let capture = ControllableFreshSampleCapture()
+    let analyzer = FreshSampleRecordingAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let images = try makeImages()
+
+    try await establishBaseline(model: model, capture: capture, analyzer: analyzer, images: images)
+
+    await capture.emit(
+      streamFrame(sequenceNumber: 4, image: images.firstCandidate, content: images.firstContent)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 1)
+    try await capture.succeedFresh(
+      at: 0,
+      image: images.firstCandidate,
+      geometry: captureGeometry(for: images.firstCandidate)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 2)
+    try await capture.succeedFresh(
+      at: 1,
+      image: images.firstCandidate,
+      geometry: captureGeometry(for: images.firstCandidate)
+    )
+    try await waitUntil { model.contentRevisionCount == 1 }
+
+    let firstEvent = try #require(model.latestContentRevisionEvent)
+    #expect(firstEvent.ordinal == 1)
+    #expect(firstEvent.evidenceStartedMachAbsoluteTime == 4_000)
+    #expect(firstEvent.confirmedMachAbsoluteTime >= firstEvent.evidenceStartedMachAbsoluteTime)
+    #expect(firstEvent.source == .boundedFreshSample)
+
+    await capture.emit(
+      streamFrame(sequenceNumber: 5, image: images.baseline, content: images.baselineContent)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 3)
+    try await capture.succeedFresh(
+      at: 2,
+      image: images.baseline,
+      geometry: captureGeometry(for: images.baseline)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 4)
+    try await capture.succeedFresh(
+      at: 3,
+      image: images.baseline,
+      geometry: captureGeometry(for: images.baseline)
+    )
+    try await waitUntil { model.contentRevisionCount == 2 }
+
+    let secondEvent = try #require(model.latestContentRevisionEvent)
+    #expect(secondEvent.ordinal == 2)
+    #expect(secondEvent.evidenceStartedMachAbsoluteTime == 5_000)
+    #expect(secondEvent.confirmedMachAbsoluteTime >= secondEvent.evidenceStartedMachAbsoluteTime)
+    #expect(secondEvent.source == .boundedFreshSample)
+    #expect(await capture.freshInvocationCount == 4)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test(arguments: [UInt64(0), 3_999, UInt64.max])
+  func invalidFreshRequestStartIsRejectedBeforeDetectorConfirmation(
+    requestStartedMachAbsoluteTime: UInt64
+  ) async throws {
+    let capture = ControllableFreshSampleCapture()
+    let analyzer = FreshSampleRecordingAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let images = try makeImages()
+
+    try await establishBaseline(model: model, capture: capture, analyzer: analyzer, images: images)
+    await capture.emit(
+      streamFrame(sequenceNumber: 4, image: images.firstCandidate, content: images.firstContent)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 1)
+
+    try await capture.succeedFresh(
+      at: 0,
+      image: images.firstCandidate,
+      geometry: captureGeometry(for: images.firstCandidate),
+      requestStartedMachAbsoluteTime: requestStartedMachAbsoluteTime
+    )
+    try await waitForFreshReturnCount(capture, expected: 1)
+    await settleAsyncWork()
+
+    #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
+    #expect(await capture.freshInvocationCount == 1)
 
     await model.stopWindowCapture()
   }
@@ -151,6 +378,7 @@ struct AppFreshContentSampleIntegrationTests {
     #expect(await capture.returnCancellationStates == [true])
     await settleAsyncWork()
     #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
 
     try await capture.succeedFresh(
       at: 1,
@@ -168,6 +396,9 @@ struct AppFreshContentSampleIntegrationTests {
       geometry: captureGeometry(for: images.replacementCandidate)
     )
     try await waitUntil { model.contentRevisionCount == 1 }
+
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.source == .boundedFreshSample)
 
     #expect(await capture.freshInvocationCount == 3)
     #expect(model.capturedFrameCount == 5)
@@ -192,6 +423,8 @@ struct AppFreshContentSampleIntegrationTests {
     await model.stopWindowCapture()
     await model.startWindowCapture()
     try await waitUntil { model.captureStatus == .capturing }
+    #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
     for sequenceNumber in 1...3 {
       await capture.emit(
         streamFrame(
@@ -220,6 +453,7 @@ struct AppFreshContentSampleIntegrationTests {
     #expect(await capture.returnCancellationStates == [true])
     await settleAsyncWork()
     #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
 
     try await capture.succeedFresh(
       at: 1,
@@ -241,6 +475,8 @@ struct AppFreshContentSampleIntegrationTests {
     #expect(invocations[0].operationID != invocations[1].operationID)
     #expect(invocations[1].operationID == invocations[2].operationID)
     #expect(model.capturedFrameCount == 4)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.source == .boundedFreshSample)
 
     await model.stopWindowCapture()
   }
@@ -528,6 +764,7 @@ struct AppFreshContentSampleIntegrationTests {
     await settleAsyncWork()
     #expect(await capture.freshInvocationCount == 1)
     #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
 
     await capture.emit(
       streamFrame(sequenceNumber: 6, image: images.firstCandidate, content: images.firstContent)
@@ -535,6 +772,8 @@ struct AppFreshContentSampleIntegrationTests {
     try await waitUntil { model.contentRevisionCount == 1 }
     #expect(await capture.freshInvocationCount == 1)
     #expect(await analyzer.invocationCount == 2)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.source == .continuousDenseNew)
 
     await model.stopWindowCapture()
   }
@@ -643,7 +882,7 @@ struct AppFreshContentSampleIntegrationTests {
       windowID: freshSampleWindow.id,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(timeIntervalSince1970: TimeInterval(sequenceNumber)),
-      displayTime: UInt64.max,
+      displayTime: sequenceNumber * 1_000,
       deliveryKind: .new,
       captureSurfaceGeometry: captureGeometry(for: image),
       image: image,
@@ -694,7 +933,10 @@ struct AppFreshContentSampleIntegrationTests {
     )
   }
 
-  private func makeImage(changedPixelIndices: Set<Int>) -> CGImage? {
+  private func makeImage(
+    changedPixelIndices: Set<Int>,
+    baseChannel: UInt8 = 255
+  ) -> CGImage? {
     let width = 160
     let height = 90
     var bytes: [UInt8] = []
@@ -702,7 +944,7 @@ struct AppFreshContentSampleIntegrationTests {
     for row in 0..<height {
       for column in 0..<width {
         let pixelIndex = row * width + column
-        let channel: UInt8 = changedPixelIndices.contains(pixelIndex) ? 0 : 255
+        let channel: UInt8 = changedPixelIndices.contains(pixelIndex) ? 0 : baseChannel
         bytes.append(contentsOf: [channel, channel, channel, 255])
       }
     }
@@ -826,6 +1068,8 @@ private struct StreamProvenanceSnapshot: Equatable {
   let capturedFrameCount: Int
   let newCapturedFrameCount: Int
   let repeatedCapturedFrameCount: Int
+  let lastNewFrameAt: Date?
+  let latestDifferenceFromStableFrame: Double?
   let stableFrameCount: Int
   let slideChangeCount: Int
   let slideIdentitySampleCount: Int
@@ -840,6 +1084,8 @@ private struct StreamProvenanceSnapshot: Equatable {
     capturedFrameCount = model.capturedFrameCount
     newCapturedFrameCount = model.newCapturedFrameCount
     repeatedCapturedFrameCount = model.repeatedCapturedFrameCount
+    lastNewFrameAt = model.lastNewFrameAt
+    latestDifferenceFromStableFrame = model.latestDifferenceFromStableFrame
     stableFrameCount = model.stableFrameCount
     slideChangeCount = model.slideChangeCount
     slideIdentitySampleCount = model.slideIdentitySampleCount
@@ -949,7 +1195,8 @@ private actor ControllableFreshSampleCapture: PowerPointWindowCapturing {
   func succeedFresh(
     at index: Int,
     image: CGImage,
-    geometry: CaptureSurfaceGeometry
+    geometry: CaptureSurfaceGeometry,
+    requestStartedMachAbsoluteTime: UInt64? = nil
   ) throws {
     guard invocations.indices.contains(index) else {
       throw FreshSampleIntegrationTestError.missingFreshInvocation(index)
@@ -963,6 +1210,8 @@ private actor ControllableFreshSampleCapture: PowerPointWindowCapturing {
         requestID: invocation.requestID,
         captureOperationID: invocation.operationID,
         identity: invocation.identity,
+        requestStartedMachAbsoluteTime:
+          requestStartedMachAbsoluteTime ?? mach_absolute_time(),
         capturedAt: Date(timeIntervalSince1970: TimeInterval(index + 100)),
         captureSurfaceGeometry: geometry,
         image: image

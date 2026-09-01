@@ -40,20 +40,37 @@ struct TaskFreshContentSampleWaiter: FreshContentSampleWaiting {
   }
 }
 
+private enum FreshContentSampleCandidateToken: Equatable, Sendable {
+  case coarse(StableFrameCandidateToken)
+  case dense(StableContentChangeCandidateToken)
+}
+
 private struct FreshContentSampleEpisode {
-  let candidateToken: StableContentChangeCandidateToken
+  let candidateToken: FreshContentSampleCandidateToken
   var attemptsStarted: Int
   var providerBusyDeferrals: Int
   var isExhausted: Bool
 }
 
+private struct CoarseRevisionEvidence {
+  let candidateToken: StableFrameCandidateToken
+  let evidenceStartedMachAbsoluteTime: UInt64?
+}
+
+private struct DenseRevisionEvidence {
+  let candidateToken: StableContentChangeCandidateToken
+  let evidenceStartedMachAbsoluteTime: UInt64?
+}
+
 private struct FreshContentSampleRequest {
   let requestID: FreshSampleRequestID
-  let candidateToken: StableContentChangeCandidateToken
+  let candidateToken: FreshContentSampleCandidateToken
   let captureOperationID: CaptureOperationID
   let captureIdentity: PowerPointWindowIdentity
   let anchoredStreamSequenceNumber: UInt64
   let anchoredCoarseFingerprint: FrameFingerprint
+  let coarseDetectorFingerprint: FrameFingerprint?
+  let evidenceStartedMachAbsoluteTime: UInt64
   let slideCanvasGeneration: Int
   let canvasSelection: ConfirmedSlideCanvasSelection
   let slideIdentityGeneration: Int
@@ -134,6 +151,7 @@ final class AppModel: ObservableObject {
   @Published private(set) var slideIdentitySampleCount = 0
   @Published private(set) var slideIdentityContinuityBreakCount = 0
   @Published private(set) var contentRevisionCount = 0
+  @Published private(set) var latestContentRevisionEvent: RuntimeContentRevisionEvent?
   @Published private(set) var slideCanvasStatus = SlideCanvasStatus.unavailable
   @Published private(set) var slideCanvasOverlayMappingState =
     SlideCanvasOverlayMappingState.unavailable
@@ -168,6 +186,8 @@ final class AppModel: ObservableObject {
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
   private var stableContentChangeDetector = StableContentChangeDetector()
+  private var coarseRevisionEvidence: CoarseRevisionEvidence?
+  private var denseRevisionEvidence: DenseRevisionEvidence?
   private var captureDeliveryMetrics = CaptureDeliveryMetrics()
   private var refreshGeneration: UInt64 = 0
   private var nextCaptureOperationRawValue: UInt64 = 0
@@ -461,11 +481,10 @@ final class AppModel: ObservableObject {
     latestDifferenceFromStableFrame = nil
     stableFrameCount = 0
     slideChangeCount = 0
-    contentRevisionCount = 0
+    resetContentRevisions()
     latestStableFrame = nil
     prepareSlideCanvasForNewCapture()
-    stableFrameDetector.reset()
-    stableContentChangeDetector.reset()
+    resetVisualDetectors()
     lastAcceptedCaptureSequenceNumber = nil
     captureContentRequiresNewFrame = false
     latestVisualFreshnessBoundaryMachTime = nil
@@ -502,8 +521,7 @@ final class AppModel: ObservableObject {
         activeCaptureWindowID = nil
         activeCaptureIdentity = nil
         invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
-        stableFrameDetector.reset()
-        stableContentChangeDetector.reset()
+        resetVisualDetectors()
         lastAcceptedCaptureSequenceNumber = nil
         invalidateSlideCanvasAfterCaptureEnd()
         resetSlideAnalysis()
@@ -532,8 +550,7 @@ final class AppModel: ObservableObject {
       captureFailureSource = event.source
       captureSCStreamErrorCode = event.scStreamErrorCode
       captureStatus = .error(event.message)
-      stableFrameDetector.reset()
-      stableContentChangeDetector.reset()
+      resetVisualDetectors()
       lastAcceptedCaptureSequenceNumber = nil
       invalidateSlideCanvasAfterCaptureEnd()
       resetSlideAnalysis()
@@ -562,8 +579,7 @@ final class AppModel: ObservableObject {
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
     invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
-    stableFrameDetector.reset()
-    stableContentChangeDetector.reset()
+    resetVisualDetectors()
     lastAcceptedCaptureSequenceNumber = nil
     captureContentRequiresNewFrame = false
     captureFailureSource = nil
@@ -898,14 +914,133 @@ final class AppModel: ObservableObject {
     slideCanvasInvalidationReason = activeCaptureSessionID == nil ? nil : reason
   }
 
+  private func resetContentRevisions() {
+    contentRevisionCount = 0
+    latestContentRevisionEvent = nil
+  }
+
+  private func recordContentRevision(
+    source: RuntimeContentRevisionSource,
+    evidenceStartedMachAbsoluteTime: UInt64?,
+    confirmedMachAbsoluteTime: UInt64?
+  ) {
+    contentRevisionCount += 1
+    guard
+      let evidenceStartedMachAbsoluteTime,
+      evidenceStartedMachAbsoluteTime > 0,
+      let confirmedMachAbsoluteTime,
+      confirmedMachAbsoluteTime >= evidenceStartedMachAbsoluteTime
+    else {
+      // Never carry an older event forward under a newer counter. Runtime
+      // projection then fails closed instead of inventing temporal evidence.
+      latestContentRevisionEvent = nil
+      return
+    }
+    latestContentRevisionEvent = RuntimeContentRevisionEvent(
+      ordinal: contentRevisionCount,
+      evidenceStartedMachAbsoluteTime: evidenceStartedMachAbsoluteTime,
+      confirmedMachAbsoluteTime: confirmedMachAbsoluteTime,
+      source: source
+    )
+  }
+
+  private func resetVisualDetectors() {
+    stableFrameDetector.reset()
+    stableContentChangeDetector.reset()
+    coarseRevisionEvidence = nil
+    denseRevisionEvidence = nil
+  }
+
+  private func resetDenseContentChangeDetector() {
+    stableContentChangeDetector.reset()
+    denseRevisionEvidence = nil
+  }
+
+  private func discardDenseContentChangeCandidate() {
+    stableContentChangeDetector.discardPendingChange()
+    denseRevisionEvidence = nil
+  }
+
+  private func sourceMachAbsoluteTime(
+    for frame: CapturedSlideCanvasFrame
+  ) -> UInt64? {
+    guard let displayTime = frame.displayTime, displayTime > 0 else { return nil }
+    return displayTime
+  }
+
+  private func updateCoarseRevisionEvidence(
+    for observation: StableFrameObservation,
+    frame: CapturedSlideCanvasFrame
+  ) -> UInt64? {
+    guard let candidateToken = observation.candidateToken else {
+      coarseRevisionEvidence = nil
+      return nil
+    }
+    if coarseRevisionEvidence?.candidateToken != candidateToken {
+      coarseRevisionEvidence = CoarseRevisionEvidence(
+        candidateToken: candidateToken,
+        evidenceStartedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
+      )
+    }
+    let evidenceStartedMachAbsoluteTime =
+      coarseRevisionEvidence?.evidenceStartedMachAbsoluteTime
+    switch observation.stability {
+    case .stable, .significantVisualChange:
+      coarseRevisionEvidence = nil
+    case .invalid, .collecting, .unchanged, .transitioning:
+      break
+    }
+    return evidenceStartedMachAbsoluteTime
+  }
+
+  private func updateDenseRevisionEvidence(
+    for observation: StableContentChangeObservation,
+    frame: CapturedSlideCanvasFrame
+  ) -> UInt64? {
+    switch observation.state {
+    case .contentChangePending:
+      guard let candidateToken = observation.pendingChangeToken else {
+        denseRevisionEvidence = nil
+        return nil
+      }
+      if denseRevisionEvidence?.candidateToken != candidateToken {
+        denseRevisionEvidence = DenseRevisionEvidence(
+          candidateToken: candidateToken,
+          evidenceStartedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
+        )
+      }
+      return denseRevisionEvidence?.evidenceStartedMachAbsoluteTime
+    case .contentChanged:
+      let evidenceStartedMachAbsoluteTime =
+        denseRevisionEvidence?.evidenceStartedMachAbsoluteTime
+      denseRevisionEvidence = nil
+      return evidenceStartedMachAbsoluteTime
+    case .invalid, .collectingBaseline, .baselineEstablished, .unchanged:
+      denseRevisionEvidence = nil
+      return nil
+    }
+  }
+
+  private func evidenceStartedMachAbsoluteTime(
+    for candidateToken: FreshContentSampleCandidateToken
+  ) -> UInt64? {
+    switch candidateToken {
+    case .coarse(let token):
+      guard coarseRevisionEvidence?.candidateToken == token else { return nil }
+      return coarseRevisionEvidence?.evidenceStartedMachAbsoluteTime
+    case .dense(let token):
+      guard denseRevisionEvidence?.candidateToken == token else { return nil }
+      return denseRevisionEvidence?.evidenceStartedMachAbsoluteTime
+    }
+  }
+
   private func resetCanvasVisualPipeline() {
     cancelFreshContentSampling(resetEpisode: true)
     invalidateTranscriptionContext()
-    stableFrameDetector.reset()
-    stableContentChangeDetector.reset()
+    resetVisualDetectors()
     latestDifferenceFromStableFrame = nil
     stableFrameCount = 0
-    contentRevisionCount = 0
+    resetContentRevisions()
     latestStableFrame = nil
     resetSlideAnalysis()
     resetBoardCandidateContext()
@@ -914,11 +1049,28 @@ final class AppModel: ObservableObject {
     invalidateProductionOverlayLease()
   }
 
+  private func continuousDenseRevisionSource(
+    for frame: CapturedSlideCanvasFrame
+  ) -> RuntimeContentRevisionSource? {
+    switch frame.deliveryKind {
+    case .new:
+      return .continuousDenseNew
+    case .idleRepeat:
+      return .continuousDenseIdleRepeat
+    case nil:
+      return nil
+    }
+  }
+
   private func processVisualFrame(
     _ frame: CapturedSlideCanvasFrame,
     sessionID: CaptureOperationID
   ) {
     let observation = stableFrameDetector.ingest(frame.fingerprint)
+    let coarseEvidenceStartedMachAbsoluteTime = updateCoarseRevisionEvidence(
+      for: observation,
+      frame: frame
+    )
     latestDifferenceFromStableFrame = observation.differenceFromStableFrame
 
     switch observation.stability {
@@ -926,7 +1078,11 @@ final class AppModel: ObservableObject {
       cancelFreshContentSampling(resetEpisode: true)
       stableFrameCount += 1
       if observation.differenceFromStableFrame != nil {
-        contentRevisionCount += 1
+        recordContentRevision(
+          source: .coarseStable,
+          evidenceStartedMachAbsoluteTime: coarseEvidenceStartedMachAbsoluteTime,
+          confirmedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
+        )
       }
       guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
       latestStableFrame = frame.image
@@ -934,16 +1090,41 @@ final class AppModel: ObservableObject {
     case .significantVisualChange:
       cancelFreshContentSampling(resetEpisode: true)
       stableFrameCount += 1
-      contentRevisionCount += 1
+      recordContentRevision(
+        source: .coarseSignificantVisualChange,
+        evidenceStartedMachAbsoluteTime: coarseEvidenceStartedMachAbsoluteTime,
+        confirmedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
+      )
       guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
     case .unchanged:
       receiveContentFingerprintIfAvailable(frame, captureSessionID: sessionID)
-    case .invalid, .collecting, .transitioning:
+    case .invalid:
       cancelFreshContentSampling(resetEpisode: true)
-      stableContentChangeDetector.discardPendingChange()
+      discardDenseContentChangeCandidate()
       invalidateSlideAnalysisForVisualFreshness()
+    case .collecting, .transitioning:
+      discardDenseContentChangeCandidate()
+      invalidateSlideAnalysisForVisualFreshness()
+      // Initial baseline collection has no prior coarse frame to revise. Only
+      // an exact post-baseline candidate receives bounded fresh confirmation.
+      guard
+        observation.differenceFromStableFrame != nil,
+        let candidateToken = observation.candidateToken,
+        let comparableCoarseFingerprint = CGImageRasterizer.makeFrameFingerprint(
+          from: frame.image
+        )
+      else {
+        cancelFreshContentSampling(resetEpisode: true)
+        return
+      }
+      scheduleFreshContentSample(
+        candidateToken: .coarse(candidateToken),
+        anchoredStreamSequenceNumber: frame.sequenceNumber,
+        anchoredCoarseFingerprint: comparableCoarseFingerprint,
+        coarseDetectorFingerprint: frame.fingerprint
+      )
     }
   }
 
@@ -958,8 +1139,7 @@ final class AppModel: ObservableObject {
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
     invalidateSlideIdentityAfterCaptureEnd(state: failedIdentityState)
-    stableFrameDetector.reset()
-    stableContentChangeDetector.reset()
+    resetVisualDetectors()
     lastAcceptedCaptureSequenceNumber = nil
     invalidateSlideCanvasAfterCaptureEnd()
     resetSlideAnalysis()
@@ -984,8 +1164,7 @@ final class AppModel: ObservableObject {
     captureContentRequiresNewFrame = true
     invalidateTranscriptionContext()
     latestEligibleWindowFrame = nil
-    stableFrameDetector.reset()
-    stableContentChangeDetector.reset()
+    resetVisualDetectors()
     latestDifferenceFromStableFrame = nil
     latestStableFrame = nil
     resetSlideAnalysis()
@@ -1058,11 +1237,15 @@ final class AppModel: ObservableObject {
   ) {
     guard let contentFingerprint = frame.contentFingerprint else {
       cancelFreshContentSampling(resetEpisode: true)
-      stableContentChangeDetector.discardPendingChange()
+      discardDenseContentChangeCandidate()
       invalidateSlideAnalysisForVisualFreshness()
       return
     }
     let observation = stableContentChangeDetector.ingest(contentFingerprint)
+    let denseEvidenceStartedMachAbsoluteTime = updateDenseRevisionEvidence(
+      for: observation,
+      frame: frame
+    )
     switch observation.state {
     case .baselineEstablished:
       cancelFreshContentSampling(resetEpisode: true)
@@ -1070,7 +1253,15 @@ final class AppModel: ObservableObject {
       startSlideAnalysis(frame, captureSessionID: captureSessionID)
     case .contentChanged:
       cancelFreshContentSampling(resetEpisode: true)
-      contentRevisionCount += 1
+      guard let source = continuousDenseRevisionSource(for: frame) else {
+        invalidateSlideAnalysisForVisualFreshness()
+        return
+      }
+      recordContentRevision(
+        source: source,
+        evidenceStartedMachAbsoluteTime: denseEvidenceStartedMachAbsoluteTime,
+        confirmedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
+      )
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: captureSessionID)
     case .unchanged:
@@ -1091,17 +1282,18 @@ final class AppModel: ObservableObject {
         )
       else {
         cancelFreshContentSampling(resetEpisode: true)
-        stableContentChangeDetector.discardPendingChange()
+        discardDenseContentChangeCandidate()
         return
       }
       scheduleFreshContentSample(
-        candidateToken: candidateToken,
+        candidateToken: .dense(candidateToken),
         anchoredStreamSequenceNumber: frame.sequenceNumber,
-        anchoredCoarseFingerprint: comparableCoarseFingerprint
+        anchoredCoarseFingerprint: comparableCoarseFingerprint,
+        coarseDetectorFingerprint: nil
       )
     case .invalid:
       cancelFreshContentSampling(resetEpisode: true)
-      stableContentChangeDetector.discardPendingChange()
+      discardDenseContentChangeCandidate()
       invalidateSlideAnalysisForVisualFreshness()
     case .collectingBaseline:
       cancelFreshContentSampling(resetEpisode: true)
@@ -1110,9 +1302,10 @@ final class AppModel: ObservableObject {
   }
 
   private func scheduleFreshContentSample(
-    candidateToken: StableContentChangeCandidateToken,
+    candidateToken: FreshContentSampleCandidateToken,
     anchoredStreamSequenceNumber: UInt64,
-    anchoredCoarseFingerprint: FrameFingerprint
+    anchoredCoarseFingerprint: FrameFingerprint,
+    coarseDetectorFingerprint: FrameFingerprint?
   ) {
     if freshContentSampleEpisode?.candidateToken != candidateToken {
       cancelFreshContentSampling(resetEpisode: true)
@@ -1128,6 +1321,13 @@ final class AppModel: ObservableObject {
       currentFreshContentSampleRequest == nil,
       let episode = freshContentSampleEpisode,
       episode.candidateToken == candidateToken,
+      let evidenceStartedMachAbsoluteTime =
+        evidenceStartedMachAbsoluteTime(for: candidateToken),
+      evidenceStartedMachAbsoluteTime > 0,
+      freshContentSampleCandidateIsStructurallyValid(
+        candidateToken,
+        coarseDetectorFingerprint: coarseDetectorFingerprint
+      ),
       !episode.isExhausted,
       episode.attemptsStarted < 2,
       captureStatus == .capturing,
@@ -1156,6 +1356,8 @@ final class AppModel: ObservableObject {
       captureIdentity: activeCaptureIdentity,
       anchoredStreamSequenceNumber: anchoredStreamSequenceNumber,
       anchoredCoarseFingerprint: anchoredCoarseFingerprint,
+      coarseDetectorFingerprint: coarseDetectorFingerprint,
+      evidenceStartedMachAbsoluteTime: evidenceStartedMachAbsoluteTime,
       slideCanvasGeneration: slideCanvasGeneration,
       canvasSelection: confirmedSlideCanvasSelection,
       slideIdentityGeneration: slideIdentityGeneration,
@@ -1191,6 +1393,20 @@ final class AppModel: ObservableObject {
         guard !Task.isCancelled, let self else { return }
         self.exhaustFreshContentSampleEpisode(for: request)
       }
+    }
+  }
+
+  private func freshContentSampleCandidateIsStructurallyValid(
+    _ candidateToken: FreshContentSampleCandidateToken,
+    coarseDetectorFingerprint: FrameFingerprint?
+  ) -> Bool {
+    switch (candidateToken, coarseDetectorFingerprint) {
+    case (.coarse, .some(let fingerprint)):
+      return fingerprint.isValid
+    case (.dense, .none):
+      return true
+    case (.coarse, .none), (.dense, .some):
+      return false
     }
   }
 
@@ -1242,7 +1458,8 @@ final class AppModel: ObservableObject {
     scheduleFreshContentSample(
       candidateToken: request.candidateToken,
       anchoredStreamSequenceNumber: request.anchoredStreamSequenceNumber,
-      anchoredCoarseFingerprint: request.anchoredCoarseFingerprint
+      anchoredCoarseFingerprint: request.anchoredCoarseFingerprint,
+      coarseDetectorFingerprint: request.coarseDetectorFingerprint
     )
   }
 
@@ -1273,14 +1490,95 @@ final class AppModel: ObservableObject {
       return
     }
 
+    let beforeConfirmationMachAbsoluteTime = mach_absolute_time()
     guard
+      request.evidenceStartedMachAbsoluteTime > 0,
+      sample.requestStartedMachAbsoluteTime >= request.evidenceStartedMachAbsoluteTime,
+      sample.requestStartedMachAbsoluteTime <= beforeConfirmationMachAbsoluteTime,
       freshFrame.fingerprint.normalizedDifference(
         from: request.anchoredCoarseFingerprint
-      ) <= stableFrameDetector.configuration.stableDifferenceThreshold,
+      ) <= stableFrameDetector.configuration.stableDifferenceThreshold
+    else {
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    switch request.candidateToken {
+    case .coarse(let candidateToken):
+      receiveFreshCoarseCandidateConfirmation(
+        freshFrame,
+        candidateToken: candidateToken,
+        request: request
+      )
+    case .dense(let candidateToken):
+      receiveFreshDenseCandidateConfirmation(
+        freshFrame,
+        candidateToken: candidateToken,
+        request: request
+      )
+    }
+  }
+
+  private func receiveFreshCoarseCandidateConfirmation(
+    _ freshFrame: CapturedSlideCanvasFrame,
+    candidateToken: StableFrameCandidateToken,
+    request: FreshContentSampleRequest
+  ) {
+    guard
+      let coarseDetectorFingerprint = request.coarseDetectorFingerprint,
+      let observation = stableFrameDetector.confirmPendingFrame(
+        coarseDetectorFingerprint,
+        token: candidateToken
+      ),
+      observation.candidateToken == candidateToken
+    else {
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    switch observation.stability {
+    case .collecting, .transitioning:
+      finishFreshContentSampleRequest(request.requestID, resetEpisode: false)
+      scheduleFreshContentSample(
+        candidateToken: request.candidateToken,
+        anchoredStreamSequenceNumber: request.anchoredStreamSequenceNumber,
+        anchoredCoarseFingerprint: request.anchoredCoarseFingerprint,
+        coarseDetectorFingerprint: coarseDetectorFingerprint
+      )
+    case .stable, .significantVisualChange:
+      let confirmedMachAbsoluteTime = mach_absolute_time()
+      coarseRevisionEvidence = nil
+      finishFreshContentSampleRequest(request.requestID, resetEpisode: true)
+      recordContentRevision(
+        source: .boundedFreshSample,
+        evidenceStartedMachAbsoluteTime: request.evidenceStartedMachAbsoluteTime,
+        confirmedMachAbsoluteTime: confirmedMachAbsoluteTime
+      )
+      guard rebaseDenseFingerprintForConfirmedCoarseFrame(freshFrame.contentFingerprint) else {
+        return
+      }
+      latestStableFrame = freshFrame.image
+      startSlideAnalysis(
+        freshFrame,
+        captureSessionID: request.captureOperationID,
+        origin: .boundedFreshSample
+      )
+    case .invalid, .unchanged:
+      exhaustFreshContentSampleEpisode(for: request)
+    }
+  }
+
+  private func receiveFreshDenseCandidateConfirmation(
+    _ freshFrame: CapturedSlideCanvasFrame,
+    candidateToken: StableContentChangeCandidateToken,
+    request: FreshContentSampleRequest
+  ) {
+    guard
+      request.coarseDetectorFingerprint == nil,
       let contentFingerprint = freshFrame.contentFingerprint,
       let observation = stableContentChangeDetector.confirmPendingChange(
         contentFingerprint,
-        token: request.candidateToken
+        token: candidateToken
       )
     else {
       exhaustFreshContentSampleEpisode(for: request)
@@ -1293,11 +1591,17 @@ final class AppModel: ObservableObject {
       scheduleFreshContentSample(
         candidateToken: request.candidateToken,
         anchoredStreamSequenceNumber: request.anchoredStreamSequenceNumber,
-        anchoredCoarseFingerprint: request.anchoredCoarseFingerprint
+        anchoredCoarseFingerprint: request.anchoredCoarseFingerprint,
+        coarseDetectorFingerprint: nil
       )
     case .contentChanged:
       finishFreshContentSampleRequest(request.requestID, resetEpisode: true)
-      contentRevisionCount += 1
+      denseRevisionEvidence = nil
+      recordContentRevision(
+        source: .boundedFreshSample,
+        evidenceStartedMachAbsoluteTime: request.evidenceStartedMachAbsoluteTime,
+        confirmedMachAbsoluteTime: mach_absolute_time()
+      )
       latestStableFrame = freshFrame.image
       startSlideAnalysis(
         freshFrame,
@@ -1314,6 +1618,12 @@ final class AppModel: ObservableObject {
   ) -> Bool {
     guard
       currentFreshContentSampleRequest?.requestID == request.requestID,
+      evidenceStartedMachAbsoluteTime(for: request.candidateToken)
+        == request.evidenceStartedMachAbsoluteTime,
+      freshContentSampleCandidateIsStructurallyValid(
+        request.candidateToken,
+        coarseDetectorFingerprint: request.coarseDetectorFingerprint
+      ),
       captureStatus == .capturing,
       activeCaptureSessionID == request.captureOperationID,
       activeCaptureIdentity == request.captureIdentity,
@@ -1382,10 +1692,11 @@ final class AppModel: ObservableObject {
       let contentFingerprint,
       stableContentChangeDetector.rebase(to: contentFingerprint)
     else {
-      stableContentChangeDetector.reset()
+      resetDenseContentChangeDetector()
       invalidateSlideAnalysisForVisualFreshness()
       return false
     }
+    denseRevisionEvidence = nil
     return true
   }
 
@@ -1728,8 +2039,7 @@ final class AppModel: ObservableObject {
     invalidateTranscriptionContext()
     slideIdentityGeneration += 1
     latestEligibleWindowFrame = nil
-    stableFrameDetector.reset()
-    stableContentChangeDetector.reset()
+    resetVisualDetectors()
     latestDifferenceFromStableFrame = nil
     latestStableFrame = nil
     invalidateOverlayPlacement()

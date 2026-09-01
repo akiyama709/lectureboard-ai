@@ -29,6 +29,15 @@ struct RuntimeVerificationReportTests {
     #expect(decoded == report)
     #expect(decoded.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
     #expect(decoded.slideCanvasConfirmationMode == .diagnosticFullFrame)
+    #expect(decoded.snapshots[0].latestContentRevisionEvent?.ordinal == 2)
+    #expect(
+      decoded.snapshots[0].latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime
+        == 12_300
+    )
+    #expect(
+      decoded.snapshots[0].latestContentRevisionEvent?.confirmedMachAbsoluteTime == 12_345
+    )
+    #expect(decoded.snapshots[0].latestContentRevisionEvent?.source == .continuousDenseNew)
   }
 
   @Test func normalizesInvalidNumericAndMetadataValues() {
@@ -79,7 +88,7 @@ struct RuntimeVerificationReportTests {
       snapshots: []
     )
 
-    #expect(RuntimeVerificationReport.currentSchemaVersion == 10)
+    #expect(RuntimeVerificationReport.currentSchemaVersion == 11)
     #expect(report.schemaVersion == RuntimeVerificationReport.currentSchemaVersion)
   }
 
@@ -93,7 +102,7 @@ struct RuntimeVerificationReportTests {
     let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: data)
 
     #expect(decoded == report)
-    #expect(decoded.schemaVersion == 10)
+    #expect(decoded.schemaVersion == 11)
     #expect(decoded.captureFailureSource == .delegateStoppedWithKnownSCError)
     #expect(decoded.captureSCStreamErrorCode == .systemStoppedStream)
     #expect(
@@ -494,6 +503,169 @@ struct RuntimeVerificationReportTests {
     #expect(decoded.snapshots[0].slideCanvasOverlayState == .unavailable)
   }
 
+  @Test func decodesSchemaTenWithoutContentRevisionEventMetadata() throws {
+    let encoded = try JSONEncoder().encode(
+      RuntimeVerificationReport(
+        startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+        finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+        requestedDurationSeconds: 12,
+        permissionWasRequested: false,
+        permissionRequestReturned: nil,
+        preflightBefore: .authorized,
+        preflightAfter: .authorized,
+        matchedWindowCount: 1,
+        selectedWindowID: 42,
+        selectedBundleIdentifier: "com.microsoft.Powerpoint",
+        runStatus: .completed,
+        failureCode: nil,
+        untrustedFailureDetail: nil,
+        snapshots: [snapshot()]
+      )
+    )
+    var object = try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    object["schemaVersion"] = 10
+    var snapshots = try #require(object["snapshots"] as? [[String: Any]])
+    snapshots[0].removeValue(forKey: "latestContentRevisionEvent")
+    object["snapshots"] = snapshots
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
+
+    #expect(decoded.schemaVersion == 10)
+    #expect(decoded.snapshots[0].contentRevisionCount == 2)
+    #expect(decoded.snapshots[0].latestContentRevisionEvent == nil)
+  }
+
+  @Test func schemaTenIgnoresInjectedMalformedContentRevisionEventMetadata() throws {
+    var object = try currentReportJSONObject()
+    object["schemaVersion"] = 10
+    var snapshots = try #require(object["snapshots"] as? [[String: Any]])
+    snapshots[0]["latestContentRevisionEvent"] = [
+      "ordinal": "PRIVATE_INVALID_ORDINAL",
+      "evidenceStartedMachAbsoluteTime": -1,
+      "confirmedMachAbsoluteTime": "PRIVATE_INVALID_CONFIRMATION",
+      "source": "PRIVATE_UNKNOWN_SOURCE",
+    ]
+    object["snapshots"] = snapshots
+
+    let legacyData = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(RuntimeVerificationReport.self, from: legacyData)
+
+    #expect(decoded.schemaVersion == 10)
+    #expect(decoded.snapshots[0].contentRevisionCount == 2)
+    #expect(decoded.snapshots[0].latestContentRevisionEvent == nil)
+  }
+
+  @Test func schemaElevenRejectsMissingOrInconsistentContentRevisionMetadata() throws {
+    let currentObject = try currentReportJSONObject()
+
+    var missingEventObject = currentObject
+    var missingEventSnapshots = try #require(
+      missingEventObject["snapshots"] as? [[String: Any]]
+    )
+    missingEventSnapshots[0].removeValue(forKey: "latestContentRevisionEvent")
+    missingEventObject["snapshots"] = missingEventSnapshots
+
+    var missingCountObject = currentObject
+    var missingCountSnapshots = try #require(
+      missingCountObject["snapshots"] as? [[String: Any]]
+    )
+    missingCountSnapshots[0].removeValue(forKey: "contentRevisionCount")
+    missingCountObject["snapshots"] = missingCountSnapshots
+
+    var negativeCountWithoutEventObject = currentObject
+    var negativeCountWithoutEventSnapshots = try #require(
+      negativeCountWithoutEventObject["snapshots"] as? [[String: Any]]
+    )
+    negativeCountWithoutEventSnapshots[0]["contentRevisionCount"] = -1
+    negativeCountWithoutEventSnapshots[0].removeValue(
+      forKey: "latestContentRevisionEvent"
+    )
+    negativeCountWithoutEventObject["snapshots"] = negativeCountWithoutEventSnapshots
+
+    var zeroCountWithEventObject = currentObject
+    var zeroCountWithEventSnapshots = try #require(
+      zeroCountWithEventObject["snapshots"] as? [[String: Any]]
+    )
+    zeroCountWithEventSnapshots[0]["contentRevisionCount"] = 0
+    zeroCountWithEventObject["snapshots"] = zeroCountWithEventSnapshots
+
+    var mismatchedOrdinalObject = currentObject
+    var mismatchedOrdinalSnapshots = try #require(
+      mismatchedOrdinalObject["snapshots"] as? [[String: Any]]
+    )
+    var mismatchedEvent = try #require(
+      mismatchedOrdinalSnapshots[0]["latestContentRevisionEvent"] as? [String: Any]
+    )
+    mismatchedEvent["ordinal"] = 1
+    mismatchedOrdinalSnapshots[0]["latestContentRevisionEvent"] = mismatchedEvent
+    mismatchedOrdinalObject["snapshots"] = mismatchedOrdinalSnapshots
+
+    var unknownSourceObject = currentObject
+    var unknownSourceSnapshots = try #require(
+      unknownSourceObject["snapshots"] as? [[String: Any]]
+    )
+    var unknownSourceEvent = try #require(
+      unknownSourceSnapshots[0]["latestContentRevisionEvent"] as? [String: Any]
+    )
+    unknownSourceEvent["source"] = "futurePrivateSource"
+    unknownSourceSnapshots[0]["latestContentRevisionEvent"] = unknownSourceEvent
+    unknownSourceObject["snapshots"] = unknownSourceSnapshots
+
+    var zeroEvidenceStartObject = currentObject
+    var zeroEvidenceStartSnapshots = try #require(
+      zeroEvidenceStartObject["snapshots"] as? [[String: Any]]
+    )
+    var zeroEvidenceStartEvent = try #require(
+      zeroEvidenceStartSnapshots[0]["latestContentRevisionEvent"] as? [String: Any]
+    )
+    zeroEvidenceStartEvent["evidenceStartedMachAbsoluteTime"] = 0
+    zeroEvidenceStartSnapshots[0]["latestContentRevisionEvent"] = zeroEvidenceStartEvent
+    zeroEvidenceStartObject["snapshots"] = zeroEvidenceStartSnapshots
+
+    var zeroConfirmationObject = currentObject
+    var zeroConfirmationSnapshots = try #require(
+      zeroConfirmationObject["snapshots"] as? [[String: Any]]
+    )
+    var zeroConfirmationEvent = try #require(
+      zeroConfirmationSnapshots[0]["latestContentRevisionEvent"] as? [String: Any]
+    )
+    zeroConfirmationEvent["confirmedMachAbsoluteTime"] = 0
+    zeroConfirmationSnapshots[0]["latestContentRevisionEvent"] = zeroConfirmationEvent
+    zeroConfirmationObject["snapshots"] = zeroConfirmationSnapshots
+
+    var reversedIntervalObject = currentObject
+    var reversedIntervalSnapshots = try #require(
+      reversedIntervalObject["snapshots"] as? [[String: Any]]
+    )
+    var reversedIntervalEvent = try #require(
+      reversedIntervalSnapshots[0]["latestContentRevisionEvent"] as? [String: Any]
+    )
+    reversedIntervalEvent["evidenceStartedMachAbsoluteTime"] = 12_346
+    reversedIntervalEvent["confirmedMachAbsoluteTime"] = 12_345
+    reversedIntervalSnapshots[0]["latestContentRevisionEvent"] = reversedIntervalEvent
+    reversedIntervalObject["snapshots"] = reversedIntervalSnapshots
+
+    for invalidObject in [
+      missingEventObject,
+      missingCountObject,
+      negativeCountWithoutEventObject,
+      zeroCountWithEventObject,
+      mismatchedOrdinalObject,
+      unknownSourceObject,
+      zeroEvidenceStartObject,
+      zeroConfirmationObject,
+      reversedIntervalObject,
+    ] {
+      let invalidData = try JSONSerialization.data(withJSONObject: invalidObject)
+      #expect(throws: DecodingError.self) {
+        try JSONDecoder().decode(RuntimeVerificationReport.self, from: invalidData)
+      }
+    }
+  }
+
   @Test func clampsFinishTimeAndClearsFailureFromCompletedRun() {
     let startedAt = Date(timeIntervalSince1970: 100)
     let report = RuntimeVerificationReport(
@@ -578,7 +750,7 @@ struct RuntimeVerificationReportTests {
       from: data
     )
 
-    #expect(decoded.schemaVersion == 10)
+    #expect(decoded.schemaVersion == 11)
     #expect(decoded.failureCode == .captureFailed)
     #expect(decoded.captureFailureSource == .unclassifiedCaptureFailure)
     #expect(decoded.captureSCStreamErrorCode == nil)
@@ -875,6 +1047,7 @@ struct RuntimeVerificationReportTests {
         "slideIdentitySampleCount",
         "slideIdentityContinuityBreakCount",
         "contentRevisionCount",
+        "latestContentRevisionEvent",
         "recognizedTextCount",
         "detectedRectangleCount",
         "strokeCandidateRegionCount",
@@ -892,6 +1065,23 @@ struct RuntimeVerificationReportTests {
     #expect(root["captureFailureSource"] == nil)
     #expect(root["captureSCStreamErrorCode"] == nil)
     #expect(encodedSnapshot["contentRevisionCount"] as? Int == 2)
+    let contentRevisionEvent = try #require(
+      encodedSnapshot["latestContentRevisionEvent"] as? [String: Any]
+    )
+    #expect(
+      Set(contentRevisionEvent.keys) == [
+        "ordinal",
+        "evidenceStartedMachAbsoluteTime",
+        "confirmedMachAbsoluteTime",
+        "source",
+      ]
+    )
+    #expect(contentRevisionEvent["ordinal"] as? Int == 2)
+    #expect(
+      contentRevisionEvent["evidenceStartedMachAbsoluteTime"] as? UInt64 == 12_300
+    )
+    #expect(contentRevisionEvent["confirmedMachAbsoluteTime"] as? UInt64 == 12_345)
+    #expect(contentRevisionEvent["source"] as? String == "continuousDenseNew")
     #expect(encodedSnapshot["strokeCandidateRegionCount"] as? Int == 1)
     #expect(encodedSnapshot["slideIdentityState"] as? String == "identified")
     #expect(encodedSnapshot["slideIdentityFrameSyncState"] as? String == "waiting")
@@ -1094,12 +1284,41 @@ struct RuntimeVerificationReportTests {
       slideIdentitySampleCount: 12,
       slideIdentityContinuityBreakCount: 1,
       contentRevisionCount: 2,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 2,
+        evidenceStartedMachAbsoluteTime: 12_300,
+        confirmedMachAbsoluteTime: 12_345,
+        source: .continuousDenseNew
+      ),
       recognizedTextCount: 3,
       detectedRectangleCount: 2,
       strokeCandidateRegionCount: 1,
       occupiedRegionCount: 4,
       lastNewFrameAt: Date(timeIntervalSince1970: 1_788_045_601),
       latestDifferenceFromStableFrame: 0
+    )
+  }
+
+  private func currentReportJSONObject() throws -> [String: Any] {
+    let report = RuntimeVerificationReport(
+      startedAt: Date(timeIntervalSince1970: 1_788_045_600),
+      finishedAt: Date(timeIntervalSince1970: 1_788_045_612),
+      requestedDurationSeconds: 12,
+      permissionWasRequested: false,
+      permissionRequestReturned: nil,
+      preflightBefore: .authorized,
+      preflightAfter: .authorized,
+      matchedWindowCount: 1,
+      selectedWindowID: 42,
+      selectedBundleIdentifier: "com.microsoft.Powerpoint",
+      runStatus: .completed,
+      failureCode: nil,
+      untrustedFailureDetail: nil,
+      snapshots: [snapshot()]
+    )
+    let encoded = try JSONEncoder().encode(report)
+    return try #require(
+      JSONSerialization.jsonObject(with: encoded) as? [String: Any]
     )
   }
 

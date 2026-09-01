@@ -131,6 +131,7 @@ struct RuntimeVerificationSnapshotProjectorTests {
     #expect(snapshot.slideCanvasOverlayState == .unavailable)
     #expect(snapshot.slideCanvasInvalidationReason == nil)
     #expect(snapshot.contentRevisionCount == model.contentRevisionCount)
+    #expect(snapshot.latestContentRevisionEvent == model.latestContentRevisionEvent)
     #expect(snapshot.strokeCandidateRegionCount == 0)
   }
 }

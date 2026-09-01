@@ -24,6 +24,12 @@ struct RuntimeVerificationSnapshotTests {
       slideIdentitySampleCount: 8,
       slideIdentityContinuityBreakCount: 1,
       contentRevisionCount: 4,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 4,
+        evidenceStartedMachAbsoluteTime: 9_876_500,
+        confirmedMachAbsoluteTime: 9_876_543,
+        source: .boundedFreshSample
+      ),
       recognizedTextCount: 7,
       detectedRectangleCount: 2,
       strokeCandidateRegionCount: 3,
@@ -41,6 +47,23 @@ struct RuntimeVerificationSnapshotTests {
     #expect(object["recognizedText"] == nil)
     #expect(object["title"] == nil)
     #expect(object["contentRevisionCount"] as? Int == 4)
+    let contentRevisionEvent = try #require(
+      object["latestContentRevisionEvent"] as? [String: Any]
+    )
+    #expect(
+      Set(contentRevisionEvent.keys) == [
+        "ordinal",
+        "evidenceStartedMachAbsoluteTime",
+        "confirmedMachAbsoluteTime",
+        "source",
+      ]
+    )
+    #expect(contentRevisionEvent["ordinal"] as? Int == 4)
+    #expect(
+      contentRevisionEvent["evidenceStartedMachAbsoluteTime"] as? UInt64 == 9_876_500
+    )
+    #expect(contentRevisionEvent["confirmedMachAbsoluteTime"] as? UInt64 == 9_876_543)
+    #expect(contentRevisionEvent["source"] as? String == "boundedFreshSample")
     #expect(object["strokeCandidateRegionCount"] as? Int == 3)
     #expect(object["slideIdentityState"] as? String == "identified")
     #expect(object["slideIdentityFrameSyncState"] as? String == "timedOut")
@@ -99,6 +122,7 @@ struct RuntimeVerificationSnapshotTests {
     #expect(snapshot.slideCanvasOverlayState == .ambiguousContainingDisplays)
     #expect(snapshot.slideCanvasInvalidationReason == .selectionContextMismatch)
     #expect(snapshot.contentRevisionCount == 0)
+    #expect(snapshot.latestContentRevisionEvent == nil)
     #expect(snapshot.recognizedTextCount == 0)
     #expect(snapshot.detectedRectangleCount == 0)
     #expect(snapshot.strokeCandidateRegionCount == 0)
@@ -113,6 +137,83 @@ struct RuntimeVerificationSnapshotTests {
 
     #expect(low.latestDifferenceFromStableFrame == 0)
     #expect(high.latestDifferenceFromStableFrame == 1)
+  }
+
+  @Test func producerClearsMissingOrMismatchedContentRevisionMetadata() {
+    let missing = snapshot(contentRevisionCount: 2, latestContentRevisionEvent: nil)
+    let mismatched = snapshot(
+      contentRevisionCount: 2,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 1,
+        evidenceStartedMachAbsoluteTime: 90,
+        confirmedMachAbsoluteTime: 100,
+        source: .continuousDenseNew
+      )
+    )
+    let zeroWithEvent = snapshot(
+      contentRevisionCount: 0,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 1,
+        evidenceStartedMachAbsoluteTime: 90,
+        confirmedMachAbsoluteTime: 100,
+        source: .coarseStable
+      )
+    )
+    let zeroEvidenceStart = snapshot(
+      contentRevisionCount: 2,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 2,
+        evidenceStartedMachAbsoluteTime: 0,
+        confirmedMachAbsoluteTime: 100,
+        source: .boundedFreshSample
+      )
+    )
+    let zeroConfirmation = snapshot(
+      contentRevisionCount: 2,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 2,
+        evidenceStartedMachAbsoluteTime: 100,
+        confirmedMachAbsoluteTime: 0,
+        source: .boundedFreshSample
+      )
+    )
+    let reversedInterval = snapshot(
+      contentRevisionCount: 2,
+      latestContentRevisionEvent: RuntimeContentRevisionEvent(
+        ordinal: 2,
+        evidenceStartedMachAbsoluteTime: 101,
+        confirmedMachAbsoluteTime: 100,
+        source: .boundedFreshSample
+      )
+    )
+
+    for value in [
+      missing,
+      mismatched,
+      zeroWithEvent,
+      zeroEvidenceStart,
+      zeroConfirmation,
+      reversedInterval,
+    ] {
+      #expect(value.contentRevisionCount == 0)
+      #expect(value.latestContentRevisionEvent == nil)
+    }
+  }
+
+  @Test func contentRevisionSourceRawValuesAreStableMetadata() throws {
+    let expected: [(RuntimeContentRevisionSource, String)] = [
+      (.coarseStable, "coarseStable"),
+      (.coarseSignificantVisualChange, "coarseSignificantVisualChange"),
+      (.continuousDenseNew, "continuousDenseNew"),
+      (.continuousDenseIdleRepeat, "continuousDenseIdleRepeat"),
+      (.boundedFreshSample, "boundedFreshSample"),
+    ]
+
+    for (source, rawValue) in expected {
+      let encoded = try JSONEncoder().encode(source)
+      #expect(String(decoding: encoded, as: UTF8.self) == "\"\(rawValue)\"")
+      #expect(try JSONDecoder().decode(RuntimeContentRevisionSource.self, from: encoded) == source)
+    }
   }
 
   @Test func slideCanvasStateRawValuesAreStableMetadata() throws {
@@ -207,6 +308,29 @@ struct RuntimeVerificationSnapshotTests {
       detectedRectangleCount: 0,
       occupiedRegionCount: 0,
       latestDifferenceFromStableFrame: difference
+    )
+  }
+
+  private func snapshot(
+    contentRevisionCount: Int,
+    latestContentRevisionEvent: RuntimeContentRevisionEvent?
+  ) -> RuntimeVerificationSnapshot {
+    RuntimeVerificationSnapshot(
+      timestamp: Date(timeIntervalSince1970: 0),
+      elapsedMilliseconds: 0,
+      screenRecordingPermission: .authorized,
+      captureState: .capturing,
+      visionState: .completed,
+      frameCount: 0,
+      newFrameCount: 0,
+      repeatedFrameCount: 0,
+      stableFrameCount: 0,
+      slideChangeCount: 0,
+      contentRevisionCount: contentRevisionCount,
+      latestContentRevisionEvent: latestContentRevisionEvent,
+      recognizedTextCount: 0,
+      detectedRectangleCount: 0,
+      occupiedRegionCount: 0
     )
   }
 }

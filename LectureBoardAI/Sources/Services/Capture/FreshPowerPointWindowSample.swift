@@ -16,6 +16,10 @@ struct FreshPowerPointWindowSample: @unchecked Sendable {
   let requestID: FreshSampleRequestID
   let captureOperationID: CaptureOperationID
   let identity: PowerPointWindowIdentity
+  /// The local mach-absolute time immediately before the one-shot capture
+  /// request entered ScreenCaptureKit. This is fresh-sample provenance only;
+  /// it must never be treated as a continuous stream display time.
+  let requestStartedMachAbsoluteTime: UInt64
   let capturedAt: Date
   let captureSurfaceGeometry: CaptureSurfaceGeometry
   let image: CGImage

@@ -127,6 +127,10 @@ struct CGImageRasterizerTests {
     #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: 456)) == 456)
     #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: -1)) == nil)
     #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: 1.5)) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: true)) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse(NSNumber(value: false)) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse(true) == nil)
+    #expect(CaptureFrameDisplayTimeParser.parse(false) == nil)
     #expect(CaptureFrameDisplayTimeParser.parse(UInt64(0)) == nil)
     #expect(CaptureFrameDisplayTimeParser.parse("123") == nil)
   }

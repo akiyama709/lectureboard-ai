@@ -19,6 +19,134 @@ struct StableFrameDetectorTests {
     #expect(detector.ingest(frame).stability == .unchanged)
   }
 
+  @Test func keepsOneOpaqueTokenFromFirstCandidateObservationThroughConfirmation() throws {
+    var detector = StableFrameDetector(configuration: configuration)
+    let frame = fingerprint(20)
+
+    let first = detector.ingest(frame)
+    let firstToken = try #require(first.candidateToken)
+    let second = detector.ingest(frame)
+    let confirmed = detector.ingest(frame)
+
+    #expect(first.stability == .collecting(consecutiveFrames: 1))
+    #expect(second.stability == .collecting(consecutiveFrames: 2))
+    #expect(second.candidateToken == firstToken)
+    #expect(confirmed.stability == .stable)
+    #expect(confirmed.candidateToken == firstToken)
+    #expect(detector.ingest(frame).candidateToken == nil)
+  }
+
+  @Test func independentlyCapturedEvidenceConfirmsOnlyTheExactPendingCandidate() throws {
+    var detector = StableFrameDetector(configuration: configuration)
+    let frame = fingerprint(20)
+
+    let first = detector.ingest(frame)
+    let token = try #require(first.candidateToken)
+    let secondResult = detector.confirmPendingFrame(frame, token: token)
+    let second = try #require(secondResult)
+    let confirmedResult = detector.confirmPendingFrame(frame, token: token)
+    let confirmed = try #require(confirmedResult)
+    let afterConfirmation = detector.confirmPendingFrame(frame, token: token)
+
+    #expect(second.stability == .collecting(consecutiveFrames: 2))
+    #expect(second.candidateToken == token)
+    #expect(confirmed.stability == .stable)
+    #expect(confirmed.candidateToken == token)
+    #expect(afterConfirmation == nil)
+  }
+
+  @Test func staleConfirmationTokensCannotAdvanceAReplacementOrSurviveReset() throws {
+    var detector = StableFrameDetector(configuration: configuration)
+    let firstCandidate = fingerprint(20)
+    let replacementCandidate = fingerprint(180)
+
+    let staleToken = try #require(detector.ingest(firstCandidate).candidateToken)
+    let replacement = detector.ingest(replacementCandidate)
+    let replacementToken = try #require(replacement.candidateToken)
+
+    #expect(staleToken != replacementToken)
+    let staleResult = detector.confirmPendingFrame(firstCandidate, token: staleToken)
+    #expect(staleResult == nil)
+    let mismatchedFingerprintResult = detector.confirmPendingFrame(
+      firstCandidate,
+      token: replacementToken
+    )
+    #expect(mismatchedFingerprintResult == nil)
+    let replacementSecondResult = detector.confirmPendingFrame(
+      replacementCandidate,
+      token: replacementToken
+    )
+    let replacementSecond = try #require(replacementSecondResult)
+    #expect(replacementSecond.stability == .collecting(consecutiveFrames: 2))
+
+    detector.reset()
+
+    let afterReset = detector.confirmPendingFrame(
+      replacementCandidate,
+      token: replacementToken
+    )
+    #expect(afterReset == nil)
+    let restarted = detector.ingest(replacementCandidate)
+    #expect(restarted.stability == .collecting(consecutiveFrames: 1))
+    #expect(restarted.candidateToken != replacementToken)
+  }
+
+  @Test func replacementCandidateReceivesANewToken() throws {
+    var detector = StableFrameDetector(configuration: configuration)
+    let baseline = fingerprint(10)
+    let firstCandidate = fingerprint(80)
+    let replacement = fingerprint(180)
+    _ = detector.ingest(baseline)
+    _ = detector.ingest(baseline)
+    _ = detector.ingest(baseline)
+
+    let firstToken = try #require(detector.ingest(firstCandidate).candidateToken)
+    let replacementFirst = detector.ingest(replacement)
+    let replacementToken = try #require(replacementFirst.candidateToken)
+    let replacementSecond = detector.ingest(replacement)
+    let confirmed = detector.ingest(replacement)
+
+    #expect(firstToken != replacementToken)
+    #expect(replacementFirst.stability == .transitioning)
+    #expect(replacementSecond.candidateToken == replacementToken)
+    #expect(confirmed.stability == .significantVisualChange)
+    #expect(confirmed.candidateToken == replacementToken)
+  }
+
+  @Test func unchangedAndInvalidFramesClearCandidateTokens() throws {
+    var unchangedDetector = StableFrameDetector(configuration: configuration)
+    let baseline = fingerprint(10)
+    let candidate = fingerprint(80)
+    _ = unchangedDetector.ingest(baseline)
+    _ = unchangedDetector.ingest(baseline)
+    _ = unchangedDetector.ingest(baseline)
+
+    let beforeUnchanged = try #require(unchangedDetector.ingest(candidate).candidateToken)
+    #expect(unchangedDetector.ingest(baseline).candidateToken == nil)
+    let afterUnchanged = try #require(unchangedDetector.ingest(candidate).candidateToken)
+    #expect(afterUnchanged != beforeUnchanged)
+
+    let malformed = FrameFingerprint(sampleColumns: 2, sampleRows: 2, luminance: [1, 2])
+    let invalidObservation = unchangedDetector.ingest(malformed)
+    #expect(invalidObservation.stability == .invalid)
+    #expect(invalidObservation.candidateToken == nil)
+    let afterInvalid = try #require(unchangedDetector.ingest(candidate).candidateToken)
+    #expect(afterInvalid != afterUnchanged)
+  }
+
+  @Test func resetClearsTheCandidateTokenAndStartsANewCandidate() throws {
+    var detector = StableFrameDetector(configuration: configuration)
+    let frame = fingerprint(30)
+    let beforeReset = try #require(detector.ingest(frame).candidateToken)
+
+    detector.reset()
+
+    let afterReset = detector.ingest(frame)
+    #expect(afterReset.stability == .collecting(consecutiveFrames: 1))
+    #expect(afterReset.candidateToken != nil)
+    #expect(afterReset.candidateToken != beforeReset)
+  }
+
   @Test func treatsSmallLuminanceNoiseAsTheSameStableFrame() {
     var detector = StableFrameDetector(configuration: configuration)
     let frame = fingerprint(100)

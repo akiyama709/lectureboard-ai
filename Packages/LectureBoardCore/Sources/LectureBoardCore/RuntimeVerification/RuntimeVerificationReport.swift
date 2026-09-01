@@ -97,7 +97,7 @@ public enum RuntimeSCStreamErrorCode: String, Codable, Equatable, Sendable {
 
 /// A metadata-only runtime verification record that excludes captured content and window titles.
 public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
-  public static let currentSchemaVersion = 10
+  public static let currentSchemaVersion = 11
 
   public let schemaVersion: Int
   public let startedAt: Date
@@ -295,10 +295,21 @@ public struct RuntimeVerificationReport: Codable, Equatable, Sendable {
       captureFailureSource = nil
       captureSCStreamErrorCode = nil
     }
-    snapshots = try container.decode(
-      [RuntimeVerificationSnapshot].self,
-      forKey: .snapshots
-    )
+    var snapshotContainer = try container.nestedUnkeyedContainer(forKey: .snapshots)
+    var decodedSnapshots: [RuntimeVerificationSnapshot] = []
+    if let snapshotCount = snapshotContainer.count {
+      decodedSnapshots.reserveCapacity(snapshotCount)
+    }
+    while !snapshotContainer.isAtEnd {
+      let snapshotDecoder = try snapshotContainer.superDecoder()
+      decodedSnapshots.append(
+        try RuntimeVerificationSnapshot(
+          from: snapshotDecoder,
+          reportSchemaVersion: schemaVersion
+        )
+      )
+    }
+    snapshots = decodedSnapshots
 
     let decodedCanvasFailureReason = try container.decodeIfPresent(
       RuntimeSlideCanvasInvalidationReason.self,

@@ -32,6 +32,7 @@ enum RuntimeVerificationSnapshotProjector {
       slideIdentitySampleCount: model.slideIdentitySampleCount,
       slideIdentityContinuityBreakCount: model.slideIdentityContinuityBreakCount,
       contentRevisionCount: model.contentRevisionCount,
+      latestContentRevisionEvent: model.latestContentRevisionEvent,
       recognizedTextCount: model.latestSlideAnalysis?.textBlocks.count ?? 0,
       detectedRectangleCount: model.latestSlideAnalysis?.graphicRegions.count ?? 0,
       strokeCandidateRegionCount: model.latestSlideAnalysis?.strokeCandidateRegions.count ?? 0,

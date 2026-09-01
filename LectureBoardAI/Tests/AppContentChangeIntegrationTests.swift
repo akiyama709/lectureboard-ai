@@ -54,6 +54,10 @@ struct AppContentChangeIntegrationTests {
 
     #expect(model.stableFrameCount == 1)
     #expect(model.slideChangeCount == 0)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 4_000)
+    #expect(model.latestContentRevisionEvent?.confirmedMachAbsoluteTime == 6_000)
+    #expect(model.latestContentRevisionEvent?.source == .continuousDenseNew)
 
     let significantUpdateCoarse = coarseFingerprint(luminance: 107)
     let significantUpdateDense = changingCells(
@@ -76,6 +80,10 @@ struct AppContentChangeIntegrationTests {
     #expect(model.stableFrameCount == 2)
     #expect(model.slideChangeCount == 0)
     #expect(model.latestSlideAnalysis?.strokeCandidateRegions.count == 1)
+    #expect(model.latestContentRevisionEvent?.ordinal == 2)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 7_000)
+    #expect(model.latestContentRevisionEvent?.confirmedMachAbsoluteTime == 9_000)
+    #expect(model.latestContentRevisionEvent?.source == .coarseSignificantVisualChange)
 
     await capture.emit(
       frame(
@@ -105,6 +113,10 @@ struct AppContentChangeIntegrationTests {
     try await waitUntil { model.contentRevisionCount == 3 }
     try await analyzer.waitForAnalysisCount(4)
     #expect(model.slideChangeCount == 0)
+    #expect(model.latestContentRevisionEvent?.ordinal == 3)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 11_000)
+    #expect(model.latestContentRevisionEvent?.confirmedMachAbsoluteTime == 13_000)
+    #expect(model.latestContentRevisionEvent?.source == .continuousDenseNew)
 
     let snapshot = RuntimeVerificationSnapshotProjector.makeSnapshot(
       from: model,
@@ -168,6 +180,166 @@ struct AppContentChangeIntegrationTests {
     #expect(model.stableFrameCount == 2)
     #expect(model.slideChangeCount == 0)
     #expect(model.contentRevisionCount == 1)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 4_000)
+    #expect(model.latestContentRevisionEvent?.confirmedMachAbsoluteTime == 6_000)
+    #expect(model.latestContentRevisionEvent?.source == .coarseStable)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func recordsDenseIdleRepeatAsItsOwnRevisionSource() async throws {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = RecordingSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+    let idleRevision = changingCells(in: denseBaseline, indices: Array(0..<30))
+
+    await model.startWindowCapture()
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseBaseline
+        )
+      )
+    }
+    try await waitUntil { model.stableFrameCount == 1 }
+
+    for sequenceNumber in 4...6 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: idleRevision,
+          deliveryKind: .idleRepeat,
+          displayTime: 4_000
+        )
+      )
+    }
+    try await waitUntil { model.contentRevisionCount == 1 }
+
+    #expect(model.newCapturedFrameCount == 3)
+    #expect(model.repeatedCapturedFrameCount == 3)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 4_000)
+    #expect(model.latestContentRevisionEvent?.confirmedMachAbsoluteTime == 4_000)
+    #expect(model.latestContentRevisionEvent?.source == .continuousDenseIdleRepeat)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func denseCandidateReplacementMovesTheEvidenceIntervalStartForward() async throws {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = RecordingSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+    let abandonedCandidate = changingCells(in: denseBaseline, indices: Array(0..<30))
+    let confirmedCandidate = changingCells(in: denseBaseline, indices: Array(30..<60))
+
+    await model.startWindowCapture()
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseBaseline
+        )
+      )
+    }
+    try await waitUntil { model.stableFrameCount == 1 }
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        image: image,
+        coarseFingerprint: coarseBaseline,
+        contentFingerprint: abandonedCandidate
+      )
+    )
+    for sequenceNumber in 5...7 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: confirmedCandidate
+        )
+      )
+    }
+    try await waitUntil { model.contentRevisionCount == 1 }
+
+    #expect(model.latestContentRevisionEvent?.evidenceStartedMachAbsoluteTime == 5_000)
+    #expect(model.latestContentRevisionEvent?.confirmedMachAbsoluteTime == 7_000)
+    #expect(model.latestContentRevisionEvent?.source == .continuousDenseNew)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func invalidSourceTimesNeverCarryAnOlderRevisionEventForward() async throws {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = RecordingSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+    let firstRevision = changingCells(in: denseBaseline, indices: Array(0..<30))
+    let secondRevision = changingCells(in: denseBaseline, indices: Array(30..<60))
+
+    await model.startWindowCapture()
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseBaseline
+        )
+      )
+    }
+    try await waitUntil { model.stableFrameCount == 1 }
+    for sequenceNumber in 4...6 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: firstRevision
+        )
+      )
+    }
+    try await waitUntil { model.latestContentRevisionEvent?.ordinal == 1 }
+
+    for sequenceNumber in 7...9 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: secondRevision,
+          displayTime: 0
+        )
+      )
+    }
+    try await waitUntil { model.contentRevisionCount == 2 }
+
+    #expect(model.latestContentRevisionEvent == nil)
+    let snapshot = RuntimeVerificationSnapshotProjector.makeSnapshot(
+      from: model,
+      timestamp: Date(timeIntervalSince1970: 0),
+      elapsedMilliseconds: 1_000,
+      screenRecordingPermission: .authorized
+    )
+    #expect(snapshot.contentRevisionCount == 0)
+    #expect(snapshot.latestContentRevisionEvent == nil)
 
     await model.stopWindowCapture()
   }
@@ -300,7 +472,66 @@ struct AppContentChangeIntegrationTests {
     }
 
     #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
     #expect(model.slideChangeCount == 0)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func newCaptureResetsRevisionCountAndEventTogether() async throws {
+    let capture = FrameEmittingWindowCapture()
+    let analyzer = RecordingSlideVisualAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let image = try #require(makeImage())
+    let coarseBaseline = coarseFingerprint(luminance: 100)
+    let denseBaseline = denseFingerprint()
+    let denseRevision = changingCells(in: denseBaseline, indices: Array(0..<30))
+
+    await model.startWindowCapture()
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseBaseline
+        )
+      )
+    }
+    try await waitUntil { model.stableFrameCount == 1 }
+    for sequenceNumber in 4...6 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseRevision
+        )
+      )
+    }
+    try await waitUntil { model.contentRevisionCount == 1 }
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+
+    await model.stopWindowCapture()
+    await model.startWindowCapture()
+    try await waitUntil { model.captureStatus == .capturing }
+
+    #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
+
+    for sequenceNumber in 1...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          coarseFingerprint: coarseBaseline,
+          contentFingerprint: denseRevision
+        )
+      )
+    }
+    try await waitUntil { model.stableFrameCount == 1 }
+    #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
 
     await model.stopWindowCapture()
   }
@@ -372,6 +603,7 @@ struct AppContentChangeIntegrationTests {
         == model.newCapturedFrameCount + model.repeatedCapturedFrameCount
     )
     #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
 
     await capture.emit(
       frame(
@@ -391,6 +623,8 @@ struct AppContentChangeIntegrationTests {
     )
     #expect(model.stableFrameCount == 1)
     #expect(model.slideChangeCount == 0)
+    #expect(model.latestContentRevisionEvent?.ordinal == 1)
+    #expect(model.latestContentRevisionEvent?.source == .continuousDenseNew)
 
     await model.stopWindowCapture()
   }
@@ -437,6 +671,7 @@ struct AppContentChangeIntegrationTests {
     #expect(model.captureStatus == .capturing)
     #expect(model.newCapturedFrameCount == 3)
     #expect(model.contentRevisionCount == 0)
+    #expect(model.latestContentRevisionEvent == nil)
 
     await model.stopWindowCapture()
   }
@@ -930,13 +1165,16 @@ struct AppContentChangeIntegrationTests {
     sequenceNumber: UInt64,
     image: CGImage,
     coarseFingerprint: FrameFingerprint,
-    contentFingerprint: ContentFingerprint?
+    contentFingerprint: ContentFingerprint?,
+    deliveryKind: CapturedFrameDeliveryKind = .new,
+    displayTime: UInt64? = nil
   ) -> CapturedPowerPointFrame {
     CapturedPowerPointFrame(
       windowID: 42,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(timeIntervalSince1970: TimeInterval(sequenceNumber)),
-      deliveryKind: .new,
+      displayTime: displayTime ?? sequenceNumber * 1_000,
+      deliveryKind: deliveryKind,
       image: image,
       fingerprint: coarseFingerprint,
       contentFingerprint: contentFingerprint

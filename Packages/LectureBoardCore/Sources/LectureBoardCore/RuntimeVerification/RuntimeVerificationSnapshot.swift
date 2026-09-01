@@ -65,6 +65,45 @@ public enum RuntimeSlideCanvasInvalidationReason: String, Codable, Equatable, Se
   case unclassifiedInvalidation
 }
 
+/// A bounded metadata-only classification for the observation that confirmed
+/// a visual content revision. It records no image, recognized text, geometry,
+/// window identity, or provider detail.
+public enum RuntimeContentRevisionSource: String, Codable, Equatable, Sendable {
+  case coarseStable
+  case coarseSignificantVisualChange
+  case continuousDenseNew
+  case continuousDenseIdleRepeat
+  case boundedFreshSample
+}
+
+/// Metadata-only evidence interval for the latest confirmed visual content
+/// revision. The interval begins with the first qualifying observation retained
+/// by the confirming detector path and ends when that path confirms the revision.
+public struct RuntimeContentRevisionEvent: Codable, Equatable, Sendable {
+  public let ordinal: Int
+  public let evidenceStartedMachAbsoluteTime: UInt64
+  public let confirmedMachAbsoluteTime: UInt64
+  public let source: RuntimeContentRevisionSource
+
+  public init(
+    ordinal: Int,
+    evidenceStartedMachAbsoluteTime: UInt64,
+    confirmedMachAbsoluteTime: UInt64,
+    source: RuntimeContentRevisionSource
+  ) {
+    self.ordinal = ordinal
+    self.evidenceStartedMachAbsoluteTime = evidenceStartedMachAbsoluteTime
+    self.confirmedMachAbsoluteTime = confirmedMachAbsoluteTime
+    self.source = source
+  }
+
+  fileprivate var hasValidMachAbsoluteInterval: Bool {
+    evidenceStartedMachAbsoluteTime > 0
+      && confirmedMachAbsoluteTime > 0
+      && evidenceStartedMachAbsoluteTime <= confirmedMachAbsoluteTime
+  }
+}
+
 /// A metadata-only observation. It deliberately carries no frame image or recognized slide text.
 public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let timestamp: Date
@@ -84,7 +123,8 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
   public let slideIdentityFrameSyncState: SlideIdentityFrameSyncState
   public let slideIdentitySampleCount: Int
   public let slideIdentityContinuityBreakCount: Int
-  public let contentRevisionCount: Int
+  public private(set) var contentRevisionCount: Int
+  public private(set) var latestContentRevisionEvent: RuntimeContentRevisionEvent?
   public let recognizedTextCount: Int
   public let detectedRectangleCount: Int
   public let strokeCandidateRegionCount: Int
@@ -111,6 +151,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     slideIdentitySampleCount: Int = 0,
     slideIdentityContinuityBreakCount: Int = 0,
     contentRevisionCount: Int = 0,
+    latestContentRevisionEvent: RuntimeContentRevisionEvent? = nil,
     recognizedTextCount: Int,
     detectedRectangleCount: Int,
     strokeCandidateRegionCount: Int = 0,
@@ -138,7 +179,17 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     self.slideIdentityFrameSyncState = slideIdentityFrameSyncState
     self.slideIdentitySampleCount = max(slideIdentitySampleCount, 0)
     self.slideIdentityContinuityBreakCount = max(slideIdentityContinuityBreakCount, 0)
-    self.contentRevisionCount = max(contentRevisionCount, 0)
+    let normalizedContentRevisionCount = max(contentRevisionCount, 0)
+    if normalizedContentRevisionCount > 0,
+      latestContentRevisionEvent?.ordinal == normalizedContentRevisionCount,
+      latestContentRevisionEvent?.hasValidMachAbsoluteInterval == true
+    {
+      self.contentRevisionCount = normalizedContentRevisionCount
+      self.latestContentRevisionEvent = latestContentRevisionEvent
+    } else {
+      self.contentRevisionCount = 0
+      self.latestContentRevisionEvent = nil
+    }
     self.recognizedTextCount = max(recognizedTextCount, 0)
     self.detectedRectangleCount = max(detectedRectangleCount, 0)
     self.strokeCandidateRegionCount = max(strokeCandidateRegionCount, 0)
@@ -170,6 +221,7 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case slideIdentitySampleCount
     case slideIdentityContinuityBreakCount
     case contentRevisionCount
+    case latestContentRevisionEvent
     case recognizedTextCount
     case detectedRectangleCount
     case strokeCandidateRegionCount
@@ -178,8 +230,49 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
     case latestDifferenceFromStableFrame
   }
 
-  public init(from decoder: Decoder) throws {
+  public init(from decoder: any Decoder) throws {
+    try self.init(
+      from: decoder,
+      reportSchemaVersion: RuntimeVerificationReport.currentSchemaVersion
+    )
+  }
+
+  init(from decoder: any Decoder, reportSchemaVersion: Int) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
+    let decodedContentRevisionCount =
+      reportSchemaVersion >= 11
+      ? try container.decode(Int.self, forKey: .contentRevisionCount)
+      : try container.decodeIfPresent(Int.self, forKey: .contentRevisionCount) ?? 0
+    let decodedContentRevisionEvent: RuntimeContentRevisionEvent?
+    if reportSchemaVersion >= 11 {
+      decodedContentRevisionEvent = try container.decodeIfPresent(
+        RuntimeContentRevisionEvent.self,
+        forKey: .latestContentRevisionEvent
+      )
+      guard decodedContentRevisionCount >= 0 else {
+        throw DecodingError.dataCorruptedError(
+          forKey: .contentRevisionCount,
+          in: container,
+          debugDescription: "Schema 11 content-revision count cannot be negative."
+        )
+      }
+      let contentRevisionMetadataIsConsistent =
+        decodedContentRevisionCount == 0
+        ? decodedContentRevisionEvent == nil
+        : decodedContentRevisionEvent?.ordinal == decodedContentRevisionCount
+          && decodedContentRevisionEvent?.hasValidMachAbsoluteInterval == true
+      guard contentRevisionMetadataIsConsistent else {
+        throw DecodingError.dataCorruptedError(
+          forKey: .latestContentRevisionEvent,
+          in: container,
+          debugDescription: "Schema 11 content-revision metadata is missing or inconsistent."
+        )
+      }
+    } else {
+      // Historical reports predate this metadata. Ignore even injected values
+      // so their counter semantics remain exactly as recorded.
+      decodedContentRevisionEvent = nil
+    }
     self.init(
       timestamp: try container.decode(Date.self, forKey: .timestamp),
       elapsedMilliseconds: try container.decode(Int.self, forKey: .elapsedMilliseconds),
@@ -222,10 +315,8 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
         Int.self,
         forKey: .slideIdentityContinuityBreakCount
       ) ?? 0,
-      contentRevisionCount: try container.decodeIfPresent(
-        Int.self,
-        forKey: .contentRevisionCount
-      ) ?? 0,
+      contentRevisionCount: decodedContentRevisionCount,
+      latestContentRevisionEvent: decodedContentRevisionEvent,
       recognizedTextCount: try container.decode(Int.self, forKey: .recognizedTextCount),
       detectedRectangleCount: try container.decode(
         Int.self,
@@ -242,5 +333,9 @@ public struct RuntimeVerificationSnapshot: Codable, Equatable, Sendable {
         forKey: .latestDifferenceFromStableFrame
       )
     )
+    if reportSchemaVersion <= 10 {
+      contentRevisionCount = max(decodedContentRevisionCount, 0)
+      latestContentRevisionEvent = nil
+    }
   }
 }
