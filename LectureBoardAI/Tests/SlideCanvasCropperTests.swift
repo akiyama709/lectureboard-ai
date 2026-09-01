@@ -399,6 +399,375 @@ struct SlideCanvasCropperTests {
     )
   }
 
+  @Test func preparesBoundedFreshSampleWithTopLeftCropAndExplicitOrigin() throws {
+    let requestID = FreshSampleRequestID()
+    let operationID = CaptureOperationID(rawValue: 21)
+    let image = try #require(
+      makeImage(
+        width: 2,
+        height: 2,
+        rgbaBytes: [
+          255, 0, 0, 255, 0, 255, 0, 255,
+          0, 0, 255, 255, 255, 255, 0, 255,
+        ]
+      )
+    )
+    let geometry = makeGeometry(width: 2, height: 2)
+    let sample = try #require(
+      makeFreshSample(
+        requestID: requestID,
+        operationID: operationID,
+        image: image,
+        geometry: geometry,
+        windowID: 51
+      )
+    )
+    let region = try #require(SlideCanvasRegion(x: 0, y: 0, width: 1, height: 0.5))
+    let selection = try #require(
+      ConfirmedSlideCanvasSelection(
+        captureOperationID: operationID,
+        windowID: 51,
+        captureSurfaceGeometry: geometry,
+        region: region
+      )
+    )
+
+    guard
+      case .prepared(let prepared) = FreshSlideCanvasSamplePreparer.evaluate(
+        sample,
+        expectedIdentity: sample.identity,
+        anchorSequenceNumber: 77,
+        selection: selection
+      )
+    else {
+      Issue.record("Expected a prepared bounded fresh sample.")
+      return
+    }
+    let raster = try #require(CGImageRasterizer.makeRGBRaster(from: prepared.image))
+
+    #expect(raster.width == 2)
+    #expect(raster.height == 1)
+    #expect(raster.rgbBytes == [255, 0, 0, 0, 255, 0])
+    #expect(prepared.windowID == 51)
+    #expect(prepared.sequenceNumber == 77)
+    #expect(prepared.capturedAt == sample.capturedAt)
+    #expect(prepared.displayTime == nil)
+    #expect(prepared.deliveryKind == nil)
+    #expect(
+      prepared.origin
+        == .boundedFreshSample(requestID: requestID, anchorSequenceNumber: 77)
+    )
+    #expect(prepared.fingerprint.isValid)
+    #expect(prepared.contentFingerprint?.isValid == true)
+  }
+
+  @Test func preservesContinuousStreamOriginAndCompatibilityAccessors() throws {
+    let image = try #require(makeSolidImage(width: 2, height: 2, rgb: (1, 2, 3)))
+    let geometry = makeGeometry(width: 2, height: 2)
+    let frame = CapturedPowerPointFrame(
+      windowID: 61,
+      sequenceNumber: 4,
+      capturedAt: .distantPast,
+      displayTime: 99,
+      deliveryKind: .idleRepeat,
+      captureSurfaceGeometry: geometry,
+      image: image,
+      fingerprint: FrameFingerprint(sampleColumns: 1, sampleRows: 1, luminance: [1]),
+      contentFingerprint: nil
+    )
+    let region = try #require(SlideCanvasRegion(x: 0, y: 0, width: 1, height: 1))
+    let selection = try #require(
+      ConfirmedSlideCanvasSelection(
+        captureOperationID: CaptureOperationID(rawValue: 22),
+        windowID: 61,
+        captureSurfaceGeometry: geometry,
+        region: region
+      )
+    )
+
+    let prepared = try #require(
+      SlideCanvasFramePreparer.makeFrame(
+        from: frame,
+        captureOperationID: CaptureOperationID(rawValue: 22),
+        selection: selection
+      )
+    )
+
+    #expect(
+      prepared.origin
+        == .continuousStream(displayTime: 99, deliveryKind: .idleRepeat)
+    )
+    #expect(prepared.displayTime == 99)
+    #expect(prepared.deliveryKind == .idleRepeat)
+  }
+
+  @Test func freshSampleRequestIDsAreOpaqueAndUnique() {
+    let first = FreshSampleRequestID()
+    let second = FreshSampleRequestID()
+
+    #expect(first == first)
+    #expect(first != second)
+  }
+
+  @Test func rejectsFreshOperationAndExactWindowMismatchesWithoutInvalidatingSelection() throws {
+    let selectionOperationID = CaptureOperationID(rawValue: 30)
+    let image = try #require(makeSolidImage(width: 4, height: 2, rgb: (1, 2, 3)))
+    let geometry = makeGeometry(width: 4, height: 2)
+    let region = try #require(SlideCanvasRegion(x: 0, y: 0, width: 0.5, height: 1))
+    let selection = try #require(
+      ConfirmedSlideCanvasSelection(
+        captureOperationID: selectionOperationID,
+        windowID: 71,
+        captureSurfaceGeometry: geometry,
+        region: region
+      )
+    )
+    let wrongOperation = try #require(
+      makeFreshSample(
+        operationID: CaptureOperationID(rawValue: 31),
+        image: image,
+        geometry: geometry,
+        windowID: 71
+      )
+    )
+    let wrongWindow = try #require(
+      makeFreshSample(
+        operationID: selectionOperationID,
+        image: image,
+        geometry: geometry,
+        windowID: 72
+      )
+    )
+    let wrongProcess = try #require(
+      makeFreshSample(
+        operationID: selectionOperationID,
+        image: image,
+        geometry: geometry,
+        windowID: 71,
+        processID: 9_999
+      )
+    )
+    let matching = try #require(
+      makeFreshSample(
+        operationID: selectionOperationID,
+        image: image,
+        geometry: geometry,
+        windowID: 71
+      )
+    )
+
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          matching,
+          expectedIdentity: matching.identity,
+          anchorSequenceNumber: 0,
+          selection: selection
+        )
+      ) == .invalidAnchorSequence
+    )
+
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          wrongOperation,
+          expectedIdentity: wrongOperation.identity,
+          anchorSequenceNumber: 1,
+          selection: selection
+        )
+      ) == .captureOperationMismatch
+    )
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          wrongWindow,
+          expectedIdentity: matching.identity,
+          anchorSequenceNumber: 1,
+          selection: selection
+        )
+      ) == .windowIdentityMismatch
+    )
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          wrongProcess,
+          expectedIdentity: matching.identity,
+          anchorSequenceNumber: 1,
+          selection: selection
+        )
+      ) == .windowIdentityMismatch
+    )
+    guard
+      case .prepared = FreshSlideCanvasSamplePreparer.evaluate(
+        matching,
+        expectedIdentity: matching.identity,
+        anchorSequenceNumber: 1,
+        selection: selection
+      )
+    else {
+      Issue.record("A rejected fresh sample must not invalidate the immutable selection.")
+      return
+    }
+  }
+
+  @Test func rejectsFreshProductionSurfaceTupleAndOutputDimensionMismatches() throws {
+    let operationID = CaptureOperationID(rawValue: 40)
+    let image = try #require(makeSolidImage(width: 4, height: 2, rgb: (1, 2, 3)))
+    let selectedGeometry = makeGeometry(width: 4, height: 2)
+    let region = try #require(SlideCanvasRegion(x: 0, y: 0, width: 1, height: 1))
+    let selection = try #require(
+      ConfirmedSlideCanvasSelection(
+        captureOperationID: operationID,
+        windowID: 81,
+        captureSurfaceGeometry: selectedGeometry,
+        region: region
+      )
+    )
+    let changedTuple = makeGeometry(
+      contentRect: CGRect(x: 1, y: 0, width: 3, height: 2),
+      width: 4,
+      height: 2
+    )
+    let tupleMismatch = try #require(
+      makeFreshSample(
+        operationID: operationID,
+        image: image,
+        geometry: changedTuple,
+        windowID: 81
+      )
+    )
+    let outputMismatch = try #require(
+      makeFreshSample(
+        operationID: operationID,
+        image: image,
+        geometry: makeGeometry(width: 5, height: 2),
+        windowID: 81
+      )
+    )
+
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          tupleMismatch,
+          expectedIdentity: tupleMismatch.identity,
+          anchorSequenceNumber: 1,
+          selection: selection
+        )
+      ) == .surfaceGeometryMismatch
+    )
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          outputMismatch,
+          expectedIdentity: outputMismatch.identity,
+          anchorSequenceNumber: 1,
+          selection: selection
+        )
+      ) == .outputDimensionsMismatch
+    )
+  }
+
+  @Test func testOnlyFreshFullFrameRequiresOriginalSourceDimensions() throws {
+    let operationID = CaptureOperationID(rawValue: 50)
+    let image = try #require(makeSolidImage(width: 4, height: 2, rgb: (1, 2, 3)))
+    let sample = try #require(
+      makeFreshSample(
+        operationID: operationID,
+        image: image,
+        geometry: makeGeometry(width: 4, height: 2),
+        windowID: 91
+      )
+    )
+    let mismatchedSelection = try #require(
+      ConfirmedSlideCanvasSelection.testOnlyFullFrame(
+        captureOperationID: operationID,
+        windowID: 91,
+        sourcePixelWidth: 5,
+        sourcePixelHeight: 2
+      )
+    )
+    let matchingSelection = try #require(
+      ConfirmedSlideCanvasSelection.testOnlyFullFrame(
+        captureOperationID: operationID,
+        windowID: 91,
+        sourcePixelWidth: 4,
+        sourcePixelHeight: 2
+      )
+    )
+
+    #expect(
+      rejection(
+        FreshSlideCanvasSamplePreparer.evaluate(
+          sample,
+          expectedIdentity: sample.identity,
+          anchorSequenceNumber: 1,
+          selection: mismatchedSelection
+        )
+      ) == .testOnlySourceDimensionsMismatch
+    )
+    guard
+      case .prepared(let prepared) = FreshSlideCanvasSamplePreparer.evaluate(
+        sample,
+        expectedIdentity: sample.identity,
+        anchorSequenceNumber: 1,
+        selection: matchingSelection
+      )
+    else {
+      Issue.record("Expected exact test-only source dimensions to pass.")
+      return
+    }
+    #expect(prepared.image === image)
+    #expect(prepared.contentFingerprint?.isValid == true)
+  }
+
+  @Test func fullFrameFreshSampleMatchesTheSameHighContrastImageFingerprint() throws {
+    let operationID = CaptureOperationID(rawValue: 60)
+    let image = try #require(
+      makeImage(
+        width: 2,
+        height: 1,
+        rgbaBytes: [255, 255, 255, 255, 0, 0, 0, 255]
+      )
+    )
+    let anchorFingerprint = try #require(
+      CGImageRasterizer.makeFrameFingerprint(from: image)
+    )
+    let anchorContentFingerprint = try #require(
+      CGImageRasterizer.makeContentFingerprint(from: image)
+    )
+    let sample = try #require(
+      makeFreshSample(
+        operationID: operationID,
+        image: image,
+        geometry: makeGeometry(width: 2, height: 1),
+        windowID: 101
+      )
+    )
+    let selection = try #require(
+      ConfirmedSlideCanvasSelection.testOnlyFullFrame(
+        captureOperationID: operationID,
+        windowID: 101,
+        sourcePixelWidth: 2,
+        sourcePixelHeight: 1
+      )
+    )
+
+    guard
+      case .prepared(let prepared) = FreshSlideCanvasSamplePreparer.evaluate(
+        sample,
+        expectedIdentity: sample.identity,
+        anchorSequenceNumber: 9,
+        selection: selection
+      )
+    else {
+      Issue.record("Expected a valid full-frame fresh sample.")
+      return
+    }
+
+    #expect(prepared.fingerprint.normalizedDifference(from: anchorFingerprint) == 0)
+    #expect(prepared.contentFingerprint == anchorContentFingerprint)
+  }
+
   private func makeFrame(image: CGImage, windowID: CGWindowID) -> CapturedPowerPointFrame {
     makeFrame(
       image: image,
@@ -443,6 +812,40 @@ struct SlideCanvasCropperTests {
       preconditionFailure("Synthetic geometry must be valid.")
     }
     return geometry
+  }
+
+  private func makeFreshSample(
+    requestID: FreshSampleRequestID = FreshSampleRequestID(),
+    operationID: CaptureOperationID,
+    image: CGImage,
+    geometry: CaptureSurfaceGeometry,
+    windowID: CGWindowID,
+    processID: pid_t = 1_234
+  ) -> FreshPowerPointWindowSample? {
+    guard
+      let identity = PowerPointWindowIdentity(
+        windowID: windowID,
+        ownerProcessID: processID,
+        bundleIdentifier: PowerPointWindowIdentity.expectedBundleIdentifier
+      )
+    else {
+      return nil
+    }
+    return FreshPowerPointWindowSample(
+      requestID: requestID,
+      captureOperationID: operationID,
+      identity: identity,
+      capturedAt: Date(timeIntervalSince1970: 2),
+      captureSurfaceGeometry: geometry,
+      image: image
+    )
+  }
+
+  private func rejection(
+    _ outcome: FreshSlideCanvasSamplePreparer.Outcome
+  ) -> FreshSlideCanvasSampleRejection? {
+    guard case .rejected(let reason) = outcome else { return nil }
+    return reason
   }
 
   private func makeSplitImage(

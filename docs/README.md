@@ -34,6 +34,7 @@ The [`adr`](adr/) directory records the platform, overlay, context, AI-provider,
 - [ADR 0008 — Post-identity frame timeout](adr/0008-post-identity-frame-timeout.md)
 - [ADR 0009 — User-confirmed slide-canvas boundary](adr/0009-user-confirmed-slide-canvas-boundary.md)
 - [ADR 0010 — Fail-closed production-overlay boundary](adr/0010-fail-closed-production-overlay-boundary.md)
+- [ADR 0011 — Bounded dense-change fresh samples](adr/0011-bound-dense-change-fresh-samples.md)
 
 ## Local development handoff
 

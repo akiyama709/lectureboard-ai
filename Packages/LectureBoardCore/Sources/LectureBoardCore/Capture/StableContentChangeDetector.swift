@@ -110,19 +110,45 @@ public enum StableContentChangeState: Equatable, Sendable {
   case contentChanged
 }
 
+/// Identifies one currently pending content-change candidate without exposing
+/// its fingerprint or internal identity.
+public struct StableContentChangeCandidateToken: Hashable, Sendable {
+  private let identity: StableContentChangeCandidateIdentity
+
+  fileprivate init() {
+    self.identity = StableContentChangeCandidateIdentity()
+  }
+
+  public static func == (
+    lhs: StableContentChangeCandidateToken,
+    rhs: StableContentChangeCandidateToken
+  ) -> Bool {
+    lhs.identity === rhs.identity
+  }
+
+  public func hash(into hasher: inout Hasher) {
+    hasher.combine(ObjectIdentifier(identity))
+  }
+}
+
+private final class StableContentChangeCandidateIdentity: Sendable {}
+
 public struct StableContentChangeObservation: Equatable, Sendable {
   public let state: StableContentChangeState
   public let comparisonFromBaseline: ContentFingerprintComparison?
   public let baselineFingerprint: ContentFingerprint?
+  public let pendingChangeToken: StableContentChangeCandidateToken?
 
   public init(
     state: StableContentChangeState,
     comparisonFromBaseline: ContentFingerprintComparison?,
-    baselineFingerprint: ContentFingerprint?
+    baselineFingerprint: ContentFingerprint?,
+    pendingChangeToken: StableContentChangeCandidateToken? = nil
   ) {
     self.state = state
     self.comparisonFromBaseline = comparisonFromBaseline
     self.baselineFingerprint = baselineFingerprint
+    self.pendingChangeToken = pendingChangeToken
   }
 }
 
@@ -132,6 +158,7 @@ public struct StableContentChangeDetector: Sendable {
   private var baselineFingerprint: ContentFingerprint?
   private var candidateFingerprint: ContentFingerprint?
   private var candidateCount = 0
+  private var pendingChangeToken: StableContentChangeCandidateToken?
 
   public init(configuration: StableContentChangeDetectorConfiguration = .init()) {
     self.configuration = configuration
@@ -139,8 +166,7 @@ public struct StableContentChangeDetector: Sendable {
 
   public mutating func reset() {
     baselineFingerprint = nil
-    candidateFingerprint = nil
-    candidateCount = 0
+    clearCandidate()
   }
 
   @discardableResult
@@ -153,6 +179,52 @@ public struct StableContentChangeDetector: Sendable {
 
   public mutating func discardPendingChange() {
     clearCandidate()
+  }
+
+  /// Adds evidence to the exact pending content-change candidate represented by
+  /// `token`. Rejected evidence returns `nil` and leaves detector state intact.
+  ///
+  /// This is intended for bounded out-of-band samples. It does not create or
+  /// replace a candidate, and it cannot establish an initial baseline.
+  public mutating func confirmPendingChange(
+    _ fingerprint: ContentFingerprint,
+    token: StableContentChangeCandidateToken
+  ) -> StableContentChangeObservation? {
+    guard fingerprint.isValid,
+      let baselineFingerprint,
+      let candidateFingerprint,
+      let pendingChangeToken,
+      pendingChangeToken == token,
+      candidateCount > 0,
+      hasExpectedDimensions(fingerprint),
+      candidateMatches(fingerprint),
+      let comparisonFromBaseline = fingerprint.comparison(
+        from: baselineFingerprint,
+        cellDifferenceThreshold: configuration.cellDifferenceThreshold
+      )
+    else {
+      return nil
+    }
+
+    let differsFromBaseline =
+      comparisonFromBaseline.changedCellCount > 0
+      && comparisonFromBaseline.changedCellRate >= configuration.minimumChangedCellRate
+    guard differsFromBaseline else { return nil }
+
+    candidateCount += 1
+    guard candidateCount >= configuration.requiredConsecutiveFrames else {
+      return observation(
+        state: .contentChangePending(consecutiveFrames: candidateCount),
+        comparisonFromBaseline: comparisonFromBaseline
+      )
+    }
+
+    self.baselineFingerprint = candidateFingerprint
+    clearCandidate()
+    return observation(
+      state: .contentChanged,
+      comparisonFromBaseline: comparisonFromBaseline
+    )
   }
 
   public mutating func ingest(
@@ -191,6 +263,7 @@ public struct StableContentChangeDetector: Sendable {
     } else {
       candidateFingerprint = fingerprint
       candidateCount = 1
+      pendingChangeToken = StableContentChangeCandidateToken()
     }
 
     guard candidateCount >= configuration.requiredConsecutiveFrames,
@@ -218,6 +291,7 @@ public struct StableContentChangeDetector: Sendable {
     } else {
       candidateFingerprint = fingerprint
       candidateCount = 1
+      pendingChangeToken = nil
     }
 
     guard candidateCount >= configuration.requiredConsecutiveFrames,
@@ -253,16 +327,25 @@ public struct StableContentChangeDetector: Sendable {
   private mutating func clearCandidate() {
     candidateFingerprint = nil
     candidateCount = 0
+    pendingChangeToken = nil
   }
 
   private func observation(
     state: StableContentChangeState,
     comparisonFromBaseline: ContentFingerprintComparison? = nil
   ) -> StableContentChangeObservation {
-    StableContentChangeObservation(
+    let observablePendingChangeToken: StableContentChangeCandidateToken?
+    if case .contentChangePending = state {
+      observablePendingChangeToken = pendingChangeToken
+    } else {
+      observablePendingChangeToken = nil
+    }
+
+    return StableContentChangeObservation(
       state: state,
       comparisonFromBaseline: comparisonFromBaseline,
-      baselineFingerprint: baselineFingerprint
+      baselineFingerprint: baselineFingerprint,
+      pendingChangeToken: observablePendingChangeToken
     )
   }
 }

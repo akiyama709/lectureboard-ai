@@ -12,6 +12,7 @@
 		15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */; };
 		170B4EBB32FCC514A6F1DD12 /* RuntimeVerificationPermissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE751E95121001B5CC8751E /* RuntimeVerificationPermissionPolicy.swift */; };
 		17E19A5D0092192B875989B7 /* DisplayCoordinateSnapshotProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0231A8C423EE223BACBCBE27 /* DisplayCoordinateSnapshotProvider.swift */; };
+		1A85DA374EDE97B270CE9672 /* FreshPowerPointWindowSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99E0A32CABE7EE68D1E7C093 /* FreshPowerPointWindowSample.swift */; };
 		1B3BBF17EF512860F1DDD5F0 /* SlideCanvasCalibrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183F00DFA7B07C7191DF5E6E /* SlideCanvasCalibrationTests.swift */; };
 		1C738559CA669F8BB7BC0D5B /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4614FE7EC712603B67D3964 /* TranscriptionProvider.swift */; };
 		1CFEB3D0827FEABA39C4E7F9 /* RuntimeVerificationWindowSelectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67ED979FFCBC3875345D1B6 /* RuntimeVerificationWindowSelectorTests.swift */; };
@@ -54,6 +55,7 @@
 		CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */; };
 		D246E75CC4EC3135D57F194F /* RuntimeVerificationHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A345C0DC1E4887ADBE0CC9 /* RuntimeVerificationHostView.swift */; };
 		D2928CBE9C5434FD2164CA68 /* DemoBoardSceneFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */; };
+		D5130E4B5883D16D68F6401D /* AppFreshContentSampleIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6762B018CA178D4534CD0A3 /* AppFreshContentSampleIntegrationTests.swift */; };
 		DD91F76CC3DA3E2EF12AC7C0 /* SlideVisionAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D151DFBB724F1F892CF322C3 /* SlideVisionAnalyzer.swift */; };
 		DDE3CDC591EAB8E3961F7A4E /* ProductionOverlayEligibilityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */; };
 		E574DF31282514A1E8639F81 /* CGImageRasterizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3481B81CFD853D292EFE12 /* CGImageRasterizerTests.swift */; };
@@ -111,6 +113,7 @@
 		6CE5A06FD66D0421B4FCDB73 /* RuntimeVerificationReportWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationReportWriter.swift; sourceTree = "<group>"; };
 		6D65BCB707258FE845C04C66 /* RuntimeVerificationRunnerIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationRunnerIntegrationTests.swift; sourceTree = "<group>"; };
 		7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionOverlayEligibilityProviderTests.swift; sourceTree = "<group>"; };
+		99E0A32CABE7EE68D1E7C093 /* FreshPowerPointWindowSample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FreshPowerPointWindowSample.swift; sourceTree = "<group>"; };
 		9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalInkStyle.swift; sourceTree = "<group>"; };
 		9C4BEFE7878AD8CA03EE430A /* RuntimeVerificationSnapshotProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationSnapshotProjector.swift; sourceTree = "<group>"; };
 		A278657D170BEE56FC7CA483 /* AppContentChangeIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContentChangeIntegrationTests.swift; sourceTree = "<group>"; };
@@ -134,6 +137,7 @@
 		DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechRecognizerProvider.swift; sourceTree = "<group>"; };
 		E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoBoardSceneFactory.swift; sourceTree = "<group>"; };
 		E27AF28CC1C1B769574C1FDC /* CGImageRasterizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGImageRasterizer.swift; sourceTree = "<group>"; };
+		E6762B018CA178D4534CD0A3 /* AppFreshContentSampleIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFreshContentSampleIntegrationTests.swift; sourceTree = "<group>"; };
 		E78A6B7F5758FCB240CA36DA /* PowerPointWindowIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowIdentityTests.swift; sourceTree = "<group>"; };
 		EE3481B81CFD853D292EFE12 /* CGImageRasterizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGImageRasterizerTests.swift; sourceTree = "<group>"; };
 		F2F5A3F602842353D19BC808 /* CaptureDeliveryMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDeliveryMetrics.swift; sourceTree = "<group>"; };
@@ -266,6 +270,7 @@
 			isa = PBXGroup;
 			children = (
 				A278657D170BEE56FC7CA483 /* AppContentChangeIntegrationTests.swift */,
+				E6762B018CA178D4534CD0A3 /* AppFreshContentSampleIntegrationTests.swift */,
 				2FC879B22ADEB760BE850009 /* AppModelPermissionTests.swift */,
 				DA3395EFB908D5DD6084507C /* AppSlideCanvasIntegrationTests.swift */,
 				1D7C61CD4E4190A5CDA3B42A /* AppSlideIdentityIntegrationTests.swift */,
@@ -318,6 +323,7 @@
 			isa = PBXGroup;
 			children = (
 				F2F5A3F602842353D19BC808 /* CaptureDeliveryMetrics.swift */,
+				99E0A32CABE7EE68D1E7C093 /* FreshPowerPointWindowSample.swift */,
 				36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */,
 			);
 			path = Capture;
@@ -454,6 +460,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A94CFE60E848E7A8640904F8 /* AppContentChangeIntegrationTests.swift in Sources */,
+				D5130E4B5883D16D68F6401D /* AppFreshContentSampleIntegrationTests.swift in Sources */,
 				F1FEBFE97ACB4D8D35C3E2B2 /* AppModelPermissionTests.swift in Sources */,
 				A7EAB2B8DD0FC248EBDBF6B2 /* AppSlideCanvasIntegrationTests.swift in Sources */,
 				A4E7163F132C8E8545BA9376 /* AppSlideIdentityIntegrationTests.swift in Sources */,
@@ -494,6 +501,7 @@
 				D2928CBE9C5434FD2164CA68 /* DemoBoardSceneFactory.swift in Sources */,
 				CEDB5ACD9C3AC7C25D9D68E8 /* DigitalInkStyle.swift in Sources */,
 				17E19A5D0092192B875989B7 /* DisplayCoordinateSnapshotProvider.swift in Sources */,
+				1A85DA374EDE97B270CE9672 /* FreshPowerPointWindowSample.swift in Sources */,
 				5FCFB9CC3030B9EA0311AB64 /* LectureBoardAIApp.swift in Sources */,
 				5F3046B9FDDCA5989CE8FC26 /* MainView.swift in Sources */,
 				CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */,

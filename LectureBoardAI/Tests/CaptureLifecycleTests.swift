@@ -1,4 +1,6 @@
 import CoreGraphics
+import CoreMedia
+import CoreVideo
 import Foundation
 import LectureBoardCore
 import ScreenCaptureKit
@@ -231,6 +233,265 @@ struct CaptureSessionLifecycleTests {
     #expect(acceptedFirstStart)
     #expect(acceptedSecondStart)
     #expect(lifecycle.activeSessionID == CaptureOperationID(rawValue: 2))
+  }
+}
+
+struct FreshSampleCaptureLifecycleTests {
+  @Test func acceptsOnlyOneRequestForTheExactActiveCapture() throws {
+    var lifecycle = FreshSampleCaptureLifecycle()
+    let operationID = CaptureOperationID(rawValue: 7)
+    let identity = try #require(makeIdentity(windowID: 71, processID: 701))
+    let firstRequestID = FreshSampleRequestID()
+    let secondRequestID = FreshSampleRequestID()
+
+    lifecycle.activate(operationID: operationID, identity: identity)
+
+    let acceptedFirstRequest = lifecycle.beginRequest(
+      firstRequestID,
+      operationID: operationID,
+      identity: identity
+    )
+    let acceptedSecondRequest = lifecycle.beginRequest(
+      secondRequestID,
+      operationID: operationID,
+      identity: identity
+    )
+    #expect(acceptedFirstRequest)
+    #expect(!acceptedSecondRequest)
+    #expect(
+      lifecycle.acceptsCompletion(
+        requestID: firstRequestID,
+        operationID: operationID,
+        identity: identity
+      )
+    )
+  }
+
+  @Test func rejectsOperationAndIdentityMismatches() throws {
+    var lifecycle = FreshSampleCaptureLifecycle()
+    let operationID = CaptureOperationID(rawValue: 8)
+    let identity = try #require(makeIdentity(windowID: 81, processID: 801))
+    let otherIdentity = try #require(makeIdentity(windowID: 81, processID: 802))
+    let requestID = FreshSampleRequestID()
+
+    lifecycle.activate(operationID: operationID, identity: identity)
+
+    let acceptedWrongOperation = lifecycle.beginRequest(
+      requestID,
+      operationID: CaptureOperationID(rawValue: 9),
+      identity: identity
+    )
+    let acceptedWrongIdentity = lifecycle.beginRequest(
+      requestID,
+      operationID: operationID,
+      identity: otherIdentity
+    )
+    #expect(!acceptedWrongOperation)
+    #expect(!acceptedWrongIdentity)
+    #expect(lifecycle.inFlightRequestID == nil)
+  }
+
+  @Test func invalidatedInFlightRequestKeepsTheProviderBusyUntilItReturns() throws {
+    var lifecycle = FreshSampleCaptureLifecycle()
+    let oldOperationID = CaptureOperationID(rawValue: 10)
+    let newOperationID = CaptureOperationID(rawValue: 11)
+    let oldIdentity = try #require(makeIdentity(windowID: 101, processID: 1_001))
+    let newIdentity = try #require(makeIdentity(windowID: 111, processID: 1_101))
+    let oldRequestID = FreshSampleRequestID()
+    let newRequestID = FreshSampleRequestID()
+
+    lifecycle.activate(operationID: oldOperationID, identity: oldIdentity)
+    let acceptedOldRequest = lifecycle.beginRequest(
+      oldRequestID,
+      operationID: oldOperationID,
+      identity: oldIdentity
+    )
+    #expect(acceptedOldRequest)
+
+    lifecycle.deactivate()
+    lifecycle.activate(operationID: newOperationID, identity: newIdentity)
+
+    #expect(
+      !lifecycle.acceptsCompletion(
+        requestID: oldRequestID,
+        operationID: oldOperationID,
+        identity: oldIdentity
+      )
+    )
+    let acceptedNewRequestWhileOldIsInFlight = lifecycle.beginRequest(
+      newRequestID,
+      operationID: newOperationID,
+      identity: newIdentity
+    )
+    #expect(!acceptedNewRequestWhileOldIsInFlight)
+
+    lifecycle.finishRequest(oldRequestID)
+    let acceptedNewRequestAfterOldFinished = lifecycle.beginRequest(
+      newRequestID,
+      operationID: newOperationID,
+      identity: newIdentity
+    )
+    #expect(acceptedNewRequestAfterOldFinished)
+  }
+
+  @Test func staleFinishCannotReleaseANewerRequest() throws {
+    var lifecycle = FreshSampleCaptureLifecycle()
+    let operationID = CaptureOperationID(rawValue: 12)
+    let identity = try #require(makeIdentity(windowID: 121, processID: 1_201))
+    let staleRequestID = FreshSampleRequestID()
+    let currentRequestID = FreshSampleRequestID()
+
+    lifecycle.activate(operationID: operationID, identity: identity)
+    let acceptedCurrentRequest = lifecycle.beginRequest(
+      currentRequestID,
+      operationID: operationID,
+      identity: identity
+    )
+    #expect(acceptedCurrentRequest)
+
+    lifecycle.finishRequest(staleRequestID)
+
+    #expect(lifecycle.inFlightRequestID == currentRequestID)
+  }
+
+  private func makeIdentity(
+    windowID: CGWindowID,
+    processID: pid_t
+  ) -> PowerPointWindowIdentity? {
+    PowerPointWindowIdentity(
+      windowID: windowID,
+      ownerProcessID: processID,
+      bundleIdentifier: PowerPointWindowIdentity.expectedBundleIdentifier
+    )
+  }
+}
+
+struct FreshPowerPointSampleBufferConverterTests {
+  @Test func acceptsOnlyANewBGRAFrameWithCompleteSurfaceGeometry() throws {
+    let capturedAt = Date(timeIntervalSince1970: 123)
+    let sampleBuffer = try #require(
+      makeSampleBuffer(status: .complete, includesSurfaceGeometry: true)
+    )
+
+    let surface = try #require(
+      FreshPowerPointSampleBufferConverter.makeSurface(
+        from: sampleBuffer,
+        capturedAt: capturedAt
+      )
+    )
+
+    #expect(surface.capturedAt == capturedAt)
+    #expect(surface.image.width == 4)
+    #expect(surface.image.height == 2)
+    #expect(surface.captureSurfaceGeometry.outputPixelWidth == 4)
+    #expect(surface.captureSurfaceGeometry.outputPixelHeight == 2)
+    #expect(surface.captureSurfaceGeometry.contentRect == CGRect(x: 0, y: 0, width: 4, height: 2))
+  }
+
+  @Test func rejectsIdleOrIncompleteSurfaceEvidence() throws {
+    let idle = try #require(
+      makeSampleBuffer(status: .idle, includesSurfaceGeometry: true)
+    )
+    let missingGeometry = try #require(
+      makeSampleBuffer(status: .complete, includesSurfaceGeometry: false)
+    )
+    let wrongPixelFormat = try #require(
+      makeSampleBuffer(
+        status: .complete,
+        includesSurfaceGeometry: true,
+        pixelFormat: kCVPixelFormatType_32ARGB
+      )
+    )
+
+    #expect(
+      FreshPowerPointSampleBufferConverter.makeSurface(
+        from: idle,
+        capturedAt: .distantPast
+      ) == nil
+    )
+    #expect(
+      FreshPowerPointSampleBufferConverter.makeSurface(
+        from: missingGeometry,
+        capturedAt: .distantPast
+      ) == nil
+    )
+    #expect(
+      FreshPowerPointSampleBufferConverter.makeSurface(
+        from: wrongPixelFormat,
+        capturedAt: .distantPast
+      ) == nil
+    )
+  }
+
+  private func makeSampleBuffer(
+    status: SCFrameStatus,
+    includesSurfaceGeometry: Bool,
+    pixelFormat: OSType = kCVPixelFormatType_32BGRA
+  ) -> CMSampleBuffer? {
+    var pixelBuffer: CVPixelBuffer?
+    let attributes: [CFString: Any] = [
+      kCVPixelBufferCGImageCompatibilityKey: true,
+      kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+    ]
+    guard
+      CVPixelBufferCreate(
+        kCFAllocatorDefault,
+        4,
+        2,
+        pixelFormat,
+        attributes as CFDictionary,
+        &pixelBuffer
+      ) == kCVReturnSuccess,
+      let pixelBuffer
+    else {
+      return nil
+    }
+
+    var formatDescription: CMVideoFormatDescription?
+    guard
+      CMVideoFormatDescriptionCreateForImageBuffer(
+        allocator: kCFAllocatorDefault,
+        imageBuffer: pixelBuffer,
+        formatDescriptionOut: &formatDescription
+      ) == noErr,
+      let formatDescription
+    else {
+      return nil
+    }
+
+    var timing = CMSampleTimingInfo(
+      duration: .invalid,
+      presentationTimeStamp: .zero,
+      decodeTimeStamp: .invalid
+    )
+    var sampleBuffer: CMSampleBuffer?
+    guard
+      CMSampleBufferCreateReadyWithImageBuffer(
+        allocator: kCFAllocatorDefault,
+        imageBuffer: pixelBuffer,
+        formatDescription: formatDescription,
+        sampleTiming: &timing,
+        sampleBufferOut: &sampleBuffer
+      ) == noErr,
+      let sampleBuffer,
+      let attachmentArray = CMSampleBufferGetSampleAttachmentsArray(
+        sampleBuffer,
+        createIfNecessary: true
+      ) as NSArray?,
+      let attachments = attachmentArray.firstObject as? NSMutableDictionary
+    else {
+      return nil
+    }
+
+    attachments[SCStreamFrameInfo.status] = NSNumber(value: status.rawValue)
+    if includesSurfaceGeometry {
+      attachments[SCStreamFrameInfo.contentRect] = NSValue(
+        rect: CGRect(x: 0, y: 0, width: 4, height: 2)
+      )
+      attachments[SCStreamFrameInfo.scaleFactor] = NSNumber(value: 2.0)
+      attachments[SCStreamFrameInfo.contentScale] = NSNumber(value: 1.0)
+    }
+    return sampleBuffer
   }
 }
 

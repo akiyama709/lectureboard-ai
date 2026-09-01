@@ -90,6 +90,141 @@ struct StableContentChangeDetectorTests {
     )
     #expect(firstDelivery.baselineFingerprint == baseline)
     #expect(secondDelivery.baselineFingerprint == baseline)
+    #expect(firstDelivery.pendingChangeToken != nil)
+    #expect(secondDelivery.pendingChangeToken == firstDelivery.pendingChangeToken)
+  }
+
+  @Test func pendingChangeTokenAllowsOnlyMatchingNonDestructiveConfirmations() throws {
+    var detector = StableContentChangeDetector()
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let changed = changingCells(in: baseline, indices: Array(0..<15))
+    let acceptedBaseline = detector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+
+    let firstDelivery = detector.ingest(changed)
+    let token = try #require(firstDelivery.pendingChangeToken)
+    acceptsSendable(token)
+
+    let secondResult = detector.confirmPendingChange(changed, token: token)
+    let secondDelivery = try #require(secondResult)
+    let confirmationResult = detector.confirmPendingChange(changed, token: token)
+    let confirmed = try #require(confirmationResult)
+
+    #expect(secondDelivery.state == .contentChangePending(consecutiveFrames: 2))
+    #expect(secondDelivery.pendingChangeToken == token)
+    #expect(confirmed.state == .contentChanged)
+    #expect(confirmed.pendingChangeToken == nil)
+    #expect(confirmed.baselineFingerprint == changed)
+    let staleConfirmation = detector.confirmPendingChange(changed, token: token)
+    #expect(staleConfirmation == nil)
+    #expect(detector.ingest(changed).state == .unchanged)
+  }
+
+  @Test func rejectedFreshConfirmationsDoNotMutatePendingCandidate() throws {
+    var detector = StableContentChangeDetector()
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let changed = changingCells(in: baseline, indices: Array(0..<15))
+    let otherCandidate = changingCells(in: baseline, indices: Array(15..<30))
+    let malformed = ContentFingerprint(sampleColumns: 160, sampleRows: 90, cells: [])
+    let mismatchedDimensions = fingerprint(columns: 90, rows: 160)
+    let acceptedBaseline = detector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+
+    let pending = detector.ingest(changed)
+    let token = try #require(pending.pendingChangeToken)
+
+    let malformedResult = detector.confirmPendingChange(malformed, token: token)
+    let mismatchedResult = detector.confirmPendingChange(mismatchedDimensions, token: token)
+    let otherCandidateResult = detector.confirmPendingChange(otherCandidate, token: token)
+    #expect(malformedResult == nil)
+    #expect(mismatchedResult == nil)
+    #expect(otherCandidateResult == nil)
+
+    let matchingResult = detector.confirmPendingChange(changed, token: token)
+    let stillSecond = try #require(matchingResult)
+    #expect(stillSecond.state == .contentChangePending(consecutiveFrames: 2))
+    #expect(stillSecond.pendingChangeToken == token)
+  }
+
+  @Test func staleTokenCannotConfirmReplacementCandidate() throws {
+    var detector = StableContentChangeDetector()
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let firstCandidate = changingCells(in: baseline, indices: Array(0..<15))
+    let replacementCandidate = changingCells(in: baseline, indices: Array(15..<30))
+    let acceptedBaseline = detector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+
+    let firstToken = try #require(detector.ingest(firstCandidate).pendingChangeToken)
+    let replacementPending = detector.ingest(replacementCandidate)
+    let replacementToken = try #require(replacementPending.pendingChangeToken)
+
+    #expect(firstToken != replacementToken)
+    let staleResult = detector.confirmPendingChange(replacementCandidate, token: firstToken)
+    #expect(staleResult == nil)
+
+    let replacementResult = detector.confirmPendingChange(
+      replacementCandidate,
+      token: replacementToken
+    )
+    let replacementSecond = try #require(replacementResult)
+    #expect(replacementSecond.state == .contentChangePending(consecutiveFrames: 2))
+    #expect(replacementSecond.pendingChangeToken == replacementToken)
+  }
+
+  @Test func tokenFromAnotherDetectorCannotConfirmCandidate() throws {
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let changed = changingCells(in: baseline, indices: Array(0..<15))
+    var detector = StableContentChangeDetector()
+    var otherDetector = StableContentChangeDetector()
+    let acceptedBaseline = detector.rebase(to: baseline)
+    let acceptedOtherBaseline = otherDetector.rebase(to: baseline)
+    #expect(acceptedBaseline)
+    #expect(acceptedOtherBaseline)
+
+    let pending = detector.ingest(changed)
+    let token = try #require(pending.pendingChangeToken)
+    let otherPending = otherDetector.ingest(changed)
+    let foreignToken = try #require(otherPending.pendingChangeToken)
+    #expect(token != foreignToken)
+
+    let foreignResult = detector.confirmPendingChange(changed, token: foreignToken)
+    #expect(foreignResult == nil)
+    let matchingResult = detector.confirmPendingChange(changed, token: token)
+    let secondDelivery = try #require(matchingResult)
+    #expect(secondDelivery.state == .contentChangePending(consecutiveFrames: 2))
+  }
+
+  @Test func resetRebaseAndDiscardInvalidatePendingChangeTokens() throws {
+    let baseline = fingerprint(columns: 160, rows: 90)
+    let changed = changingCells(in: baseline, indices: Array(0..<15))
+    var detector = StableContentChangeDetector()
+
+    let acceptedInitialBaseline = detector.rebase(to: baseline)
+    #expect(acceptedInitialBaseline)
+    let tokenBeforeReset = try #require(detector.ingest(changed).pendingChangeToken)
+    detector.reset()
+    let afterResetResult = detector.confirmPendingChange(changed, token: tokenBeforeReset)
+    #expect(afterResetResult == nil)
+
+    let acceptedPostResetBaseline = detector.rebase(to: baseline)
+    #expect(acceptedPostResetBaseline)
+    let tokenBeforeRebase = try #require(detector.ingest(changed).pendingChangeToken)
+    #expect(tokenBeforeReset != tokenBeforeRebase)
+    let acceptedRebase = detector.rebase(to: baseline)
+    #expect(acceptedRebase)
+    let afterRebaseResult = detector.confirmPendingChange(changed, token: tokenBeforeRebase)
+    #expect(afterRebaseResult == nil)
+
+    let tokenBeforeDiscard = try #require(detector.ingest(changed).pendingChangeToken)
+    detector.discardPendingChange()
+    let afterDiscardResult = detector.confirmPendingChange(changed, token: tokenBeforeDiscard)
+    #expect(afterDiscardResult == nil)
+
+    let replacementToken = try #require(detector.ingest(changed).pendingChangeToken)
+    #expect(replacementToken != tokenBeforeDiscard)
+    let replacementResult = detector.confirmPendingChange(changed, token: replacementToken)
+    let replacementSecond = try #require(replacementResult)
+    #expect(replacementSecond.state == .contentChangePending(consecutiveFrames: 2))
   }
 
   @Test func defaultConfigurationResetsCandidateAndConfirmsOnlyLaterPersistentState() {
@@ -345,4 +480,6 @@ struct StableContentChangeDetectorTests {
     }
     return FrameFingerprint(sampleColumns: 32, sampleRows: 18, luminance: luminance)
   }
+
+  private func acceptsSendable<T: Sendable>(_: T) {}
 }

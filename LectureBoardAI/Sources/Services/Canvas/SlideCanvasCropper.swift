@@ -113,16 +113,84 @@ struct ConfirmedSlideCanvasSelection: Equatable, Sendable {
   }
 }
 
-/// A capture delivery whose image and fingerprints contain only the confirmed canvas.
+enum CapturedSlideCanvasFrameOrigin: Equatable, Sendable {
+  case continuousStream(
+    displayTime: UInt64?,
+    deliveryKind: CapturedFrameDeliveryKind
+  )
+  case boundedFreshSample(
+    requestID: FreshSampleRequestID,
+    anchorSequenceNumber: UInt64
+  )
+}
+
+/// A capture image whose image and fingerprints contain only the confirmed canvas.
 struct CapturedSlideCanvasFrame: @unchecked Sendable {
   let windowID: CGWindowID
   let sequenceNumber: UInt64
   let capturedAt: Date
-  let displayTime: UInt64?
-  let deliveryKind: CapturedFrameDeliveryKind
+  let origin: CapturedSlideCanvasFrameOrigin
   let image: CGImage
   let fingerprint: FrameFingerprint
   let contentFingerprint: ContentFingerprint?
+
+  /// Compatibility accessor by name for continuous stream deliveries. Its type
+  /// is intentionally optional because a bounded fresh sample has no
+  /// ScreenCaptureKit stream display time.
+  var displayTime: UInt64? {
+    guard case .continuousStream(let displayTime, _) = origin else { return nil }
+    return displayTime
+  }
+
+  /// Compatibility accessor by name for continuous stream deliveries. Its type
+  /// is intentionally optional because a bounded fresh sample is deliberately
+  /// neither a new stream delivery nor an idle repeat.
+  var deliveryKind: CapturedFrameDeliveryKind? {
+    guard case .continuousStream(_, let deliveryKind) = origin else { return nil }
+    return deliveryKind
+  }
+
+  init(
+    windowID: CGWindowID,
+    sequenceNumber: UInt64,
+    capturedAt: Date,
+    displayTime: UInt64?,
+    deliveryKind: CapturedFrameDeliveryKind,
+    image: CGImage,
+    fingerprint: FrameFingerprint,
+    contentFingerprint: ContentFingerprint?
+  ) {
+    self.init(
+      windowID: windowID,
+      sequenceNumber: sequenceNumber,
+      capturedAt: capturedAt,
+      origin: .continuousStream(
+        displayTime: displayTime,
+        deliveryKind: deliveryKind
+      ),
+      image: image,
+      fingerprint: fingerprint,
+      contentFingerprint: contentFingerprint
+    )
+  }
+
+  init(
+    windowID: CGWindowID,
+    sequenceNumber: UInt64,
+    capturedAt: Date,
+    origin: CapturedSlideCanvasFrameOrigin,
+    image: CGImage,
+    fingerprint: FrameFingerprint,
+    contentFingerprint: ContentFingerprint?
+  ) {
+    self.windowID = windowID
+    self.sequenceNumber = sequenceNumber
+    self.capturedAt = capturedAt
+    self.origin = origin
+    self.image = image
+    self.fingerprint = fingerprint
+    self.contentFingerprint = contentFingerprint
+  }
 }
 
 enum SlideCanvasFramePreparer {
@@ -217,6 +285,117 @@ enum SlideCanvasFramePreparer {
         capturedAt: frame.capturedAt,
         displayTime: frame.displayTime,
         deliveryKind: frame.deliveryKind,
+        image: canvasImage,
+        fingerprint: fingerprint,
+        contentFingerprint: contentFingerprint
+      )
+    )
+  }
+
+  private static func cropTopLeft(
+    image: CGImage,
+    pixelRect: SlideCanvasPixelRect
+  ) -> CGImage? {
+    image.cropping(
+      to: CGRect(
+        x: pixelRect.x,
+        y: pixelRect.y,
+        width: pixelRect.width,
+        height: pixelRect.height
+      )
+    )
+  }
+}
+
+enum FreshSlideCanvasSampleRejection: Equatable, Sendable {
+  case invalidAnchorSequence
+  case captureOperationMismatch
+  case windowIdentityMismatch
+  case outputDimensionsMismatch
+  case surfaceGeometryMismatch
+  case testOnlySourceDimensionsMismatch
+  case cropOrFingerprintFailed
+}
+
+/// Produces a canvas-local frame from one bounded fresh sample without mutating
+/// or invalidating the production canvas selection on rejection.
+enum FreshSlideCanvasSamplePreparer {
+  enum Outcome {
+    case prepared(CapturedSlideCanvasFrame)
+    case rejected(FreshSlideCanvasSampleRejection)
+  }
+
+  static func evaluate(
+    _ sample: FreshPowerPointWindowSample,
+    expectedIdentity: PowerPointWindowIdentity,
+    anchorSequenceNumber: UInt64,
+    selection: ConfirmedSlideCanvasSelection
+  ) -> Outcome {
+    guard anchorSequenceNumber > 0 else {
+      return .rejected(.invalidAnchorSequence)
+    }
+    guard sample.captureOperationID == selection.captureOperationID else {
+      return .rejected(.captureOperationMismatch)
+    }
+    guard
+      sample.identity == expectedIdentity,
+      expectedIdentity.windowID == selection.windowID
+    else {
+      return .rejected(.windowIdentityMismatch)
+    }
+    guard
+      sample.captureSurfaceGeometry.outputPixelWidth == sample.image.width,
+      sample.captureSurfaceGeometry.outputPixelHeight == sample.image.height
+    else {
+      return .rejected(.outputDimensionsMismatch)
+    }
+    switch selection.provenance {
+    case .screenCaptureKit(let selectedGeometry):
+      guard sample.captureSurfaceGeometry == selectedGeometry else {
+        return .rejected(.surfaceGeometryMismatch)
+      }
+    case .testOnlyWholeFrame(let pixelWidth, let pixelHeight):
+      guard
+        selection.region.isFullFrame,
+        pixelWidth == sample.image.width,
+        pixelHeight == sample.image.height
+      else {
+        return .rejected(.testOnlySourceDimensionsMismatch)
+      }
+    }
+
+    let canvasImage: CGImage
+    if selection.region.isFullFrame {
+      canvasImage = sample.image
+    } else {
+      guard
+        let pixelRect = selection.region.pixelRect(
+          sourcePixelWidth: sample.image.width,
+          sourcePixelHeight: sample.image.height
+        ),
+        let croppedImage = cropTopLeft(image: sample.image, pixelRect: pixelRect)
+      else {
+        return .rejected(.cropOrFingerprintFailed)
+      }
+      canvasImage = croppedImage
+    }
+
+    guard
+      let fingerprint = CGImageRasterizer.makeFrameFingerprint(from: canvasImage),
+      let contentFingerprint = CGImageRasterizer.makeContentFingerprint(from: canvasImage)
+    else {
+      return .rejected(.cropOrFingerprintFailed)
+    }
+
+    return .prepared(
+      CapturedSlideCanvasFrame(
+        windowID: sample.identity.windowID,
+        sequenceNumber: anchorSequenceNumber,
+        capturedAt: sample.capturedAt,
+        origin: .boundedFreshSample(
+          requestID: sample.requestID,
+          anchorSequenceNumber: anchorSequenceNumber
+        ),
         image: canvasImage,
         fingerprint: fingerprint,
         contentFingerprint: contentFingerprint

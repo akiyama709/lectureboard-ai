@@ -29,9 +29,9 @@
 
 ## 3．現時点の成果物
 
-　リポジトリには，macOSアプリの骨格，透明オーバーレイの試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得実装，利用者確認式のスライド面切出し，現在frameの画面位置に基づくfail-closedなoverlay座標変換，切出し後の安定フレーム・視覚更新判定，160×90のRGB指紋による持続的内容更新判定，安定した視覚フレームを対象とするVision文字・矩形解析，長辺640ピクセル以下のRGBラスタと筆跡候補解析，正規化占有領域の構築，Apple Speechによる一言語文字起こし，文脈判断コア，ベクトル板書モデル，空白配置試作，単体テスト，英語・日本語を同一ファイルに収録したREADME，設計文書，GitHub Actions，公開前検査が含まれる．
+　リポジトリには，macOSアプリの骨格，透明オーバーレイの試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得実装，利用者確認式のスライド面切出し，現在frameの画面位置に基づくfail-closedなoverlay座標変換，切出し後の安定フレーム・視覚更新判定，160×90のRGB指紋による持続的内容更新判定，pending dense changeに限定した最大2回のone-shot sample経路，安定した視覚フレームを対象とするVision文字・矩形解析，長辺640ピクセル以下のRGBラスタと筆跡候補解析，正規化占有領域の構築，Apple Speechによる一言語文字起こし，文脈判断コア，ベクトル板書モデル，空白配置試作，単体テスト，英語・日本語を同一ファイルに収録したREADME，設計文書，GitHub Actions，公開前検査が含まれる．
 
-　2026年9月1日現在，現行schema 10 sourceの中核Swift packageは137テスト・15 suite，ネイティブmacOS Appは228テスト・27 suiteがMac上で通過している．14時44分から14時45分JSTに全14段階の`make verify`が合格し，結果を反映した文書を含む状態でも14時50分から14時51分JSTに同じ全14段階へ再度合格した．最終native result bundleは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_14-50-49-+0900.xcresult`であり，authoritative total 228，failed 0，skipped 0，expected failure 0である．生成したarm64 runtimeはad hoc署名のstrict bundle検査へ合格したが，Developer ID署名，hardened runtime及びnotarization済みではない．このgateはlive schema 10分類の証拠ではない．2026年8月31日の完全gateは，その時点のschema 9 sourceに関する履歴証拠として保持する．
+　2026年9月1日現在，現行schema 10 sourceの中核Swift packageは142テスト・15 suite，ネイティブmacOS Appは251テスト・30 suiteがMac上で通過している．このfresh-sample増分を含む全14段階の`make verify`は16時19分から16時20分JSTに合格し，結果を反映した文書を含む状態でも16時25分から16時26分JSTに再度合格した．最終native result bundleは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_16-25-29-+0900.xcresult`であり，authoritative total 251，failed 0，skipped 0，expected failure 0である．生成したarm64 runtimeはad hoc署名のstrict bundle検査へ合格したが，Developer ID署名，hardened runtime及びnotarization済みではない．自動gateはlive schema 10分類又はone-shot取得の証拠ではない．14時44分から14時45分JST及び14時50分から14時51分JSTに合格した完全gateは，直前のschema 10 sourceに関する履歴証拠として保持する．2026年8月31日の完全gateは，その時点のschema 9 sourceに関する履歴証拠として保持する．
 
 　16時17分の全14段階`make verify`は119 Coreテスト及び217 Appテスト時点の履歴証拠である．123件及び218件への変更後に行った最初の後続試行は，sandboxがSwift module cacheへの書込みを拒否したためCore manifestの計画段階で停止した．この失敗を成功証拠には数えない．
 
@@ -97,7 +97,7 @@
 
 　single-stroke reportのSHA-256は`494eb356282f8c49c9a57d7d67ec2e56cb31a22326da69d373b556f047332d45`であり，15 new，15 repeat，1 revision及び1 componentを記録した．five-stroke rerunのSHA-256は`7cadc164d28f534fe3620261eb26b14c20d7694b16216629d940d1c5e9870385`であり，66 new，15 repeat，4 revisions及び5 componentsを記録した．両runとも手書き前と消去後の画像はbyte-identicalだったが，別個のpost-erase revisionは記録しなかった．統合metadata audit `LectureBoard-Runtime-Schema9-Live-Checkpoint-Audit-2026-09-01.json`のSHA-256は`a547704072066e63047abaffc8e4bec0149be39760901e852236158d103ceff2`，image auditは`38552053c77b46d6a9eccb0cbde8f1baeef6faadf74bee9f57247e8e110d95a9`である．
 
-　dense detectorの既定契約はdifference threshold `0.08`，minimum changed-pixel fraction `0.001`，persistence tolerance `0`及び同一候補3 deliveryである．erase候補は3件目のqualifying deliveryを受けなかったため，thresholdは弱めなかった．次の実装候補は，dense candidate pending時だけ最大2回を約100 ms間隔で取得するbounded one-shot fresh sampleである．capture operation，正確なwindow，canvas，identity及びcandidate generationを全てguardし，capture metrics，identity及びoverlay provenanceへ混入させない．現時点では未実装である．
+　dense detectorの既定契約はdifference threshold `0.08`，minimum changed-pixel fraction `0.001`，persistence tolerance `0`及び同一候補3 observationである．erase候補は3件目のqualifying observationを受けなかったため，thresholdは弱めなかった．現行sourceは，dense candidate pending時だけ最大2回を約100 ms間隔で取得するbounded one-shot fresh sampleを実装した．同じopaque candidate token，capture operation，正確なwindow identity，stream anchor，canvas，semantic identity及びvisual continuityを全てguardし，provider busyの再待機も最大10回に制限する．one-shot resultをcapture metrics，identity，post-identity frame gate及びoverlay provenanceへ混入させず，fresh-only解析からoverlayを再表示しない．これらは決定論的Core及びApp testに合格したが，実PowerPointにおける`SCScreenshotManager`のstatus・geometry attachment，timing及びpost-erase revisionは未検証である．
 
 　最新review済みignored helper sourceのSHA-256は`37e07382857c0a72cdfc08e8bb30b52162837409b004ced6d6f34e8bef2f7aaf`である．保存したreview済みarm64 binary `DriveExactPowerPointInk-Schema10-Reviewed-2026-09-01`のSHA-256は`e7d5b1d01fa6929834526766fc606c1deb2fc78f4558cd0a990e65a62dd9a15d`である．GUI-free self-test 20件全て，lint，Swift 6 strict typecheck，compile及び独立reviewに合格した．これはhelperのtest済みpolicyだけの証拠であり，all-Spaces切替，Escape後のWindowServer挙動，実Accessibility focus変更及びend-to-end inputはlive未検証である．
 
@@ -115,8 +115,8 @@ make test-runtime-launch-smoke
 
 　次の作業は，次の順で進める．固定schema 8 App及び`LectureBoard AI Schema 9 Idle Policy Verification.app`はbuild，置換又は移動せず，それぞれの履歴証拠として保持する．新規reportはsystem temporary directory内の一意なpathへ書き，内容を検証してからexternal verification directoryへcopyし，`cmp`とSHA-256で保存結果を確認する．
 
-1. bounded one-shot fresh-sample経路をtest-firstで実装し，operation，window，canvas，identity，candidate generation，停止，restart及びstale completionの各分岐を固定する．detector thresholdは弱めない．
-2. 明確に分離したschema 10検証artifactで，static control，mouse ink及びeraseを再試行し，別個のpost-erase content revisionとbounded capture failure sourceを確認できるか検証する．見えるstroke及び視覚的復元と，意味的ink分類，既存ink検出及びper-input分類を分けて記録する．
+1. 履歴artifactへ触れず，完全gate済みsourceから別名schema 10検証artifactを固定し，実行物のhash，CDHash及びstrict署名結果を記録する．detector thresholdは弱めない．
+2. 固定したschema 10検証artifactで，static control，dynamic slide，mouse ink及びeraseをこの順に再試行し，別個のpost-erase content revisionとbounded capture failure sourceを確認できるか検証する．見えるstroke及び視覚的復元と，意味的ink分類，既存ink検出及びper-input分類を分けて記録する．
 3. 利用者確認式スライド面と実装済みoverlay座標変換を，window表示，full-screen，発表者表示，複数display，異なるscale factor，window移動，resize及び再選択で別々に検証する．未検証のmodeを成功扱いしない．
 4. 意味的なスライド情報を，選択済みの正確なScreenCaptureKit window IDへfail-closedで結び付けられるproduction identity providerを実装する．PowerPointの`window.id`が`nil`である間は弱いfallbackを採用しない．
 5. LaunchServices capture authorization，post-restart permission persistence，PowerPoint windowの終了・再選択・再起動・display再接続，日本語・英語・日英混在・animation・長時間の代表的資料，OCR，click-through，pen tablet，microphone及びonline共有を，それぞれ独立した検証項目として扱う．
@@ -125,9 +125,9 @@ make test-runtime-launch-smoke
 
 ## 5．次の実装単位
 
-　選択したPowerPoint windowの連続取得からoverlayのfail-closedな座標変換までの決定論的基盤に加え，schema 10のbounded capture-terminal診断を実装した．現行sourceはCore 137件・15 suite，App 228件・27 suite及び全14段階gateに合格する．schema 10診断は最初のterminal eventだけを同期採用し，stale operationを拒否し，新規start及びmanual stopでresetし，runner最終JSONへ保持する．互換性，正規化及びprivacy boundaryもtest済みであるが，live schema 10 reportは未検証である．固定schema 9 Appのlive証拠は，idle continuity，visual content updates，見えるmouse stroke及び消去後の視覚的復元に限定する．意味的又は入力ごとのink分類，既存ink検出，別個のpost-erase revision，利用者確認精度，目視alignment及びproduction renderingは未検証である．
+　選択したPowerPoint windowの連続取得からoverlayのfail-closedな座標変換までの決定論的基盤に加え，schema 10のbounded capture-terminal診断及びpending dense changeに限定したbounded one-shot sample経路を実装した．現行sourceはCore 142件・15 suite，App 251件・30 suite及び全14段階gateに合格する．schema 10診断は最初のterminal eventだけを同期採用し，stale operationを拒否し，新規start及びmanual stopでresetし，runner最終JSONへ保持する．one-shot経路は最大2 actual sample，約100 ms間隔，最大10 busy deferral及び厳格なprovenance guardを備え，通常stream及びoverlayの根拠から分離する．互換性，正規化，privacy及びfresh-sample boundaryはtest済みであるが，live schema 10 report及びone-shot取得は未検証である．固定schema 9 Appのlive証拠は，idle continuity，visual content updates，見えるmouse stroke及び消去後の視覚的復元に限定する．意味的又は入力ごとのink分類，既存ink検出，別個のpost-erase revision，利用者確認精度，目視alignment及びproduction renderingは未検証である．
 
-　直近の作業単位は，bounded one-shot fresh sampleをtest-firstで実装してpost-erase revisionを再検証することである．その後，利用者確認式canvasと実PowerPoint上のoverlayを独立して検証し，exact-window-bound production identity providerを弱いfallbackなしで追跡する．固定schema 8及びschema 9 Appは移動・置換しない．いずれの新規reportもsystem temporary directory内の一意なpathで検証してからexternal verification directoryへcopyする．代表資料，OCR，LaunchServices，長時間運転，既存ink，複数display，click-through，pen tablet及びmicrophoneは別の検証項目として残す．
+　直近の作業単位は，完全gate済みsourceから別名schema 10 artifactを固定し，static，dynamic slide，mouse ink及びeraseを順に再検証することである．その後，利用者確認式canvasと実PowerPoint上のoverlayを独立して検証し，exact-window-bound production identity providerを弱いfallbackなしで追跡する．固定schema 8及びschema 9 Appは移動・置換しない．いずれの新規reportもsystem temporary directory内の一意なpathで検証してからexternal verification directoryへcopyする．代表資料，OCR，LaunchServices，長時間運転，既存ink，複数display，click-through，pen tablet及びmicrophoneは別の検証項目として残す．
 
 　AIやクラウドサービスを先に接続してはならない．まず，何を見て，どのスライドを対象とし，どこが空いており，どの発話を根拠としたかを観察・記録できる基盤を完成させる．
 

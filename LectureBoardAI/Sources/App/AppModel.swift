@@ -30,6 +30,42 @@ struct TaskSlideIdentityFrameTimeoutWaiter: SlideIdentityFrameTimeoutWaiting {
   }
 }
 
+protocol FreshContentSampleWaiting: Sendable {
+  func wait(for duration: Duration) async
+}
+
+struct TaskFreshContentSampleWaiter: FreshContentSampleWaiting {
+  func wait(for duration: Duration) async {
+    try? await Task.sleep(for: duration)
+  }
+}
+
+private struct FreshContentSampleEpisode {
+  let candidateToken: StableContentChangeCandidateToken
+  var attemptsStarted: Int
+  var providerBusyDeferrals: Int
+  var isExhausted: Bool
+}
+
+private struct FreshContentSampleRequest {
+  let requestID: FreshSampleRequestID
+  let candidateToken: StableContentChangeCandidateToken
+  let captureOperationID: CaptureOperationID
+  let captureIdentity: PowerPointWindowIdentity
+  let anchoredStreamSequenceNumber: UInt64
+  let anchoredCoarseFingerprint: FrameFingerprint
+  let slideCanvasGeneration: Int
+  let canvasSelection: ConfirmedSlideCanvasSelection
+  let slideIdentityGeneration: Int
+  let slideIdentityState: SlideIdentityState
+  let slideIdentityFrameSyncState: SlideIdentityFrameSyncState
+}
+
+private enum SlideAnalysisOrigin: Equatable {
+  case continuousStream
+  case boundedFreshSample
+}
+
 private struct BoardCandidateContext {
   var transcriptSegments: [TranscriptSegment] = []
   var intents: [BoardIntent] = []
@@ -50,6 +86,8 @@ private struct RenderedProductionOverlayState: Equatable {
 
 @MainActor
 final class AppModel: ObservableObject {
+  private static let maximumFreshContentSampleProviderBusyDeferrals = 10
+
   enum Status: Equatable {
     case ready
     case scanning
@@ -124,6 +162,8 @@ final class AppModel: ObservableObject {
   private let slideCanvasConfirmationMode: SlideCanvasConfirmationMode
   private let slideIdentityFrameTimeout: Duration
   private let slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting
+  private let freshContentSampleDelay: Duration
+  private let freshContentSampleWaiter: any FreshContentSampleWaiting
   private let boardEngine = ContextualBoardEngine()
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
@@ -145,6 +185,9 @@ final class AppModel: ObservableObject {
   private var latestSlideIdentityFrameSynchronizationMachTime: UInt64?
   private var latestVisualFreshnessBoundaryMachTime: UInt64?
   private var slideIdentityFrameTimeoutTask: Task<Void, Never>?
+  private var freshContentSampleTask: Task<Void, Never>?
+  private var freshContentSampleEpisode: FreshContentSampleEpisode?
+  private var currentFreshContentSampleRequest: FreshContentSampleRequest?
   private var analysisGeneration = 0
   private var slideCanvasGeneration = 0
   private var confirmedSlideCanvasSelection: ConfirmedSlideCanvasSelection?
@@ -175,6 +218,9 @@ final class AppModel: ObservableObject {
     slideIdentityFrameTimeout: Duration = .seconds(2),
     slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
       TaskSlideIdentityFrameTimeoutWaiter(),
+    freshContentSampleDelay: Duration = .milliseconds(100),
+    freshContentSampleWaiter: any FreshContentSampleWaiting =
+      TaskFreshContentSampleWaiter(),
     overlayController: any OverlayWindowControlling = OverlayWindowController(),
     displayCoordinateSnapshotProvider: any DisplayCoordinateSnapshotProviding =
       SystemDisplayCoordinateSnapshotProvider(),
@@ -195,6 +241,8 @@ final class AppModel: ObservableObject {
     self.slideCanvasConfirmationMode = slideCanvasConfirmationMode
     self.slideIdentityFrameTimeout = max(slideIdentityFrameTimeout, .zero)
     self.slideIdentityFrameTimeoutWaiter = slideIdentityFrameTimeoutWaiter
+    self.freshContentSampleDelay = max(freshContentSampleDelay, .zero)
+    self.freshContentSampleWaiter = freshContentSampleWaiter
     self.overlayController = overlayController
     self.displayCoordinateSnapshotProvider = displayCoordinateSnapshotProvider
     self.productionOverlayEligibilityProvider = productionOverlayEligibilityProvider
@@ -207,6 +255,7 @@ final class AppModel: ObservableObject {
   }
 
   deinit {
+    freshContentSampleTask?.cancel()
     let leaseScheduler = productionOverlayLeaseScheduler
     let safetyEventProvider = productionOverlaySafetyEventProvider
     Task { @MainActor in
@@ -677,6 +726,7 @@ final class AppModel: ObservableObject {
       return
     }
     lastAcceptedCaptureSequenceNumber = frame.sequenceNumber
+    cancelFreshContentSampling(resetEpisode: false)
     captureDeliveryMetrics.record(frame.deliveryKind, capturedAt: frame.capturedAt)
     newCapturedFrameCount = captureDeliveryMetrics.newFrameCount
     repeatedCapturedFrameCount = captureDeliveryMetrics.repeatedFrameCount
@@ -790,6 +840,7 @@ final class AppModel: ObservableObject {
   }
 
   private func prepareSlideCanvasForNewCapture() {
+    cancelFreshContentSampling(resetEpisode: true)
     invalidateTranscriptionContext()
     resetBoardCandidateContext()
     clearOverlayDemoForCaptureStart()
@@ -807,6 +858,7 @@ final class AppModel: ObservableObject {
   }
 
   private func invalidateSlideCanvasAfterCaptureEnd() {
+    cancelFreshContentSampling(resetEpisode: true)
     invalidateTranscriptionContext()
     resetBoardCandidateContext()
     overlayDemoSceneIsLoaded = false
@@ -847,6 +899,7 @@ final class AppModel: ObservableObject {
   }
 
   private func resetCanvasVisualPipeline() {
+    cancelFreshContentSampling(resetEpisode: true)
     invalidateTranscriptionContext()
     stableFrameDetector.reset()
     stableContentChangeDetector.reset()
@@ -870,6 +923,7 @@ final class AppModel: ObservableObject {
 
     switch observation.stability {
     case .stable:
+      cancelFreshContentSampling(resetEpisode: true)
       stableFrameCount += 1
       if observation.differenceFromStableFrame != nil {
         contentRevisionCount += 1
@@ -878,6 +932,7 @@ final class AppModel: ObservableObject {
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
     case .significantVisualChange:
+      cancelFreshContentSampling(resetEpisode: true)
       stableFrameCount += 1
       contentRevisionCount += 1
       guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
@@ -886,6 +941,7 @@ final class AppModel: ObservableObject {
     case .unchanged:
       receiveContentFingerprintIfAvailable(frame, captureSessionID: sessionID)
     case .invalid, .collecting, .transitioning:
+      cancelFreshContentSampling(resetEpisode: true)
       stableContentChangeDetector.discardPendingChange()
       invalidateSlideAnalysisForVisualFreshness()
     }
@@ -924,6 +980,7 @@ final class AppModel: ObservableObject {
       return
     }
     lastAcceptedCaptureSequenceNumber = sequenceNumber
+    cancelFreshContentSampling(resetEpisode: true)
     captureContentRequiresNewFrame = true
     invalidateTranscriptionContext()
     latestEligibleWindowFrame = nil
@@ -940,9 +997,12 @@ final class AppModel: ObservableObject {
 
   private func startSlideAnalysis(
     _ frame: CapturedSlideCanvasFrame,
-    captureSessionID: CaptureOperationID
+    captureSessionID: CaptureOperationID,
+    origin: SlideAnalysisOrigin = .continuousStream
   ) {
-    invalidateProductionSceneForVisualFreshness()
+    if origin == .continuousStream {
+      invalidateProductionSceneForVisualFreshness()
+    }
     slideAnalysisNeedsRefresh = true
     analysisGeneration += 1
     let requestGeneration = analysisGeneration
@@ -964,7 +1024,8 @@ final class AppModel: ObservableObject {
           captureSessionID: captureSessionID,
           requestGeneration: requestGeneration,
           requestSlideIdentityGeneration: requestSlideIdentityGeneration,
-          requestSlideCanvasGeneration: requestSlideCanvasGeneration
+          requestSlideCanvasGeneration: requestSlideCanvasGeneration,
+          origin: origin
         )
       } catch is CancellationError {
         guard let self else { return }
@@ -973,7 +1034,8 @@ final class AppModel: ObservableObject {
           captureSessionID: captureSessionID,
           requestGeneration: requestGeneration,
           requestSlideIdentityGeneration: requestSlideIdentityGeneration,
-          requestSlideCanvasGeneration: requestSlideCanvasGeneration
+          requestSlideCanvasGeneration: requestSlideCanvasGeneration,
+          origin: origin
         )
       } catch {
         guard let self else { return }
@@ -983,7 +1045,8 @@ final class AppModel: ObservableObject {
           captureSessionID: captureSessionID,
           requestGeneration: requestGeneration,
           requestSlideIdentityGeneration: requestSlideIdentityGeneration,
-          requestSlideCanvasGeneration: requestSlideCanvasGeneration
+          requestSlideCanvasGeneration: requestSlideCanvasGeneration,
+          origin: origin
         )
       }
     }
@@ -994,6 +1057,7 @@ final class AppModel: ObservableObject {
     captureSessionID: CaptureOperationID
   ) {
     guard let contentFingerprint = frame.contentFingerprint else {
+      cancelFreshContentSampling(resetEpisode: true)
       stableContentChangeDetector.discardPendingChange()
       invalidateSlideAnalysisForVisualFreshness()
       return
@@ -1001,24 +1065,319 @@ final class AppModel: ObservableObject {
     let observation = stableContentChangeDetector.ingest(contentFingerprint)
     switch observation.state {
     case .baselineEstablished:
+      cancelFreshContentSampling(resetEpisode: true)
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: captureSessionID)
     case .contentChanged:
+      cancelFreshContentSampling(resetEpisode: true)
       contentRevisionCount += 1
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: captureSessionID)
     case .unchanged:
+      cancelFreshContentSampling(resetEpisode: true)
       guard slideAnalysisNeedsRefresh, slideAnalysisStatus != .analyzing else { return }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: captureSessionID)
-    case .invalid, .collectingBaseline, .contentChangePending:
+    case .contentChangePending:
       invalidateSlideAnalysisForVisualFreshness()
+      // Continuous full-frame capture fingerprints are sampled directly from the
+      // pixel buffer, while a bounded screenshot is represented as a CGImage.
+      // Re-rasterize the accepted canvas image so the fresh-sample guard compares
+      // fingerprints produced by the same deterministic image path.
+      guard
+        let candidateToken = observation.pendingChangeToken,
+        let comparableCoarseFingerprint = CGImageRasterizer.makeFrameFingerprint(
+          from: frame.image
+        )
+      else {
+        cancelFreshContentSampling(resetEpisode: true)
+        stableContentChangeDetector.discardPendingChange()
+        return
+      }
+      scheduleFreshContentSample(
+        candidateToken: candidateToken,
+        anchoredStreamSequenceNumber: frame.sequenceNumber,
+        anchoredCoarseFingerprint: comparableCoarseFingerprint
+      )
+    case .invalid:
+      cancelFreshContentSampling(resetEpisode: true)
+      stableContentChangeDetector.discardPendingChange()
+      invalidateSlideAnalysisForVisualFreshness()
+    case .collectingBaseline:
+      cancelFreshContentSampling(resetEpisode: true)
+      invalidateSlideAnalysisForVisualFreshness()
+    }
+  }
+
+  private func scheduleFreshContentSample(
+    candidateToken: StableContentChangeCandidateToken,
+    anchoredStreamSequenceNumber: UInt64,
+    anchoredCoarseFingerprint: FrameFingerprint
+  ) {
+    if freshContentSampleEpisode?.candidateToken != candidateToken {
+      cancelFreshContentSampling(resetEpisode: true)
+      freshContentSampleEpisode = FreshContentSampleEpisode(
+        candidateToken: candidateToken,
+        attemptsStarted: 0,
+        providerBusyDeferrals: 0,
+        isExhausted: false
+      )
+    }
+
+    guard
+      currentFreshContentSampleRequest == nil,
+      let episode = freshContentSampleEpisode,
+      episode.candidateToken == candidateToken,
+      !episode.isExhausted,
+      episode.attemptsStarted < 2,
+      captureStatus == .capturing,
+      let activeCaptureSessionID,
+      let activeCaptureIdentity,
+      activeCaptureIdentity == selectedWindow?.identity,
+      let lastAcceptedCaptureSequenceNumber,
+      lastAcceptedCaptureSequenceNumber == anchoredStreamSequenceNumber,
+      !captureContentRequiresNewFrame,
+      slideCanvasStatus == .confirmed,
+      let confirmedSlideCanvasSelection,
+      confirmedSlideCanvasSelection.captureOperationID == activeCaptureSessionID,
+      let latestEligibleWindowFrame,
+      latestEligibleWindowFrame.windowID == activeCaptureIdentity.windowID,
+      latestEligibleWindowFrame.sequenceNumber == anchoredStreamSequenceNumber,
+      !slideIdentityQuarantineActive,
+      !slideIdentityFrameGate.requiresFreshFrame
+    else {
+      return
+    }
+
+    let request = FreshContentSampleRequest(
+      requestID: FreshSampleRequestID(),
+      candidateToken: candidateToken,
+      captureOperationID: activeCaptureSessionID,
+      captureIdentity: activeCaptureIdentity,
+      anchoredStreamSequenceNumber: anchoredStreamSequenceNumber,
+      anchoredCoarseFingerprint: anchoredCoarseFingerprint,
+      slideCanvasGeneration: slideCanvasGeneration,
+      canvasSelection: confirmedSlideCanvasSelection,
+      slideIdentityGeneration: slideIdentityGeneration,
+      slideIdentityState: slideIdentityState,
+      slideIdentityFrameSyncState: slideIdentityFrameSyncState
+    )
+    currentFreshContentSampleRequest = request
+
+    let delay = freshContentSampleDelay
+    let waiter = freshContentSampleWaiter
+    let capture = windowCapture
+    freshContentSampleTask = Task { @MainActor [weak self] in
+      await waiter.wait(for: delay)
+      guard
+        !Task.isCancelled,
+        self?.beginFreshContentSample(request) == true
+      else {
+        return
+      }
+
+      do {
+        let sample = try await capture.captureFreshSample(
+          operationID: request.captureOperationID,
+          identity: request.captureIdentity,
+          requestID: request.requestID
+        )
+        guard !Task.isCancelled, let self else { return }
+        self.receiveFreshContentSample(sample, request: request)
+      } catch FreshPowerPointWindowSampleError.requestAlreadyInFlight {
+        guard !Task.isCancelled, let self else { return }
+        self.deferFreshContentSampleAfterProviderBusy(request)
+      } catch {
+        guard !Task.isCancelled, let self else { return }
+        self.exhaustFreshContentSampleEpisode(for: request)
+      }
+    }
+  }
+
+  private func beginFreshContentSample(
+    _ request: FreshContentSampleRequest
+  ) -> Bool {
+    guard freshContentSampleRequestIsCurrent(request),
+      var episode = freshContentSampleEpisode,
+      episode.candidateToken == request.candidateToken,
+      !episode.isExhausted,
+      episode.attemptsStarted < 2
+    else {
+      finishFreshContentSampleRequest(request.requestID, resetEpisode: false)
+      return false
+    }
+
+    episode.attemptsStarted += 1
+    freshContentSampleEpisode = episode
+    return true
+  }
+
+  private func deferFreshContentSampleAfterProviderBusy(
+    _ request: FreshContentSampleRequest
+  ) {
+    guard freshContentSampleRequestIsCurrent(request),
+      var episode = freshContentSampleEpisode,
+      episode.candidateToken == request.candidateToken,
+      episode.attemptsStarted > 0
+    else {
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    // The provider rejected this call before starting another OS screenshot, so
+    // it must not consume either of the candidate's two capture attempts. Keep
+    // the retry itself bounded in case an older system callback never returns.
+    episode.attemptsStarted -= 1
+    episode.providerBusyDeferrals += 1
+    freshContentSampleEpisode = episode
+    guard
+      episode.providerBusyDeferrals
+        <= Self.maximumFreshContentSampleProviderBusyDeferrals
+    else {
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    finishFreshContentSampleRequest(request.requestID, resetEpisode: false)
+    scheduleFreshContentSample(
+      candidateToken: request.candidateToken,
+      anchoredStreamSequenceNumber: request.anchoredStreamSequenceNumber,
+      anchoredCoarseFingerprint: request.anchoredCoarseFingerprint
+    )
+  }
+
+  private func receiveFreshContentSample(
+    _ sample: FreshPowerPointWindowSample,
+    request: FreshContentSampleRequest
+  ) {
+    guard freshContentSampleRequestIsCurrent(request),
+      sample.requestID == request.requestID,
+      sample.captureOperationID == request.captureOperationID,
+      sample.identity == request.captureIdentity
+    else {
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    let freshFrame: CapturedSlideCanvasFrame
+    switch FreshSlideCanvasSamplePreparer.evaluate(
+      sample,
+      expectedIdentity: request.captureIdentity,
+      anchorSequenceNumber: request.anchoredStreamSequenceNumber,
+      selection: request.canvasSelection
+    ) {
+    case .prepared(let preparedFrame):
+      freshFrame = preparedFrame
+    case .rejected:
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    guard
+      freshFrame.fingerprint.normalizedDifference(
+        from: request.anchoredCoarseFingerprint
+      ) <= stableFrameDetector.configuration.stableDifferenceThreshold,
+      let contentFingerprint = freshFrame.contentFingerprint,
+      let observation = stableContentChangeDetector.confirmPendingChange(
+        contentFingerprint,
+        token: request.candidateToken
+      )
+    else {
+      exhaustFreshContentSampleEpisode(for: request)
+      return
+    }
+
+    switch observation.state {
+    case .contentChangePending:
+      finishFreshContentSampleRequest(request.requestID, resetEpisode: false)
+      scheduleFreshContentSample(
+        candidateToken: request.candidateToken,
+        anchoredStreamSequenceNumber: request.anchoredStreamSequenceNumber,
+        anchoredCoarseFingerprint: request.anchoredCoarseFingerprint
+      )
+    case .contentChanged:
+      finishFreshContentSampleRequest(request.requestID, resetEpisode: true)
+      contentRevisionCount += 1
+      latestStableFrame = freshFrame.image
+      startSlideAnalysis(
+        freshFrame,
+        captureSessionID: request.captureOperationID,
+        origin: .boundedFreshSample
+      )
+    case .invalid, .collectingBaseline, .baselineEstablished, .unchanged:
+      exhaustFreshContentSampleEpisode(for: request)
+    }
+  }
+
+  private func freshContentSampleRequestIsCurrent(
+    _ request: FreshContentSampleRequest
+  ) -> Bool {
+    guard
+      currentFreshContentSampleRequest?.requestID == request.requestID,
+      captureStatus == .capturing,
+      activeCaptureSessionID == request.captureOperationID,
+      activeCaptureIdentity == request.captureIdentity,
+      selectedWindow?.identity == request.captureIdentity,
+      activeCaptureWindowID == request.captureIdentity.windowID,
+      lastAcceptedCaptureSequenceNumber == request.anchoredStreamSequenceNumber,
+      !captureContentRequiresNewFrame,
+      latestEligibleWindowFrame?.sequenceNumber == request.anchoredStreamSequenceNumber,
+      latestEligibleWindowFrame?.windowID == request.captureIdentity.windowID,
+      slideCanvasStatus == .confirmed,
+      slideCanvasGeneration == request.slideCanvasGeneration,
+      confirmedSlideCanvasSelection == request.canvasSelection,
+      slideIdentityGeneration == request.slideIdentityGeneration,
+      slideIdentityState == request.slideIdentityState,
+      slideIdentityFrameSyncState == request.slideIdentityFrameSyncState,
+      !slideIdentityQuarantineActive,
+      !slideIdentityFrameGate.requiresFreshFrame,
+      freshContentSampleEpisode?.candidateToken == request.candidateToken
+    else {
+      return false
+    }
+    return true
+  }
+
+  private func finishFreshContentSampleRequest(
+    _ requestID: FreshSampleRequestID,
+    resetEpisode: Bool
+  ) {
+    guard currentFreshContentSampleRequest?.requestID == requestID else { return }
+    currentFreshContentSampleRequest = nil
+    freshContentSampleTask = nil
+    if resetEpisode {
+      freshContentSampleEpisode = nil
+    }
+  }
+
+  private func exhaustFreshContentSampleEpisode(
+    for request: FreshContentSampleRequest
+  ) {
+    guard currentFreshContentSampleRequest?.requestID == request.requestID else { return }
+    currentFreshContentSampleRequest = nil
+    freshContentSampleTask = nil
+    guard var episode = freshContentSampleEpisode,
+      episode.candidateToken == request.candidateToken
+    else {
+      return
+    }
+    episode.isExhausted = true
+    freshContentSampleEpisode = episode
+  }
+
+  private func cancelFreshContentSampling(resetEpisode: Bool) {
+    freshContentSampleTask?.cancel()
+    freshContentSampleTask = nil
+    currentFreshContentSampleRequest = nil
+    if resetEpisode {
+      freshContentSampleEpisode = nil
     }
   }
 
   private func rebaseDenseFingerprintForConfirmedCoarseFrame(
     _ contentFingerprint: ContentFingerprint?
   ) -> Bool {
+    cancelFreshContentSampling(resetEpisode: true)
     guard
       let contentFingerprint,
       stableContentChangeDetector.rebase(to: contentFingerprint)
@@ -1043,7 +1402,8 @@ final class AppModel: ObservableObject {
     captureSessionID: CaptureOperationID,
     requestGeneration: Int,
     requestSlideIdentityGeneration: Int,
-    requestSlideCanvasGeneration: Int
+    requestSlideCanvasGeneration: Int,
+    origin: SlideAnalysisOrigin
   ) {
     guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
@@ -1058,7 +1418,9 @@ final class AppModel: ObservableObject {
     slideAnalysisNeedsRefresh = false
     latestCompletedAnalysisGeneration = requestGeneration
     slideAnalysisTask = nil
-    renderAlignedOverlayIfPossible()
+    if origin == .continuousStream {
+      renderAlignedOverlayIfPossible()
+    }
   }
 
   private func handleSlideAnalysisError(
@@ -1067,7 +1429,8 @@ final class AppModel: ObservableObject {
     captureSessionID: CaptureOperationID,
     requestGeneration: Int,
     requestSlideIdentityGeneration: Int,
-    requestSlideCanvasGeneration: Int
+    requestSlideCanvasGeneration: Int,
+    origin: SlideAnalysisOrigin
   ) {
     guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
@@ -1080,7 +1443,9 @@ final class AppModel: ObservableObject {
     slideAnalysisStatus = .error(message)
     latestCompletedAnalysisGeneration = nil
     slideAnalysisTask = nil
-    invalidateProductionOverlayLease()
+    if origin == .continuousStream {
+      invalidateProductionOverlayLease()
+    }
   }
 
   private func handleSlideAnalysisCancellation(
@@ -1088,7 +1453,8 @@ final class AppModel: ObservableObject {
     captureSessionID: CaptureOperationID,
     requestGeneration: Int,
     requestSlideIdentityGeneration: Int,
-    requestSlideCanvasGeneration: Int
+    requestSlideCanvasGeneration: Int,
+    origin: SlideAnalysisOrigin
   ) {
     guard captureSessionID == activeCaptureSessionID,
       requestGeneration == analysisGeneration,
@@ -1101,7 +1467,9 @@ final class AppModel: ObservableObject {
     slideAnalysisStatus = .idle
     latestCompletedAnalysisGeneration = nil
     slideAnalysisTask = nil
-    invalidateProductionOverlayLease()
+    if origin == .continuousStream {
+      invalidateProductionOverlayLease()
+    }
   }
 
   private func resetSlideAnalysis() {
@@ -1356,6 +1724,7 @@ final class AppModel: ObservableObject {
   }
 
   private func resetVisualStateForSlideIdentityBoundary(clearBoardScene: Bool) {
+    cancelFreshContentSampling(resetEpisode: true)
     invalidateTranscriptionContext()
     slideIdentityGeneration += 1
     latestEligibleWindowFrame = nil

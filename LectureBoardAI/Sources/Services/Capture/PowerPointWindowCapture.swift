@@ -414,6 +414,14 @@ enum PowerPointWindowCaptureError: LocalizedError {
   }
 }
 
+enum FreshPowerPointWindowSampleError: Error, Equatable, Sendable {
+  case unsupported
+  case inactiveCapture
+  case requestAlreadyInFlight
+  case selectedWindowUnavailable
+  case invalidSample
+}
+
 enum CaptureFrameDisplayTimeParser {
   static func parse(_ value: Any?) -> UInt64? {
     if let value = value as? UInt64, value > 0 {
@@ -464,6 +472,56 @@ struct CaptureSessionLifecycle: Sendable {
   private func isNewer(_ operationID: CaptureOperationID) -> Bool {
     guard let latestOperationID else { return true }
     return operationID > latestOperationID
+  }
+}
+
+struct FreshSampleCaptureLifecycle: Sendable {
+  private(set) var activeOperationID: CaptureOperationID?
+  private(set) var activeIdentity: PowerPointWindowIdentity?
+  private(set) var inFlightRequestID: FreshSampleRequestID?
+
+  mutating func activate(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity
+  ) {
+    activeOperationID = operationID
+    activeIdentity = identity
+  }
+
+  mutating func deactivate() {
+    activeOperationID = nil
+    activeIdentity = nil
+  }
+
+  mutating func beginRequest(
+    _ requestID: FreshSampleRequestID,
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity
+  ) -> Bool {
+    guard
+      activeOperationID == operationID,
+      activeIdentity == identity,
+      inFlightRequestID == nil
+    else {
+      return false
+    }
+    inFlightRequestID = requestID
+    return true
+  }
+
+  func acceptsCompletion(
+    requestID: FreshSampleRequestID,
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity
+  ) -> Bool {
+    activeOperationID == operationID
+      && activeIdentity == identity
+      && inFlightRequestID == requestID
+  }
+
+  mutating func finishRequest(_ requestID: FreshSampleRequestID) {
+    guard inFlightRequestID == requestID else { return }
+    inFlightRequestID = nil
   }
 }
 
@@ -679,9 +737,23 @@ protocol PowerPointWindowCapturing: Sendable {
   ) async throws
 
   func stop(operationID: CaptureOperationID) async
+
+  func captureFreshSample(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    requestID: FreshSampleRequestID
+  ) async throws -> FreshPowerPointWindowSample
 }
 
 extension PowerPointWindowCapturing {
+  func captureFreshSample(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    requestID: FreshSampleRequestID
+  ) async throws -> FreshPowerPointWindowSample {
+    throw FreshPowerPointWindowSampleError.unsupported
+  }
+
   func start(
     operationID: CaptureOperationID,
     identity: PowerPointWindowIdentity,
@@ -751,6 +823,7 @@ enum ReenumeratedPowerPointWindowResolver {
 
 actor PowerPointWindowCapture: PowerPointWindowCapturing {
   private var lifecycle = CaptureSessionLifecycle()
+  private var freshSampleLifecycle = FreshSampleCaptureLifecycle()
 
   private var stream: SCStream?
   private var output: CaptureOutput?
@@ -796,6 +869,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     guard lifecycle.acceptStart(operationID) else {
       throw CancellationError()
     }
+    freshSampleLifecycle.deactivate()
 
     let previousStream = stream
     let previousOutput = output
@@ -872,6 +946,10 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
       }
       self.output = output
       self.stream = stream
+      freshSampleLifecycle.activate(
+        operationID: operationID,
+        identity: identity
+      )
     } catch {
       try? stream.removeStreamOutput(output, type: .screen)
       lifecycle.finishFailedStart(operationID)
@@ -881,6 +959,7 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
 
   func stop(operationID: CaptureOperationID) async {
     guard lifecycle.acceptStop(operationID) else { return }
+    freshSampleLifecycle.deactivate()
     let stream = stream
     let output = output
     self.stream = nil
@@ -889,6 +968,140 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     try? await stream.stopCapture()
     if let output {
       try? stream.removeStreamOutput(output, type: .screen)
+    }
+  }
+
+  func captureFreshSample(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    requestID: FreshSampleRequestID
+  ) async throws -> FreshPowerPointWindowSample {
+    guard lifecycle.isCurrent(operationID), stream != nil, output != nil else {
+      throw FreshPowerPointWindowSampleError.inactiveCapture
+    }
+    guard
+      freshSampleLifecycle.beginRequest(
+        requestID,
+        operationID: operationID,
+        identity: identity
+      )
+    else {
+      if freshSampleLifecycle.inFlightRequestID != nil {
+        throw FreshPowerPointWindowSampleError.requestAlreadyInFlight
+      }
+      throw FreshPowerPointWindowSampleError.inactiveCapture
+    }
+    defer {
+      freshSampleLifecycle.finishRequest(requestID)
+    }
+
+    let window = try await reenumeratedWindow(for: identity)
+    try ensureCurrentFreshSampleRequest(
+      requestID,
+      operationID: operationID,
+      identity: identity
+    )
+
+    let filter = SCContentFilter(desktopIndependentWindow: window)
+    let configuration = makeConfiguration(for: filter)
+    let surface = try await captureFreshSurface(
+      contentFilter: filter,
+      configuration: configuration
+    )
+    try ensureCurrentFreshSampleRequest(
+      requestID,
+      operationID: operationID,
+      identity: identity
+    )
+
+    _ = try await reenumeratedWindow(for: identity)
+    try ensureCurrentFreshSampleRequest(
+      requestID,
+      operationID: operationID,
+      identity: identity
+    )
+
+    return FreshPowerPointWindowSample(
+      requestID: requestID,
+      captureOperationID: operationID,
+      identity: identity,
+      capturedAt: surface.capturedAt,
+      captureSurfaceGeometry: surface.captureSurfaceGeometry,
+      image: surface.image
+    )
+  }
+
+  private func ensureCurrentFreshSampleRequest(
+    _ requestID: FreshSampleRequestID,
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity
+  ) throws {
+    guard
+      lifecycle.isCurrent(operationID),
+      stream != nil,
+      output != nil,
+      freshSampleLifecycle.acceptsCompletion(
+        requestID: requestID,
+        operationID: operationID,
+        identity: identity
+      )
+    else {
+      throw FreshPowerPointWindowSampleError.inactiveCapture
+    }
+  }
+
+  private func reenumeratedWindow(
+    for identity: PowerPointWindowIdentity
+  ) async throws -> SCWindow {
+    let content = try await SCShareableContent.excludingDesktopWindows(
+      true,
+      onScreenWindowsOnly: true
+    )
+    let candidates = content.windows.map { window in
+      ReenumeratedPowerPointWindowCandidate(
+        windowID: window.windowID,
+        ownerProcessID: window.owningApplication?.processID,
+        bundleIdentifier: window.owningApplication?.bundleIdentifier
+      )
+    }
+    guard
+      let windowIndex = ReenumeratedPowerPointWindowResolver.uniqueMatchingIndex(
+        for: identity,
+        among: candidates
+      )
+    else {
+      throw FreshPowerPointWindowSampleError.selectedWindowUnavailable
+    }
+    return content.windows[windowIndex]
+  }
+
+  private func captureFreshSurface(
+    contentFilter: SCContentFilter,
+    configuration: SCStreamConfiguration
+  ) async throws -> FreshCapturedPowerPointSurface {
+    try await withCheckedThrowingContinuation { continuation in
+      SCScreenshotManager.captureSampleBuffer(
+        contentFilter: contentFilter,
+        configuration: configuration
+      ) { sampleBuffer, error in
+        if let error {
+          continuation.resume(throwing: error)
+          return
+        }
+        guard
+          let sampleBuffer,
+          let surface = FreshPowerPointSampleBufferConverter.makeSurface(
+            from: sampleBuffer,
+            capturedAt: Date()
+          )
+        else {
+          continuation.resume(
+            throwing: FreshPowerPointWindowSampleError.invalidSample
+          )
+          return
+        }
+        continuation.resume(returning: surface)
+      }
     }
   }
 
@@ -910,6 +1123,64 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     configuration.capturesAudio = false
     configuration.ignoreShadowsSingleWindow = true
     return configuration
+  }
+}
+
+struct FreshCapturedPowerPointSurface: @unchecked Sendable {
+  let capturedAt: Date
+  let captureSurfaceGeometry: CaptureSurfaceGeometry
+  let image: CGImage
+}
+
+enum FreshPowerPointSampleBufferConverter {
+  static func makeSurface(
+    from sampleBuffer: CMSampleBuffer,
+    capturedAt: Date
+  ) -> FreshCapturedPowerPointSurface? {
+    let attachments = frameAttachments(in: sampleBuffer)
+    guard
+      sampleBuffer.isValid,
+      CaptureFrameDeliveryDecisionResolver.resolve(
+        statusValue: attachments?[.status]
+      ) == .newFrame,
+      let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+      CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA
+    else {
+      return nil
+    }
+
+    let inputImage = CIImage(cvPixelBuffer: pixelBuffer)
+    let imageContext = CIContext(options: [.cacheIntermediates: false])
+    guard
+      let image = imageContext.createCGImage(inputImage, from: inputImage.extent),
+      let captureSurfaceGeometry = CaptureSurfaceGeometryParser.parse(
+        attachments,
+        outputPixelWidth: image.width,
+        outputPixelHeight: image.height
+      )
+    else {
+      return nil
+    }
+
+    return FreshCapturedPowerPointSurface(
+      capturedAt: capturedAt,
+      captureSurfaceGeometry: captureSurfaceGeometry,
+      image: image
+    )
+  }
+
+  private static func frameAttachments(
+    in sampleBuffer: CMSampleBuffer
+  ) -> [SCStreamFrameInfo: Any]? {
+    guard
+      let attachments = CMSampleBufferGetSampleAttachmentsArray(
+        sampleBuffer,
+        createIfNecessary: false
+      ) as? [[SCStreamFrameInfo: Any]]
+    else {
+      return nil
+    }
+    return attachments.first
   }
 }
 
