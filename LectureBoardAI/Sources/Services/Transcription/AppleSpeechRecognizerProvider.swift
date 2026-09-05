@@ -4,6 +4,33 @@ import Foundation
 import LectureBoardCore
 @preconcurrency import Speech
 
+enum OnDeviceSpeechRecognitionPolicy {
+  enum Decision: Equatable {
+    case accept
+    case recognizerUnavailable
+    case onDeviceRecognitionUnavailable
+  }
+
+  static func decision(
+    recognizerAvailable: Bool,
+    supportsOnDeviceRecognition: Bool
+  ) -> Decision {
+    guard recognizerAvailable else { return .recognizerUnavailable }
+    guard supportsOnDeviceRecognition else {
+      return .onDeviceRecognitionUnavailable
+    }
+    return .accept
+  }
+
+  static func makeRequest() -> SFSpeechAudioBufferRecognitionRequest {
+    let request = SFSpeechAudioBufferRecognitionRequest()
+    request.requiresOnDeviceRecognition = true
+    request.shouldReportPartialResults = true
+    request.addsPunctuation = true
+    return request
+  }
+}
+
 @MainActor
 final class AppleSpeechRecognizerProvider: TranscriptionProvider {
   private let audioEngine = AVAudioEngine()
@@ -31,16 +58,27 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     guard
       let recognizer = SFSpeechRecognizer(
         locale: Locale(identifier: language.rawValue)
-      ),
-      recognizer.isAvailable
+      )
     else {
       stop(ifCurrent: operationID)
       throw TranscriptionError.recognizerUnavailable
     }
 
-    let request = SFSpeechAudioBufferRecognitionRequest()
-    request.shouldReportPartialResults = true
-    request.addsPunctuation = true
+    switch OnDeviceSpeechRecognitionPolicy.decision(
+      recognizerAvailable: recognizer.isAvailable,
+      supportsOnDeviceRecognition: recognizer.supportsOnDeviceRecognition
+    ) {
+    case .accept:
+      break
+    case .recognizerUnavailable:
+      stop(ifCurrent: operationID)
+      throw TranscriptionError.recognizerUnavailable
+    case .onDeviceRecognitionUnavailable:
+      stop(ifCurrent: operationID)
+      throw TranscriptionError.onDeviceRecognitionUnavailable
+    }
+
+    let request = OnDeviceSpeechRecognitionPolicy.makeRequest()
     recognitionRequest = request
     startedAt = Date()
 

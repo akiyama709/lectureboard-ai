@@ -11,7 +11,7 @@
 "setup.language" = "講義言語";
 "setup.japanese" = "日本語";
 "setup.english" = "英語";
-"setup.start" = "試作を開始";
+"setup.start" = "開始";
 "setup.stop" = "停止";
 "setup.overlay" = "オーバーレイ例を表示";
 "setup.transcription" = "文字起こしを開始";
@@ -19,7 +19,7 @@
 "status.ready" = "準備完了";
 "status.listening" = "認識中";
 "status.overlay" = "オーバーレイ表示中";
-"status.prototype" = "本版は開発用の初期構成であり，実講義用完成版ではありません．";
+"status.supportedWorkflow" = "対応する利用方法：PowerPoint資料1件，ウィンドウ表示のスライドショー，ディスプレイ1台，講義言語1種類．文字起こしを始める前に，表示中のスライド面を確定してください．";
 "board.demoTitle" = "文脈に基づく板書";
 "board.definition" = "持続可能性";
 "board.definitionBody" = "現在の必要＋将来世代の可能性";
@@ -32,7 +32,11 @@
 "setup.powerPoint" = "PowerPoint";
 "setup.powerPointWindow" = "PowerPointウィンドウ";
 "capture.title" = "選択ウィンドウの取得";
-"capture.start" = "取得を開始";
+"capture.managedStart" = "管理されたスライドショーを開始";
+"capture.managedStart.explanation" = "明示的なAutomation許可後に新しいPowerPointスライドショーを開始し，短い可逆的な役割確認を行います．既存のスライドショーは採用しません．";
+"capture.diagnostic.title" = "高度な取得診断";
+"capture.diagnostic.start" = "選択ウィンドウだけを観測";
+"capture.diagnostic.explanation" = "診断モードはスライドショーを開始せず，意味的にも結び付けないため，本番用の板書を表示できません．";
 "capture.stop" = "取得を停止";
 "capture.status.stopped" = "取得停止中";
 "capture.status.starting" = "取得を開始しています";
@@ -80,10 +84,16 @@
 "style.lineWidth" = "線の太さ";
 "transcript.live" = "認識中の発話";
 "board.preview" = "板書プレビュー";
+"board.hide" = "板書を隠す";
+"session.export" = "セッションを書き出す";
+"session.export.error" = "セッションの書き出しに失敗しました";
+"common.ok" = "OK";
 "settings.mixedLanguageNotice" = "日英混在認識とAIプロバイダー設定は，一言語の取得経路を安定させた後に追加します．";
 "error.authorizationDenied" = "音声認識またはマイクへのアクセスが許可されていません．";
 "error.recognizerUnavailable" = "選択した言語の音声認識を現在利用できません．";
+"error.onDeviceRecognitionUnavailable" = "選択した言語の端末内音声認識を現在利用できません．音声を外部へ送信しないため，文字起こしを開始しません．";
 "error.noAudioInput" = "マイク入力を開始できませんでした．";
 "error.captureWindowUnavailable" = "選択したPowerPointウィンドウを利用できなくなりました．";
+"error.managedStartFailed" = "管理されたPowerPointスライドショーを検証できなかったため，取得と管理対象のスライドショーを停止しました．";
 "error.captureWindowInactive" = "選択したPowerPointウィンドウが非アクティブになったか，閉じられました．";
 "error.rasterizationFailed" = "取得したPowerPoint画面を視覚的な占有領域の解析用に準備できませんでした．";

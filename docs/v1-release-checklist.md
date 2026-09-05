@@ -2,50 +2,50 @@
 
 ## Definition of completion
 
-LectureBoard AI is complete when the public `v1.0.0` GitHub Release is available from `akiyama709/lectureboard-ai`, includes an installable macOS artifact signed with Developer ID and accepted by Apple notarization, and the artifact downloaded from that public release passes the final verification below.
+LectureBoard AI is complete when the public, non-prerelease `v1.0.0` GitHub Release is available from `akiyama709/lectureboard-ai`, includes the verified arm64 application archive and its checksum, SBOM, provenance, and exact source commit, and the archive downloaded from that public release passes the final verification below.
 
-The public source repository is the development venue, not the completed product. Alpha, beta, and release-candidate builds are intermediate validation gates. Publishing any prerelease does not satisfy the completion definition.
+The public source repository is the development venue, not the completed product. No alpha, beta, or release-candidate GitHub Release will be published. Internal validation phases do not satisfy the completion definition.
 
 ## Current status
 
-No alpha, beta, release-candidate, or `v1.0.0` GitHub Release has been published. The current repository is an alpha scaffold. Existing local builds are development artifacts; the currently verified runtime bundle is ad hoc signed, not Developer ID distribution signed or notarized.
+No application GitHub Release has been published. The current repository is a pre-release development scaffold. Existing local builds are development artifacts; the currently verified runtime bundle is ad hoc signed and is not Apple notarized.
 
 Every item below must be evaluated against the exact release commit and exact candidate artifact. Earlier tests and historical runtime reports may inform readiness, but they do not automatically check a release item.
 
-## 1. Alpha gate — end-to-end controlled path
+## 1. Controlled end-to-end gate
 
-- [ ] The current build safely identifies and continuously captures only the selected PowerPoint window.
-- [ ] Stable visual updates and an independent actual-slide identity signal are implemented and verified without treating image difference as slide identity.
-- [ ] OCR, geometry, slide-canvas cropping, existing-ink occupancy, and coordinate mapping are verified on controlled fixtures and live synthetic slides.
+- [ ] From one explicitly selected editing window, the current build starts one new windowed PowerPoint slide show, causally binds its returned scripting object to one exact ScreenCaptureKit window, and continuously captures only that window.
+- [ ] Stable visual updates and PowerPoint's exact slide ID and index are verified together without treating image difference as slide identity.
+- [ ] OCR, geometry, user-confirmed slide-canvas cropping, visual stroke occupancy, and coordinate mapping are verified on controlled fixtures and live synthetic slides.
 - [ ] Final transcript segments and real `SlideContext` data reach the contextual board engine with source evidence identifiers.
 - [ ] Stable text, boxes, arrows, and simple diagrams render without covering occupied regions or interfering with human input.
 - [ ] The original PowerPoint file remains unchanged during a lecture.
 - [ ] A minimal lecture session is exported as JSON and SVG.
-- [ ] A controlled ten-minute Japanese or English lecture completes with documented evidence and fallback procedures.
+- [ ] Controlled ten-minute Japanese and English sessions complete separately in the supported environment with documented evidence and fallback procedures.
 
-Passing this gate establishes a functional alpha only.
+Passing this gate establishes the controlled core workflow only; it does not authorize publication.
 
-## 2. Beta gate — representative and repeated use
+## 2. Representative and repeated-use gate
 
-- [ ] Representative Japanese, English, and staged mixed-language decks have documented results.
-- [ ] Animations, window reselection, PowerPoint restart, display reconnection, multiple-display arrangements, and long-duration operation have documented results.
-- [ ] OCR correctness, title selection, coordinates, occupancy, overlap avoidance, and board usefulness have stated metrics and acceptance thresholds.
-- [ ] Microphone transcription, transparent-overlay alignment, click-through behavior, pen-tablet non-interference, and human-ink priority are verified.
-- [ ] Online-sharing composition is verified in the supported presentation and meeting configurations.
-- [ ] Recovery and data-integrity behavior are verified after application, PowerPoint, capture, display, and permission failures.
+- [ ] At least one representative Japanese deck and one representative English deck have documented results in separate sessions.
+- [ ] Repeated managed start, normal stop, cancellation, window closure, permission denial, and capture interruption have documented results on the supported single-display configuration.
+- [ ] OCR correctness, title selection, coordinates, occupancy, overlap avoidance, and board usefulness have stated acceptance observations for the two representative decks.
+- [ ] Microphone transcription, transparent-overlay alignment, click-through behavior, mouse-ink non-interference, and human-input priority are verified.
+- [ ] Recovery and data-integrity behavior are verified after the in-scope application, PowerPoint-window, capture, and permission failures.
 - [ ] Privacy, accessibility, research-data boundaries, third-party licenses, and notices are reviewed for the supported use cases.
-- [ ] Known limitations, tester instructions, and fallback procedures are complete.
+- [ ] The exact support contract in `supported-environment.md`, known limitations, user instructions, and fallback procedures are complete; full-screen, Presenter View, multi-display, online-sharing composition, code switching, and physical pen tablets remain explicit post-v1 work rather than inferred successes.
 
-Passing this gate establishes beta readiness only.
+Passing this gate establishes representative-use evidence only; it does not authorize publication.
 
-## 3. Release-candidate gate — exact distribution artifact
+## 3. Final-candidate gate — exact distribution artifact
 
 ### Scope and quality
 
-- [ ] The `v1.0.0` feature set, supported macOS versions, supported Mac hardware, and supported PowerPoint versions are frozen and documented.
+- [ ] The `v1.0.0` feature set, supported macOS version, Apple-silicon hardware class, PowerPoint version, windowed single-display mode, and explicit exclusions are frozen in `supported-environment.md`.
 - [ ] All release-blocking defects are resolved, and every remaining known issue is triaged and documented.
 - [ ] Required Core, native-app, integration, regression, and release tests pass on the exact release commit.
-- [ ] The exact candidate completes the supported lecture path and recovery scenarios on clean supported Macs.
+- [ ] The exact candidate completes the supported lecture path and recovery scenarios from a clean verification location on the supported Mac.
+- [ ] Before publication approval, the project owner personally completes `user-acceptance-ja.md` against this exact candidate using a local copy of one self-selected PPTX; the original and working-copy byte sizes and SHA-256 values remain unchanged, and no private source or derived lecture content enters Git, GitHub, a connector, or a cloud/model context.
 - [ ] No current-build behavior is described as verified solely from a historical build, fixture, or compile-only result.
 
 ### Privacy, security, licensing, and provenance
@@ -59,35 +59,37 @@ Passing this gate establishes beta readiness only.
 
 ### macOS distribution
 
-- [ ] The installable artifact is produced reproducibly from the approved release commit.
-- [ ] The application uses the hardened runtime and an appropriate Developer ID Application signature.
-- [ ] The designated requirement is bound to the approved Apple Developer team.
-- [ ] `codesign --verify --deep --strict` succeeds on the candidate.
-- [ ] The installable artifact is submitted to Apple notarization and accepted.
-- [ ] The notarization ticket is stapled where the distribution format supports stapling.
-- [ ] Gatekeeper assessment succeeds on the candidate after transfer to a clean supported Mac.
+- [ ] The installable application archive is produced traceably from the approved release commit and declared toolchain; reproducibility means traceable regeneration and does not assert byte-identical compiler output.
+- [ ] Release preflight rejects a dirty tree, untracked files, a lightweight or incorrectly targeted tag, origin or CI-commit mismatch, inconsistent version metadata, generated-project drift, and an unexpected Xcode version before any build begins.
+- [ ] The distribution build runs from an isolated checkout or worktree and has no Debug or Apple Development signing fallback.
+- [ ] The application uses the hardened runtime and an ad hoc signature with no team identity or secure timestamp.
+- [ ] Strict verification succeeds for the application and every nested executable component; the runtime flag, absence of an Apple team identity, architecture, bundle metadata, and exact entitlement allowlist are checked.
+- [ ] The ZIP contains only the intended application bundle, preserves required macOS metadata, rejects path traversal and unexpected entries, and passes structural extraction checks.
+- [ ] The release includes SHA-256 checksums, an SBOM, and provenance binding the archive, executable, bundle version, toolchain, test result, tag, and exact commit.
+- [ ] A quarantine-preserving transfer produces the expected Gatekeeper warning, and installation is verified using only Apple's per-application Open Anyway exception. Instructions never disable Gatekeeper globally or remove quarantine metadata.
 - [ ] Download, installation, first launch, Screen Recording, microphone, Speech, and normal relaunch are verified without development-only entitlements or paths.
-- [ ] The candidate's SHA-256 checksum and version metadata are recorded.
+- [ ] The final archive checksum, size, code-directory hashes, exact test-result digest, and version metadata are recorded after packaging; no later rebuild, signing, or packaging changes those bytes.
 
 ### Documentation and operations
 
 - [ ] Installation, permissions, first lecture, update, uninstall, troubleshooting, privacy, accessibility, fallback, and support instructions are complete.
 - [ ] Release notes distinguish verified capabilities, prototypes, known limitations, and unsupported configurations.
-- [ ] The README and documentation consistently identify alpha, beta, and RC as prerelease stages and `v1.0.0` as the completion release.
+- [ ] The README and documentation consistently state that no prerelease application will be published and that `v1.0.0` is the completion release.
 - [ ] `docs/build-verification.md` contains dated evidence for the exact release commit and artifact.
-- [ ] A rollback or withdrawal procedure is documented in case the public artifact is defective.
+- [ ] A rollback or withdrawal procedure is documented in case the public artifact is defective, including who may act, which evidence is preserved, and how users are warned without rewriting the published tag.
 
-Passing this gate establishes an RC that is ready for the final publication decision. It is not project completion.
+Passing this gate establishes an exact candidate ready for the final publication decision. It is not project completion.
 
 ## 4. Public v1.0.0 publication
 
 - [ ] All required GitHub Actions checks pass for the approved release commit.
 - [ ] The release commit on `main` is reviewed and has no unintended changes.
-- [ ] Explicit user approval is obtained immediately before the external publication action.
+- [ ] Explicit user approval is obtained immediately before the external publication action and identifies the exact release commit and final application-archive SHA-256.
 - [ ] An annotated `v1.0.0` tag is created from the approved release commit and pushed without rewriting history.
-- [ ] A public GitHub Release is created for `v1.0.0`; it is not marked as a prerelease.
-- [ ] The Developer ID-signed and notarized installable macOS artifact is attached.
-- [ ] Release notes, supported environment, installation instructions, known limitations, privacy information, and SHA-256 checksum are included.
+- [ ] All assets and release notes are assembled and verified in a draft GitHub Release before the release becomes public.
+- [ ] A public GitHub Release is created for `v1.0.0`; it is not marked as a prerelease, and immutable-release controls are enabled when available.
+- [ ] The hardened-runtime, ad hoc-signed arm64 application archive is attached without any Developer ID or Apple-notarization claim.
+- [ ] Release notes, supported environment, installation instructions, known limitations, privacy information, SHA-256 checksum, SBOM, and provenance are included.
 - [ ] Source archives and attached artifacts correspond to the approved tag and recorded provenance.
 
 ## 5. Post-publication verification — completion gate
@@ -95,10 +97,31 @@ Passing this gate establishes an RC that is ready for the final publication deci
 - [ ] The public release page and artifact are accessible without repository-owner credentials.
 - [ ] The artifact is downloaded from the public GitHub Release into a clean verification environment.
 - [ ] The downloaded artifact's SHA-256 matches the published checksum.
-- [ ] Developer ID signature, designated requirement, hardened runtime, notarization, stapling where applicable, and Gatekeeper acceptance are independently rechecked.
+- [ ] Bundle identity, ad hoc signature, hardened runtime, architecture, version, entitlement allowlist, SBOM, and provenance are independently rechecked.
+- [ ] The expected Gatekeeper warning and Apple's per-application Open Anyway exception are independently verified without disabling Gatekeeper globally or removing quarantine metadata.
 - [ ] Installation, first launch, required permission flow, relaunch, and the supported core lecture path succeed from the downloaded artifact.
-- [ ] The public release URL, tag commit, artifact filename, checksum, signing identity, notarization result, test environment, and final results are recorded in `docs/build-verification.md`.
+- [ ] The public release URL, tag commit, artifact filename, checksum, ad hoc signature evidence, test environment, and final results are recorded in `docs/build-verification.md`.
 - [ ] Any discrepancy is resolved before the release is described as complete.
+
+## 6. Withdrawal and rollback triggers
+
+Publication must pause before the release becomes public, or the public artifact must be withdrawn
+from ordinary download while preserving the tag and evidence for investigation, if any of the
+following occurs:
+
+- the public asset digest, tag commit, bundle metadata, signature, SBOM, or recorded
+  provenance differs from the approved candidate;
+- the documented per-application Gatekeeper exception, installation, first launch, required permission setup, relaunch, or the supported
+  core lecture path fails on a clean supported Mac;
+- the application modifies an original PowerPoint file, exposes lecture content unexpectedly,
+  accepts ungrounded output, or renders while an identity, canvas, capture, or human-input safety
+  boundary is unavailable;
+- a release-blocking crash, data-integrity failure, permission loop, security issue, or materially
+  misleading capability statement is found after publication.
+
+Withdrawal is not completion. After correction, a new reviewed commit and artifact must repeat the
+release-candidate and publication checks. A published tag is never moved or force-updated; a
+replacement release uses the next appropriate semantic version.
 
 Only when every item in Sections 1–5 has passed, with Sections 3–5 evaluated against the same `v1.0.0` commit and public artifact, may the project be described as complete.
 

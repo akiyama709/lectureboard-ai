@@ -1251,9 +1251,9 @@ struct AppContentChangeIntegrationTests {
   private func waitUntil(
     _ predicate: @escaping @MainActor () -> Bool
   ) async throws {
-    for _ in 0..<10_000 {
+    for _ in 0..<400 {
       if predicate() { return }
-      await Task.yield()
+      try await Task.sleep(for: .milliseconds(5))
     }
     throw ContentIntegrationTestError.timedOut
   }
@@ -1316,9 +1316,9 @@ private actor RecordingSlideVisualAnalyzer: SlideVisualAnalyzing {
   }
 
   func waitForAnalysisCount(_ expectedCount: Int) async throws {
-    for _ in 0..<10_000 {
+    for _ in 0..<400 {
       if analysisCount >= expectedCount { return }
-      await Task.yield()
+      try await Task.sleep(for: .milliseconds(5))
     }
     throw ContentIntegrationTestError.analysisTimedOut
   }
@@ -1345,9 +1345,9 @@ private actor ControllableSlideVisualAnalyzer: SlideVisualAnalyzing {
   }
 
   func waitForInvocation(sequenceNumber: UInt64) async throws {
-    for _ in 0..<10_000 {
+    for _ in 0..<400 {
       if invokedSequenceNumbers.contains(sequenceNumber) { return }
-      await Task.yield()
+      try await Task.sleep(for: .milliseconds(5))
     }
     throw ControllableSlideVisualAnalyzerError.timedOutWaitingForInvocation(sequenceNumber)
   }

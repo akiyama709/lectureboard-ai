@@ -2,9 +2,9 @@
 
 ## Completion and release status
 
-Project completion is the public `v1.0.0` GitHub Release, containing an installable macOS artifact that is signed with Developer ID and accepted by Apple notarization. The existing public source repository is the development venue, not the completed product. Alpha, beta, and release-candidate builds are intermediate evidence gates.
+Project completion is the public, non-prerelease `v1.0.0` GitHub Release, containing a verified arm64 macOS application archive, its exact source commit, checksums, SBOM, provenance, and successful public-download verification. The project uses neither a paid nor an institutional Apple Developer Program membership, so the archive is hardened-runtime and ad hoc signed, and is explicitly not Developer ID signed or Apple notarized. The existing public source repository is the development venue, not the completed product.
 
-Current status: this repository is an alpha scaffold. No alpha, beta, release-candidate, or `v1.0.0` GitHub Release has been published.
+Current status: this repository is a pre-release development scaffold. No application GitHub Release has been published, and no alpha, beta, or release-candidate Release will be published.
 
 ## Phase A — repository and deterministic baseline
 
@@ -37,7 +37,7 @@ The current schema-11 decoder-hardened scaffold establishes a testable core, nat
 - Term-preservation rules
 - Important-term bilingual display
 
-## Phase E — alpha integration and controlled lecture validation
+## Phase E — controlled integration and lecture validation
 
 - Controlled dry runs
 - Ten-minute lecture trials
@@ -47,11 +47,11 @@ The current schema-11 decoder-hardened scaffold establishes a testable core, nat
 - Repeat the fixed-build static, exact-input dynamic, and single-stroke checkpoints after material producer or decoder changes; preserve report, helper-output, executable, and image provenance without treating helper stdout as cryptographically bound to a report
 - Obtain a live current-build `boundedFreshSample` event before claiming that the one-shot fresh path works with ScreenCaptureKit
 - Live validation of the implemented confirmed-canvas overlay mapping and eligibility boundary before any alignment, click-through, or pen-input claim
-- Alpha packaging that is clearly marked as unfinished
+- Internal validation artifacts that are not published as GitHub Releases
 
-**Gate:** the observable lecture path works end to end under controlled conditions. Alpha is not project completion.
+**Gate:** the observable lecture path works end to end under controlled conditions. This internal gate is not project completion.
 
-## Phase F — beta validation
+## Phase F — representative validation
 
 - Representative Japanese, English, and staged mixed-language decks
 - Repeated classroom trials on supported Mac and display configurations
@@ -59,27 +59,27 @@ The current schema-11 decoder-hardened scaffold establishes a testable core, nat
 - Privacy, accessibility, dependency-license, and third-party-notice review
 - Complete known-limitations and tester fallback documentation
 
-**Gate:** invited testers can repeatedly use a feature-complete build and all material failures are tracked. Beta is not project completion.
+**Gate:** the feature-complete build works repeatedly in the frozen supported environment and all material failures are tracked. This internal gate is not project completion.
 
-## Phase G — release candidate
+## Phase G — final release preparation
 
 - Freeze the `v1.0.0` scope and supported environment
 - Resolve release-blocking defects
 - Produce the reproducible distribution artifact
-- Apply hardened runtime and Developer ID distribution signing
-- Submit the installable artifact for Apple notarization and staple the result where applicable
-- Verify installation, Gatekeeper acceptance, first launch, permissions, and the core lecture path on a clean supported Mac
+- Apply hardened runtime and ad hoc signing without an Apple team, Developer ID identity, or secure timestamp
+- Produce the ZIP, SHA-256 checksum, SPDX SBOM, and commit-bound provenance
+- Verify installation through Apple's per-application Open Anyway flow, first launch, permissions, and the core lecture path on a clean supported Mac
 - Finalize installation, privacy, security, troubleshooting, and release documentation
 
-**Gate:** the exact candidate artifact satisfies every pre-publication item in [`v1-release-checklist.md`](v1-release-checklist.md). A release candidate is not project completion.
+**Gate:** the exact final artifact satisfies every pre-publication item in [`v1-release-checklist.md`](v1-release-checklist.md). This local artifact is not project completion until it is publicly released and re-downloaded successfully.
 
 ## Phase H — public v1.0.0 release
 
 - Verify the exact release commit and artifact
 - Obtain explicit approval immediately before external publication
 - Publish the `v1.0.0` tag and public GitHub Release
-- Attach the signed and notarized installable macOS artifact, release notes, and SHA-256 checksum
-- Re-download the public artifact and verify its checksum, signature, notarization, installation, and launch
+- Attach the hardened-runtime, ad hoc-signed arm64 application archive, release notes, checksum, SBOM, and provenance without a Developer ID or notarization claim
+- Re-download the public artifact and verify its bytes, checksum, ad hoc signature, hardened-runtime state, metadata, installation, and launch
 - Record the release URL and final evidence
 
 **Completion gate:** the public `v1.0.0` GitHub Release and its re-downloaded artifact pass the complete release checklist.

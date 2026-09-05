@@ -665,7 +665,7 @@ struct AppSlideCanvasIntegrationTests {
     await model.startTranscription()
     #expect(transcription.retainedObservationCount == 1)
     await capture.emitContentUnavailable(sequenceNumber: 6)
-    try await waitUntil { !overlay.isVisible }
+    try await waitUntil("content-unavailable overlay hide") { !overlay.isVisible }
     #expect(model.captureStatus == .capturing)
     #expect(model.slideCanvasStatus == .confirmed)
     #expect(model.latestStableFrame == nil)
@@ -713,7 +713,9 @@ struct AppSlideCanvasIntegrationTests {
         )
       )
     }
-    try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil("post-unavailable visual analysis") {
+      model.slideAnalysisStatus == .ready
+    }
     #expect(!overlay.isVisible)
     transcription.emitRetained(
       TranscriptionObservation(
@@ -732,9 +734,13 @@ struct AppSlideCanvasIntegrationTests {
         captureScreenGeometry: geometry.initialScreen
       )
     )
-    try await waitUntil { model.capturedFrameCount == 11 }
+    try await waitUntil("post-unavailable frame 12") {
+      model.capturedFrameCount == 11
+    }
 
-    await model.startTranscription()
+    try await waitUntil("automatic transcription resume") {
+      transcription.retainedObservationCount == 2
+    }
     transcription.emitRetained(
       TranscriptionObservation(
         segment: boardProposalDefinition(text: "Resilience means retaining function."),
@@ -749,7 +755,7 @@ struct AppSlideCanvasIntegrationTests {
       ),
       startIndex: 1
     )
-    try await waitUntil { overlay.isVisible }
+    try await waitUntil("post-unavailable proposal render") { overlay.isVisible }
     #expect(overlay.renderCallCount == 2)
 
     await model.stopWindowCapture()
@@ -1577,7 +1583,9 @@ struct AppSlideCanvasIntegrationTests {
     geometry: ProductionOverlayTestGeometry
   ) async throws {
     await model.startWindowCapture()
-    try await waitUntil { model.slideIdentityState == .identified }
+    try await waitUntil("establish identity") {
+      model.slideIdentityState == .identified
+    }
     await capture.emit(
       frame(
         sequenceNumber: 1,
@@ -1586,7 +1594,9 @@ struct AppSlideCanvasIntegrationTests {
         captureScreenGeometry: geometry.initialScreen
       )
     )
-    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    try await waitUntil("establish canvas confirmation") {
+      model.slideCanvasStatus == .needsConfirmation
+    }
     model.beginSlideCanvasSelection()
     #expect(model.confirmSlideCanvasSelection(geometry.region))
     for sequenceNumber in 2...4 {
@@ -1599,7 +1609,9 @@ struct AppSlideCanvasIntegrationTests {
         )
       )
     }
-    try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil("establish visual analysis") {
+      model.slideAnalysisStatus == .ready
+    }
     await capture.emit(
       frame(
         sequenceNumber: 5,
@@ -1608,7 +1620,7 @@ struct AppSlideCanvasIntegrationTests {
         captureScreenGeometry: geometry.initialScreen
       )
     )
-    try await waitUntil { model.capturedFrameCount == 5 }
+    try await waitUntil("establish frame 5") { model.capturedFrameCount == 5 }
   }
 
   private func establishVisibleProductionOverlay(
@@ -1815,12 +1827,15 @@ struct AppSlideCanvasIntegrationTests {
     )
   }
 
-  private func waitUntil(_ predicate: @escaping @MainActor () -> Bool) async throws {
+  private func waitUntil(
+    _ label: String = "unspecified",
+    _ predicate: @escaping @MainActor () -> Bool
+  ) async throws {
     for _ in 0..<10_000 {
       if predicate() { return }
       await Task.yield()
     }
-    throw AppSlideCanvasIntegrationTestError.timedOut
+    throw AppSlideCanvasIntegrationTestError.timedOut(label)
   }
 
   private func drainMainActorQueue() async {
@@ -2017,7 +2032,7 @@ private struct FixedCanvasDisplayProvider: DisplayCoordinateSnapshotProviding {
 }
 
 private enum AppSlideCanvasIntegrationTestError: Error {
-  case timedOut
+  case timedOut(String)
 }
 
 private actor ManualCanvasCapture: PowerPointWindowCapturing {
@@ -2134,7 +2149,7 @@ private actor RecordingCanvasAnalyzer: SlideVisualAnalyzing {
       if invocationCount >= expectedCount { return }
       await Task.yield()
     }
-    throw AppSlideCanvasIntegrationTestError.timedOut
+    throw AppSlideCanvasIntegrationTestError.timedOut("recording analyzer invocation")
   }
 }
 
@@ -2165,7 +2180,7 @@ private actor SecondAnalysisSuspendingCanvasAnalyzer: SlideVisualAnalyzing {
       if invocationCount >= expectedCount { return }
       await Task.yield()
     }
-    throw AppSlideCanvasIntegrationTestError.timedOut
+    throw AppSlideCanvasIntegrationTestError.timedOut("second analyzer invocation")
   }
 
   func succeedSecondAnalysis() {
@@ -2195,7 +2210,7 @@ private actor SuspendedCanvasAnalyzer: SlideVisualAnalyzing {
       if wasInvoked { return }
       await Task.yield()
     }
-    throw AppSlideCanvasIntegrationTestError.timedOut
+    throw AppSlideCanvasIntegrationTestError.timedOut("suspended analyzer invocation")
   }
 
   func succeed(title: String) {

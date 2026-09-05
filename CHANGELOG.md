@@ -4,12 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Planned
+
+- Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
+- Live validation of the implemented exact-window-bound managed PowerPoint slide-identity provider before actual slide transitions are claimed
+- Exact-window fresh-frame acquisition and live timeout calibration for a static slide after an identity boundary
+- Live PowerPoint validation of `boundedFreshSample` itself through the shared exact-post-baseline-coarse or pending-dense path, including a controlled post-erase candidate confirmed by that source without weakening detector thresholds
+- Runtime calibration of Vision recognition and occupied regions with real presentations
+- Live PowerPoint calibration of manual canvas localization, UI exclusion, ScreenCaptureKit surface padding and `contentRect` mapping, slideshow modes, resizing, and display arrangements
+- Live PowerPoint validation of the implemented confirmed-canvas overlay alignment, frontmost-window and occlusion policy, lease expiry, window movement and resizing, multi-display conversion, z-order, click-through behavior, and pen-input non-interference
+- PowerPoint package parsing and speaker-note extraction
+- Japanese–English code-switching transcription
+- Contextual AI-provider adapters
+- A hardened-runtime, ad hoc-signed `v1.0.0` application archive with checksums, SBOM, provenance, and public-download verification; no Developer ID or Apple-notarization claim
+
+## [1.0.0] - 2026-09-06
+
 ### Added
 
 - Local Codex handoff through `AGENTS.md` and `.codex/config.toml`
 - macOS toolchain diagnostic and first-run scripts
 - Japanese local-development and session-handoff documentation
 - Selected-window ScreenCaptureKit stream for continuous PowerPoint frame capture
+- An explicit managed PowerPoint transaction that retains the returned slide-show object, accepts only windowed show type, causally binds it to one exact ScreenCaptureKit window by a reversible role challenge, restores challenged state, activates App binding before identity polling, and keeps exact cleanup evidence alive until bounded drain completes
+- Exact retained-object slide ID and index polling with one-shot, session, tombstone, cancellation, replacement, stale-callback, and deferred-cleanup guards; deterministic tests pass, while live managed Apple Event execution remains unverified
 - Deterministic stable-frame and significant visual/content-change classification with unit tests
 - In-app capture controls, counters, and a latest-stable-frame preview
 - Stable-frame Vision text and rectangle analysis using the native macOS framework
@@ -35,7 +53,9 @@ All notable changes to this project will be documented in this file.
 - Canvas-only stable/content fingerprints, Vision requests, raster candidates, occupied regions, and board-placement input; capture delivery remains observable while the visual pipeline is closed before confirmation
 - Immediate stale-analysis invalidation for coarse/dense visual candidates and missing or invalid dense fingerprints, with analysis suppressed for coarse confirmation without a valid dense fingerprint and proposals gated until current-frame analysis completes after baseline recovery
 - Minimum canvas validation requiring at least 32 by 24 source pixels and 1,024 square pixels, current-board-context invalidation across semantic slide, canvas, and capture boundaries, capture-end visual/scene cleanup, and fail-closed board proposals when occupied-region analysis is empty
-- Independent App and Apple-provider transcription generation guards, provider stop and stale-callback rejection at semantic slide/canvas/capture boundaries, and explicit user resumption after each safety stop
+- Independent App and Apple-provider transcription generation guards, provider stop and stale-callback rejection at semantic-slide and temporary capture-content boundaries, and automatic resumption of a still-requested session only after current identity, canvas, frame synchronization, and visual analysis are ready; manual stop, canvas boundaries, and capture end cancel the request
+- On-device-only Apple Speech requests with a fail-closed rejection when the selected locale
+  cannot recognize without a network fallback
 - Demo-scene cleanup at capture start and demo suppression during active capture or capture-provider shutdown
 - Metadata-only runtime schema 6 slide-canvas state with schema-1-through-schema-5 decoding compatibility
 - Metadata-only schema-7 overlay diagnostics and schema-8 confirmation provenance, plus narrow direct static exact-window capture evidence that does not validate user-confirmed canvas, visible overlay alignment, semantic identity, dynamic slides, mouse ink, or LaunchServices launch
@@ -60,20 +80,8 @@ All notable changes to this project will be documented in this file.
 - Fail-closed production-overlay mapping from the confirmed output-pixel canvas through the exact current ScreenCaptureKit surface and `screenRect` into one uniquely containing AppKit display, bound to the capture operation, exact window, output dimensions, and current frame sequence, with no full-display or approximate fallback
 - Production-overlay eligibility checks for the frozen PowerPoint process and bundle being frontmost, one matching on-screen layer-zero Core Graphics window, window-bound agreement within two points, and no earlier intersecting on-screen window, plus a persistent manual-hide latch, visual/content-unavailable hiding, and an independently expiring eligibility lease
 - A separate full-display demo-overlay path that is never used as a production-coordinate fallback
-
-### Planned
-
-- Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
-- An exact-window-bound production PowerPoint slide-identity provider and live validation before actual slide transitions are claimed
-- Exact-window fresh-frame acquisition and live timeout calibration for a static slide after an identity boundary
-- Live PowerPoint validation of `boundedFreshSample` itself through the shared exact-post-baseline-coarse or pending-dense path, including a controlled post-erase candidate confirmed by that source without weakening detector thresholds
-- Runtime calibration of Vision recognition and occupied regions with real presentations
-- Live PowerPoint calibration of manual canvas localization, UI exclusion, ScreenCaptureKit surface padding and `contentRect` mapping, slideshow modes, resizing, and display arrangements
-- Live PowerPoint validation of the implemented confirmed-canvas overlay alignment, frontmost-window and occlusion policy, lease expiry, window movement and resizing, multi-display conversion, z-order, click-through behavior, and pen-input non-interference
-- PowerPoint package parsing and speaker-note extraction
-- Japanese–English code-switching transcription
-- Contextual AI-provider adapters
-- Developer ID-signed and notarized release-candidate and `v1.0.0` distribution artifacts
+- A privacy-bounded JSON and SVG session exporter containing only confirmed or pinned public board scenes, with consecutive same-slide coalescing, revisit preservation, new-capture reset, post-stop retention, and explicit exclusion of transcript, OCR text, images, window metadata, runtime identifiers, and non-public intents
+- An authoritative no-fee `v1.0.0` build and packaging path for an arm64 hardened-runtime, ad hoc-signed application ZIP with exact entitlement verification, checksum, SBOM, commit-bound provenance, and public-download verification; this path makes no Developer ID or notarization claim
 
 ## [0.1.0-alpha] - 2026-08-29
 

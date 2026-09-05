@@ -1,9 +1,12 @@
+import AppKit
 import CoreGraphics
 import LectureBoardCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MainView: View {
   @EnvironmentObject private var model: AppModel
+  @State private var sessionExportError: String?
 
   var body: some View {
     NavigationSplitView {
@@ -19,7 +22,7 @@ struct MainView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 24) {
           header
-          prototypeNotice
+          supportedWorkflowNotice
           permissions
           powerPointSelection
           captureMonitor
@@ -42,6 +45,11 @@ struct MainView: View {
     }
     .onDisappear {
       Task { await model.stopWindowCapture() }
+    }
+    .alert("session.export.error", isPresented: exportErrorIsPresented) {
+      Button("common.ok", role: .cancel) {}
+    } message: {
+      Text(sessionExportError ?? "")
     }
   }
 
@@ -74,15 +82,17 @@ struct MainView: View {
     }
   }
 
-  private var prototypeNotice: some View {
-    Label("status.prototype", systemImage: "hammer")
+  private var supportedWorkflowNotice: some View {
+    Label("status.supportedWorkflow", systemImage: "checklist")
       .padding(14)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+      .background(.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
   }
 
   private var permissions: some View {
-    GroupBox("setup.permissions") {
+    let screenCaptureAccessGranted = model.permissionService.screenCaptureAccessGranted
+
+    return GroupBox("setup.permissions") {
       HStack(spacing: 18) {
         PermissionBadge(
           titleKey: "setup.screen",
@@ -97,11 +107,15 @@ struct MainView: View {
           granted: model.permissionService.speechRecognitionGranted
         )
         Spacer()
-        Button("setup.requestScreen") {
-          Task {
-            await performScreenCaptureSetupAction(
-              ScreenCaptureSetupPolicy.action(for: .permissionButtonPressed)
-            )
+        if ScreenCaptureSetupPolicy.showsPermissionButton(
+          preflightGranted: screenCaptureAccessGranted
+        ) {
+          Button("setup.requestScreen") {
+            Task {
+              await performScreenCaptureSetupAction(
+                ScreenCaptureSetupPolicy.action(for: .permissionButtonPressed)
+              )
+            }
           }
         }
       }
@@ -147,9 +161,15 @@ struct MainView: View {
               )
             }
           }
-          Button("capture.start") {
-            Task { await model.startWindowCapture() }
+          .disabled(
+            !ScreenCaptureSetupPolicy.enablesWindowRefresh(
+              preflightGranted: model.permissionService.screenCaptureAccessGranted
+            )
+          )
+          Button("capture.managedStart") {
+            Task { await model.startManagedSlideShowCapture() }
           }
+          .buttonStyle(.borderedProminent)
           .disabled(
             !CaptureControlPolicy.canStart(
               screenCaptureAccessGranted:
@@ -162,6 +182,29 @@ struct MainView: View {
             Task { await model.stopWindowCapture() }
           }
           .disabled(model.captureStatus == .stopped)
+        }
+        Text("capture.managedStart.explanation")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+
+        DisclosureGroup("capture.diagnostic.title") {
+          VStack(alignment: .leading, spacing: 8) {
+            Button("capture.diagnostic.start") {
+              Task { await model.startWindowCapture() }
+            }
+            .disabled(
+              !CaptureControlPolicy.canStart(
+                screenCaptureAccessGranted:
+                  model.permissionService.screenCaptureAccessGranted,
+                hasSelectedWindow: model.selectedWindow != nil,
+                captureStatus: model.captureStatus
+              )
+            )
+            Text("capture.diagnostic.explanation")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+          .padding(.top, 6)
         }
       }
       .padding(.vertical, 8)
@@ -383,16 +426,38 @@ struct MainView: View {
 
   private var controls: some View {
     HStack(spacing: 12) {
-      Button("setup.overlay") { model.showOverlayDemo() }
-        .disabled(!model.canShowOverlayDemo)
-      Button("setup.stop") { model.hideOverlay() }
-      Divider().frame(height: 24)
       Button("setup.transcription") {
         Task { await model.startTranscription() }
       }
       Button("setup.transcriptionStop") { model.stopTranscription() }
+      Button("board.hide") { model.hideOverlay() }
+      Divider().frame(height: 24)
+      Button("session.export") { exportSession() }
+        .disabled(!model.canExportLectureSession)
     }
     .buttonStyle(.bordered)
+  }
+
+  private var exportErrorIsPresented: Binding<Bool> {
+    Binding(
+      get: { sessionExportError != nil },
+      set: { if !$0 { sessionExportError = nil } }
+    )
+  }
+
+  @MainActor
+  private func exportSession() {
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.json]
+    panel.canCreateDirectories = true
+    panel.nameFieldStringValue = "lectureboard-session.json"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    do {
+      _ = try model.exportLectureSession(to: url)
+    } catch {
+      sessionExportError = error.localizedDescription
+    }
   }
 
   private var transcript: some View {

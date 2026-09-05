@@ -8,6 +8,10 @@ struct LocalizationResourceTests {
     let expectedStrings = [
       "en": [
         "app.title": "LectureBoard AI",
+        "status.supportedWorkflow":
+          "Supported workflow: one PowerPoint presentation, a windowed slide show, one display, and one lecture language. Confirm the visible slide area before starting transcription.",
+        "capture.diagnostic.explanation":
+          "Diagnostic mode does not start or semantically bind a slide show, so it cannot display production board output.",
         "capture.slideIdentity.unavailable":
           "Independent slide identity is unavailable",
         "capture.slideIdentity.establishing":
@@ -29,9 +33,15 @@ struct LocalizationResourceTests {
         "capture.slideCanvas.invalidated":
           "Window geometry changed; confirm the slide area again",
         "capture.slideCanvas.confirm": "Confirm slide area",
+        "error.onDeviceRecognitionUnavailable":
+          "On-device speech recognition is unavailable for the selected language. Transcription did not start because audio must not be sent off this Mac.",
       ],
       "ja": [
         "app.title": "LectureBoard AI",
+        "status.supportedWorkflow":
+          "対応する利用方法：PowerPoint資料1件，ウィンドウ表示のスライドショー，ディスプレイ1台，講義言語1種類．文字起こしを始める前に，表示中のスライド面を確定してください．",
+        "capture.diagnostic.explanation":
+          "診断モードはスライドショーを開始せず，意味的にも結び付けないため，本番用の板書を表示できません．",
         "capture.slideIdentity.unavailable":
           "独立したスライド識別は利用できません",
         "capture.slideIdentity.establishing":
@@ -53,6 +63,8 @@ struct LocalizationResourceTests {
         "capture.slideCanvas.invalidated":
           "ウィンドウ寸法が変わったため，スライド面を再確認してください",
         "capture.slideCanvas.confirm": "スライド面を確定",
+        "error.onDeviceRecognitionUnavailable":
+          "選択した言語の端末内音声認識を現在利用できません．音声を外部へ送信しないため，文字起こしを開始しません．",
       ],
     ]
 

@@ -8,6 +8,9 @@ runtime_derived_data="$repository_root/DerivedData/RuntimeBuild"
 generated_project_directory="$runtime_derived_data/GeneratedProject"
 generated_project="$generated_project_directory/LectureBoardAI.xcodeproj"
 local_package_link="$generated_project_directory/Packages"
+entitlements_file="$repository_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
+generated_entitlements_directory="$generated_project_directory/LectureBoardAI/Config"
+generated_entitlements_link="$generated_entitlements_directory/LectureBoardAI.entitlements"
 runtime_app="$runtime_derived_data/Build/Products/Debug/LectureBoard AI.app"
 bundle_identifier="io.github.akiyama709.LectureBoardAI"
 scheme="LectureBoardAI"
@@ -56,6 +59,8 @@ print_config() {
   printf 'GENERATED_PROJECT_PATH=%s\n' "$generated_project"
   printf 'LOCAL_PACKAGE_LINK=%s\n' "$local_package_link"
   printf 'LOCAL_PACKAGE_TARGET=%s\n' "$repository_root/Packages"
+  printf 'ENTITLEMENTS_PATH=%s\n' "$entitlements_file"
+  printf 'GENERATED_ENTITLEMENTS_LINK=%s\n' "$generated_entitlements_link"
   printf 'APP_PATH=%s\n' "$runtime_app"
   printf 'BUNDLE_IDENTIFIER=%s\n' "$bundle_identifier"
   printf 'ARCHITECTURE=arm64\n'
@@ -111,6 +116,13 @@ for required_command in xcodegen xcodebuild codesign plutil lipo tr; do
   fi
 done
 
+
+if [[ ! -f "$entitlements_file" || -L "$entitlements_file" ]]; then
+  printf 'The runtime-build entitlements file is missing or symbolic: %s\n' \
+    "$entitlements_file" >&2
+  exit 1
+fi
+
 if ! grep -Fq "PRODUCT_BUNDLE_IDENTIFIER: $bundle_identifier" "$repository_root/project.yml"; then
   printf 'The runtime bundle identifier does not match project.yml: %s\n' \
     "$bundle_identifier" >&2
@@ -130,6 +142,22 @@ elif [[ -e "$local_package_link" ]]; then
   exit 1
 else
   ln -s "$repository_root/Packages" "$local_package_link"
+fi
+
+mkdir -p "$generated_entitlements_directory"
+if [[ -L "$generated_entitlements_link" ]]; then
+  actual_entitlements_target="$(readlink "$generated_entitlements_link")"
+  if [[ "$actual_entitlements_target" != "$entitlements_file" ]]; then
+    printf 'Unexpected generated entitlements link target: %s\n' \
+      "$actual_entitlements_target" >&2
+    exit 1
+  fi
+elif [[ -e "$generated_entitlements_link" ]]; then
+  printf 'The generated entitlements link path is occupied: %s\n' \
+    "$generated_entitlements_link" >&2
+  exit 1
+else
+  ln -s "$entitlements_file" "$generated_entitlements_link"
 fi
 
 printf 'Generating an isolated Xcode project for runtime verification...\n'

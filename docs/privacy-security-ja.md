@@ -37,7 +37,7 @@ LectureBoard AIが扱い得る情報には，次が含まれる．
 
 ### マイク
 
-音声認識を開始する時点で要求する．停止中は入力を処理しない．
+　音声認識を開始する時点で要求する．停止中は入力を処理しない．Apple Speech requestは端末内認識を必須とし，選択言語で端末内認識を利用できない場合は，network fallbackを許さず文字起こしを開始しない．Appleは，`requiresOnDeviceRecognition`が音声のnetwork送信を防ぐには`supportsOnDeviceRecognition`もtrueでなければならないと説明しており，実装は両条件を強制する：<https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition>．
 
 ### アクセシビリティ
 
@@ -112,7 +112,7 @@ PowerPointを遠隔操作しないMVPでは原則不要とする．将来必要�
 
 ## 10．配布
 
-一般利用者向け配布では，Developer IDによる署名とApple notarizationを行う．更新機能を追加する場合は，署名済み更新のみを受け入れる．
+　`v1.0.0`の無償配布では，Hardened Runtimeを有効にしたarm64 Appをad hoc署名し，checksum，SBOM及びcommit-bound provenanceを添付する．Developer ID署名又はApple notarization済みとは表示せず，導入案内はAppleのApp単位の「このまま開く」だけを用いる．Gatekeeper全体の無効化又はquarantine metadataの除去は案内しない．更新機能を将来追加する場合は，別途，改ざん耐性のある更新署名とkey管理を設計する．
 
 ## 11．脅威例
 

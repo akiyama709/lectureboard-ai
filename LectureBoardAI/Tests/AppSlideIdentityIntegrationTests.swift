@@ -245,19 +245,9 @@ struct AppSlideIdentityIntegrationTests {
       sequenceNumbers: 4...6
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil { transcriptionProvider.startCount == 2 }
+    #expect(model.status == .listening)
 
-    transcriptionProvider.emit(
-      startIndex: 0,
-      observation: TranscriptionObservation(
-        segment: definitionSegment(),
-        sourceMachTime: mach_absolute_time()
-      )
-    )
-    #expect(model.liveTranscript.isEmpty)
-    #expect(model.boardScene.elements.isEmpty)
-
-    await model.startTranscription()
-    #expect(transcriptionProvider.startCount == 2)
     transcriptionProvider.emit(
       startIndex: 0,
       observation: TranscriptionObservation(
@@ -284,6 +274,107 @@ struct AppSlideIdentityIntegrationTests {
     )
     #expect(model.liveTranscript == definitionSegment().text)
     #expect(!model.boardScene.elements.isEmpty)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func manualStopDuringSemanticBoundaryPreventsAutomaticTranscriptionResume() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let identityProvider = ControllableSlideIdentityProvider()
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(
+      capture: capture,
+      provider: identityProvider,
+      analyzer: analyzer,
+      transcriptionProvider: transcriptionProvider
+    )
+    let firstSlide = try sample(slideID: 101, slideIndex: 1)
+    let secondSlide = try sample(slideID: 202, slideIndex: 2)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await identityProvider.emit(sequenceNumber: 1, signal: .available(firstSlide))
+    await identityProvider.emit(sequenceNumber: 2, signal: .available(firstSlide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 1...3
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+
+    await model.startTranscription()
+    #expect(transcriptionProvider.startCount == 1)
+
+    await identityProvider.emit(sequenceNumber: 3, signal: .available(secondSlide))
+    await identityProvider.emit(sequenceNumber: 4, signal: .available(secondSlide))
+    try await waitUntil { model.slideChangeCount == 1 }
+    model.stopTranscription()
+
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 4...6
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(model.status == .ready)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func temporaryCaptureGapResumesRequestedTranscriptionAfterFreshAnalysis() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let identityProvider = ControllableSlideIdentityProvider()
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(
+      capture: capture,
+      provider: identityProvider,
+      analyzer: analyzer,
+      transcriptionProvider: transcriptionProvider
+    )
+    let slide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await identityProvider.emit(sequenceNumber: 1, signal: .available(slide))
+    await identityProvider.emit(sequenceNumber: 2, signal: .available(slide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 1...3
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await model.startTranscription()
+
+    await capture.emitContentUnavailable(sequenceNumber: 4)
+    try await waitUntil { transcriptionProvider.stopCount == 1 }
+    #expect(model.status == .ready)
+
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 5...7
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil { transcriptionProvider.startCount == 2 }
+
+    #expect(model.status == .listening)
 
     await model.stopWindowCapture()
   }
@@ -1579,6 +1670,7 @@ private actor ControllableSlideIdentityFrameTimeoutWaiter:
 
 private actor SlideIdentityFrameCapture: PowerPointWindowCapturing {
   private var frameHandler: CaptureFrameHandler?
+  private var contentUnavailableHandler: CaptureContentUnavailableHandler?
   private var errorHandler: CaptureErrorHandler?
 
   func start(
@@ -1591,8 +1683,23 @@ private actor SlideIdentityFrameCapture: PowerPointWindowCapturing {
     errorHandler = onError
   }
 
+  func start(
+    operationID: CaptureOperationID,
+    identity: PowerPointWindowIdentity,
+    onFrame: @escaping CaptureFrameHandler,
+    onContentUnavailable: @escaping CaptureContentUnavailableHandler,
+    onFailure: @escaping CaptureFailureHandler
+  ) async throws {
+    frameHandler = onFrame
+    contentUnavailableHandler = onContentUnavailable
+    errorHandler = { message in
+      onFailure(CaptureFailureEventFactory.unclassified(message: message))
+    }
+  }
+
   func stop(operationID: CaptureOperationID) async {
     frameHandler = nil
+    contentUnavailableHandler = nil
     errorHandler = nil
   }
 
@@ -1602,6 +1709,10 @@ private actor SlideIdentityFrameCapture: PowerPointWindowCapturing {
 
   func emitError(_ message: String) {
     errorHandler?(message)
+  }
+
+  func emitContentUnavailable(sequenceNumber: UInt64) {
+    contentUnavailableHandler?(sequenceNumber)
   }
 }
 

@@ -493,7 +493,7 @@ LectureBoard Sessions/
 - クラウド利用時は送信対象を画面上に明示する
 - クラウド障害時はローカルの安全な縮退動作へ移る
 - 自動更新を導入する場合は署名検証を必須とする
-- 一般配布する`.app`はDeveloper ID署名とApple notarizationを行う
+- `v1.0.0`の一般配布はHardened Runtimeを有効にしたarm64 Appのad hoc署名，checksum，SBOM及びcommit-bound provenanceを用い，Developer ID署名又はApple notarization済みとは表示しない
 
 詳細は`privacy-security-ja.md`を参照する．
 
@@ -595,11 +595,11 @@ LectureBoard Sessions/
 3. 実装済みの確認済みスライド面へのoverlay座標対応をlive検証し，OCR，図形，占有領域及び確認済み既存インクを統合する
 4. `.pptx`，発表者ノート及び確定発話を用いる根拠付き文脈判断
 5. 人間の手書きを優先する安定板書及びセッション保存
-6. 制御講義によるα検証，代表資料によるβ検証及び機能凍結後のRC検証
-7. Developer ID署名，Hardened Runtime，Apple notarization及びクリーンMacでの受入試験
+6. 制御講義，代表資料及び機能凍結後の最終artifactによる段階的検証
+7. Hardened Runtime，ad hoc署名，checksum，SBOM，provenance及びクリーンMacでのApp単位の「このまま開く」による受入試験
 8. 公開`v1.0.0` GitHub Release及び公開成果物の再取得検証
 
-　公開リポジトリ作成，α版，β版及びRCは中間ゲートである．[`v1-release-checklist.md`](v1-release-checklist.md)の全項目を満たす公開`v1.0.0` GitHub Releaseの成立だけを，本プロジェクトの完成とする．
+　公開リポジトリ作成及び内部検証artifactは中間ゲートである．α版，β版又はRCのapplication Releaseは公開しない．[`v1-release-checklist.md`](v1-release-checklist.md)の全項目を満たす公開`v1.0.0` GitHub Releaseの成立だけを，本プロジェクトの完成とする．
 
 ## 18．公式技術資料
 

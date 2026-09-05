@@ -12,6 +12,14 @@ enum ScreenCaptureSetupPolicy {
     case refreshPowerPointWindows
   }
 
+  static func showsPermissionButton(preflightGranted: Bool) -> Bool {
+    !preflightGranted
+  }
+
+  static func enablesWindowRefresh(preflightGranted: Bool) -> Bool {
+    preflightGranted
+  }
+
   static func action(for event: Event) -> Action {
     switch event {
     case .viewAppeared(preflightGranted: true):

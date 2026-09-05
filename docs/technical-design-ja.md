@@ -5,7 +5,7 @@
 
 ## 1．目的
 
-　本書は，LectureBoard AIの目標アーキテクチャと，現行alpha scaffoldで実装・検証済みの範囲を区別して記述する．LectureBoard AIの目標は，PowerPointを用いた対面・オンライン講義中に，講師の発話と現在のスライドを文脈的に理解し，スライドの空いた領域へ，文字，囲み，矢印，因果図，比較図等を自動的に描画するmacOSアプリである．
+　本書は，LectureBoard AIの目標アーキテクチャと，現行の公開前開発sourceで実装・検証済みの範囲を区別して記述する．LectureBoard AIの目標は，PowerPointを用いた対面・オンライン講義中に，講師の発話と現在のスライドを文脈的に理解し，スライドの空いた領域へ，文字，囲み，矢印，因果図，比較図等を自動的に描画するmacOSアプリである．
 
 　目標とする標準動作では，「ここを板書してください」等の音声コマンドを必要としない．講師は通常どおり講義し，必要な場合だけAI板書を停止，取消し，固定する．現行ビルドは，この一連の講義経路を実機で確認済みの製品ではない．
 
@@ -66,7 +66,7 @@ LectureBoard AI
 
 - 画面収録，マイク，音声認識の権限確認UI
 - PowerPointウィンドウの列挙と選択
-- Apple Speechによる日英単一言語の開始・停止試作
+- Apple Speechによる日英単一言語の端末内限定・開始・停止試作．端末内認識を利用できない場合はnetwork fallbackなしで停止する
 - 講師用状態表示
 - 透明なAI板書オーバーレイ試作
 - 設定と安全操作
@@ -148,7 +148,7 @@ LectureBoard AI
 
 ## 9．言語
 
-　初期alpha版では，講義開始前に日本語又は英語を選択する．UIは日本語と英語を用意し，内部表現にはBCP 47言語タグを使用する．
+　正式`v1.0.0`の対応範囲では，講義開始前に日本語又は英語を選択する．UIは日本語と英語を用意し，内部表現にはBCP 47言語タグを使用する．
 
 　日本語・英語が一つの講義中で切り替わる運用は重要な目標である．ただし，短区間言語判定，専門語保持，セッション用語集，重要語のみ二言語併記を段階的に実装し，実講義で検証するまでは「完全対応」と表示しない．
 
@@ -168,14 +168,14 @@ LectureBoard AI
 - 公開先：`akiyama709/lectureboard-ai`
 - リポジトリ名：`lectureboard-ai`
 - Bundle Identifier：`io.github.akiyama709.LectureBoardAI`
-- 初期版：`0.1.0-alpha`
-- ライセンス：MIT Licenseを暫定採用
+- 最初のapplication Release：正式`1.0.0`
+- ライセンス：MIT License
 - 公開前に所属機関の知財・ソフトウェア公開方針を確認する
 - 実装済み機能と未実装機能をREADMEとROADMAPで明確に区別する
 
 ## 12．現在の実装状況
 
-　現行ソースはschema 11のdecoder-hardened alpha scaffoldである．macOSアプリの骨格，正確なPowerPointウィンドウへfail-closedに結び付けたScreenCaptureKit取得，安定フレーム／視覚内容更新検出，確認済みキャンバス境界，Vision解析，座標変換・表示適格性試作，Apple Speech試作，文脈判断コア，空白配置，ベクトル板書モデル，画像非保持ランタイムレポートを含む．
+　現行ソースはschema 11のdecoder-hardenedな公開前開発sourceである．macOSアプリの骨格，正確なPowerPointウィンドウへfail-closedに結び付けたScreenCaptureKit取得，安定フレーム／視覚内容更新検出，確認済みキャンバス境界，Vision解析，座標変換・表示適格性試作，端末内認識を必須とするApple Speech試作，文脈判断コア，空白配置，ベクトル板書モデル，画像非保持ランタイムレポートを含む．
 
 　2026年9月1日，開発用Mac上で153件のCoreテスト（15 suites），259件のnative appテスト（30 suites），及び14段階の`make verify`が通過した．最新のnative test結果は`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_23-50-45-+0900.xcresult`で，失敗，skip，expected failureはいずれも0件である．検証対象のarm64実行ファイルのSHA-256は`a6407496c7bd0044c3f30982e749a5556bd2b8e9a751ebd7ed476f59e9151cc9`，ad hoc CDHashは`7a60426b1fb628f6fd3dce9b1c3516092d5a799a`で，strict complete-bundle署名検証を通過した．Developer ID署名，hardened runtime，notarizationは未実施である．
 
@@ -192,4 +192,4 @@ LectureBoard AI
 5. `.pptx`本文・図形・発表者ノートと実講義文字起こしを，根拠付き`BoardIntent`へ接続する
 6. ローカル／クラウドの交換可能な本番モデルproviderと，厳格な出力検証を実装する
 7. 文字，囲み，矢印，因果図の本番描画と，JSON，SVG，PDF，Markdownによるsession書出しを実装する
-8. 制御された日英講義，長時間・回復試験，署名・notarization・配布検証を順に完了する
+8. 制御された日英講義，長時間・回復試験，Hardened Runtime，ad hoc署名，checksum，SBOM，provenance及び配布検証を順に完了する

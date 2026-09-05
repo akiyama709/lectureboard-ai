@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000FE5786D0841D8E4DEDEC8 /* ManagedSlideShowBindingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BD31DB4BC53DE240B3777AE /* ManagedSlideShowBindingCoordinatorTests.swift */; };
 		0B13D3DDEDE73A8CA04EBB73 /* PowerPointSlideIdentityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA29FBA6A9428279D53EFCC /* PowerPointSlideIdentityProviderTests.swift */; };
 		0C1C9DD2DB8B6C95CC6C1295 /* RuntimeVerificationReportWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CE5A06FD66D0421B4FCDB73 /* RuntimeVerificationReportWriter.swift */; };
+		122571556BE1C3E0F06CE230 /* AppModelSessionExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71E5F780D02AA6BEBA31546 /* AppModelSessionExportTests.swift */; };
 		15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */; };
 		170B4EBB32FCC514A6F1DD12 /* RuntimeVerificationPermissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DE751E95121001B5CC8751E /* RuntimeVerificationPermissionPolicy.swift */; };
 		17E19A5D0092192B875989B7 /* DisplayCoordinateSnapshotProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0231A8C423EE223BACBCBE27 /* DisplayCoordinateSnapshotProvider.swift */; };
@@ -17,14 +19,18 @@
 		1C738559CA669F8BB7BC0D5B /* TranscriptionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4614FE7EC712603B67D3964 /* TranscriptionProvider.swift */; };
 		1CFEB3D0827FEABA39C4E7F9 /* RuntimeVerificationWindowSelectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67ED979FFCBC3875345D1B6 /* RuntimeVerificationWindowSelectorTests.swift */; };
 		21DC587215C72D20CEA81EB2 /* RuntimeVerificationPermissionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C2C608ADD9A862BE8A054E /* RuntimeVerificationPermissionPolicyTests.swift */; };
+		22DFD947044A5022ECB26185 /* ManagedSlideShowBindingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA6EA33B47C036292516A378 /* ManagedSlideShowBindingCoordinator.swift */; };
 		2A4CD5D0B8143C54B2B54A15 /* SlideCanvasCropperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 018A9E87FA3CEE0882681F4C /* SlideCanvasCropperTests.swift */; };
+		2DCC4F81FA20B454EBF1FCB6 /* PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383E10EBBF4D0F4AFFE73F13 /* PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests.swift */; };
 		3135AFAA4AAC399B9D13D2D8 /* ScreenCaptureSetupPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5656CA14C9CC8E0001F8F6 /* ScreenCaptureSetupPolicyTests.swift */; };
 		31539E4CAE08EA991E8C7CB0 /* LectureBoardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0EB3F3B07961AFF36A2CE4ED /* LectureBoardCore */; };
 		32B0BAD8455006EF069C6262 /* AppleSpeechRecognizerProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */; };
 		35BC6B6DE951DA097BC3E475 /* SlideCanvasOverlayMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1DAF0B44265BC7421ACDAE3 /* SlideCanvasOverlayMapper.swift */; };
 		37112F068A4C294AD6EFFB68 /* SlideCanvasCropper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0EA92CF3A0B5423014404B /* SlideCanvasCropper.swift */; };
 		384D1B69AAB6B188A4781135 /* RuntimeVerificationRunnerIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D65BCB707258FE845C04C66 /* RuntimeVerificationRunnerIntegrationTests.swift */; };
+		3EF29BAC41A40CD344492507 /* PowerPointAppleEventDescriptorCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DFB6EF9C104ABFA2C3A77F /* PowerPointAppleEventDescriptorCodec.swift */; };
 		53537409C4AF944D620CEEE3 /* CaptureLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42C9215A5BA5559FDF4EE0E2 /* CaptureLifecycleTests.swift */; };
+		550A9E824C2EA113FCC16A4F /* PowerPointManagedSlideShowRoleCaptureEvidenceBroker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A756AD12AA1134234B51C26 /* PowerPointManagedSlideShowRoleCaptureEvidenceBroker.swift */; };
 		5761707899B7C6D6AA9990B0 /* RuntimeVerificationLaunchPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F13F8B70B77EDF54B1C9C1 /* RuntimeVerificationLaunchPolicyTests.swift */; };
 		58032BACDC7958B9DF1816E7 /* LocalizationResourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A260C8874F1DCC60F8B435B /* LocalizationResourceTests.swift */; };
 		597500E2A3C45B1370F5FCAB /* PowerPointSlideIdentityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACB177C9DEFC6A7ED9A9986 /* PowerPointSlideIdentityProvider.swift */; };
@@ -33,23 +39,33 @@
 		62E4D20F0F695EFC53BD25FF /* RuntimeVerificationApplicationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34351EA1ADCD2D88705AB4E /* RuntimeVerificationApplicationDelegate.swift */; };
 		688BEC5EF09CC3DB0CD7A231 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2FBD20EAAA499EF3E13F42 /* SettingsView.swift */; };
 		6B96BA4A022B9A508F238B82 /* ProductionOverlayEligibilityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD73C2F862C1EB06AECDAA7 /* ProductionOverlayEligibilityProvider.swift */; };
+		6D6BDCC652C113BD75B4FF3A /* ManagedSlideShowTransactionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C986A054E3F3513A2B175520 /* ManagedSlideShowTransactionCoordinator.swift */; };
 		7A73BFDCA604A4E2603BF2D2 /* PermissionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6E833C97DC00FE614908CF0 /* PermissionServiceTests.swift */; };
 		7C1308D572474DB16FB7F575 /* SlideCanvasCalibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B144247EF3C6005A68A5BC61 /* SlideCanvasCalibration.swift */; };
+		7C6D786FDF84BC62939150D6 /* PowerPointAppleEventDescriptorCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472580826135FC751CCCB04D /* PowerPointAppleEventDescriptorCodecTests.swift */; };
 		7D0F7C013D60CAF470AB49D3 /* CaptureControlPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019E6AC260CFEF3D74B974DA /* CaptureControlPolicy.swift */; };
 		8101E217E14EB3CD58DCC807 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F453CD2C95C2282F00144BE6 /* AppModel.swift */; };
+		84D4EFC5964DFF6E2ADCDA57 /* ManagedSlideShowTransactionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7715D9A32A2BFF00934FDCF2 /* ManagedSlideShowTransactionCoordinatorTests.swift */; };
 		870663B764FE1F02EDD9165D /* RuntimeVerificationSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4BEFE7878AD8CA03EE430A /* RuntimeVerificationSnapshotProjector.swift */; };
 		8E6F6A95BAEA8F0F56E84460 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339DE12925806880C6DF0482 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift */; };
 		9090BCC90A84A8C83D6F189B /* RuntimeVerificationRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A933ACEEBCE6CE87BD3D07 /* RuntimeVerificationRunner.swift */; };
+		9423C69BBB53071F104B4D55 /* PowerPointManagedSlideShowAppleEventClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC60E5887D42F96AF55049C3 /* PowerPointManagedSlideShowAppleEventClientTests.swift */; };
+		94418237B48EC0527610C121 /* PowerPointAutomationPermissionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75600A5E351A72282EB752B /* PowerPointAutomationPermissionServiceTests.swift */; };
 		962ACFE2A3B95063564923E7 /* ScreenCaptureSetupPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0302CA2C3C1FD7E8E62412FB /* ScreenCaptureSetupPolicy.swift */; };
 		9B9A427405B04A23770D24D3 /* RuntimeVerificationCanvasConfirmationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2727F689FF17EFFBD3816B79 /* RuntimeVerificationCanvasConfirmationPolicy.swift */; };
+		9FF3E3C681EFBF961D25E399 /* PowerPointManagedSlideShowRoleChallengeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8D6B356E04B45B8361831B /* PowerPointManagedSlideShowRoleChallengeClient.swift */; };
 		A4E7163F132C8E8545BA9376 /* AppSlideIdentityIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7C61CD4E4190A5CDA3B42A /* AppSlideIdentityIntegrationTests.swift */; };
 		A7EAB2B8DD0FC248EBDBF6B2 /* AppSlideCanvasIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3395EFB908D5DD6084507C /* AppSlideCanvasIntegrationTests.swift */; };
 		A94CFE60E848E7A8640904F8 /* AppContentChangeIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A278657D170BEE56FC7CA483 /* AppContentChangeIntegrationTests.swift */; };
 		AC53C9C8222F10B0AA4376BC /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2D90DEE7480CF5D2E10E8C89 /* Localizable.strings */; };
+		B43C75EA062043BEDA4DD91C /* PowerPointManagedSlideShowRoleChallengeClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7B342A3CD0728A475DDFDFE /* PowerPointManagedSlideShowRoleChallengeClientTests.swift */; };
+		B7DD3E9D2B16CD4B503CF999 /* PowerPointManagedSlideShowAppleEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ED8EEE257D1AE08F5FFB98A /* PowerPointManagedSlideShowAppleEventClient.swift */; };
 		B9CE3E736D7119F11F2F8E43 /* PowerPointWindowIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78A6B7F5758FCB240CA36DA /* PowerPointWindowIdentityTests.swift */; };
+		BA3FBE954128885F1947D31C /* ManagedSlideShowRoleChallengeCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F89705DC206BE4F1613F8713 /* ManagedSlideShowRoleChallengeCoordinatorTests.swift */; };
 		BCCABA8DA4C54B7098EC2786 /* BoardPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A63E414F9808AC19E488E50 /* BoardPreviewView.swift */; };
 		C03D6DDCDD59F00FA72354B2 /* BoardSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E93A3CA108A8AC8C8696E3 /* BoardSceneView.swift */; };
 		C1E5CF6CF8A5B98C6408571D /* CaptureDeliveryMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D800008C4AA26556CF4B74 /* CaptureDeliveryMetricsTests.swift */; };
+		C4BB10DA1694545A2978C6DA /* ManagedSlideShowRoleChallengeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF7A2747A92B151A2C717CB /* ManagedSlideShowRoleChallengeCoordinator.swift */; };
 		C7B05EF9776D9F2B71FEDDA6 /* RuntimeVerificationWindowSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69D068382DE470573027124 /* RuntimeVerificationWindowSelector.swift */; };
 		CEDB5ACD9C3AC7C25D9D68E8 /* DigitalInkStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */; };
 		CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5573FE4ABFD2053A04418C2 /* OverlayWindowController.swift */; };
@@ -60,6 +76,7 @@
 		DDE3CDC591EAB8E3961F7A4E /* ProductionOverlayEligibilityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */; };
 		E574DF31282514A1E8639F81 /* CGImageRasterizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3481B81CFD853D292EFE12 /* CGImageRasterizerTests.swift */; };
 		E904C6056388B007AD5463BF /* PermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0C298019BDB7A1A84A3DE9 /* PermissionService.swift */; };
+		E9AE164C03DA927A7A51EFDF /* PowerPointAutomationPermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE7085F06F636DA0BC868884 /* PowerPointAutomationPermissionService.swift */; };
 		F1B2904112B349E990E8D233 /* RuntimeVerificationSnapshotProjectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97ECBF169A76FA69A221EE0 /* RuntimeVerificationSnapshotProjectorTests.swift */; };
 		F1FEBFE97ACB4D8D35C3E2B2 /* AppModelPermissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FC879B22ADEB760BE850009 /* AppModelPermissionTests.swift */; };
 		F399B14580089526F78D48EE /* SlideVisionAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 402B0930A4297FE5E924C6C1 /* SlideVisionAnalyzerTests.swift */; };
@@ -89,6 +106,7 @@
 		07B930BC193AF01B1D2DCD92 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		1003BAC593ADA5F767C7421F /* LectureBoardCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = LectureBoardCore; path = Packages/LectureBoardCore; sourceTree = SOURCE_ROOT; };
 		123F3F9F12EBE7BBC381195F /* LectureBoardAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LectureBoardAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		16DFB6EF9C104ABFA2C3A77F /* PowerPointAppleEventDescriptorCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointAppleEventDescriptorCodec.swift; sourceTree = "<group>"; };
 		183F00DFA7B07C7191DF5E6E /* SlideCanvasCalibrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideCanvasCalibrationTests.swift; sourceTree = "<group>"; };
 		192DFEC86F8158C07F62928F /* CaptureControlPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureControlPolicyTests.swift; sourceTree = "<group>"; };
 		1A260C8874F1DCC60F8B435B /* LocalizationResourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationResourceTests.swift; sourceTree = "<group>"; };
@@ -102,17 +120,24 @@
 		2FC879B22ADEB760BE850009 /* AppModelPermissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelPermissionTests.swift; sourceTree = "<group>"; };
 		339DE12925806880C6DF0482 /* RuntimeVerificationCanvasConfirmationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationCanvasConfirmationPolicyTests.swift; sourceTree = "<group>"; };
 		36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowCapture.swift; sourceTree = "<group>"; };
+		383E10EBBF4D0F4AFFE73F13 /* PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests.swift; sourceTree = "<group>"; };
 		402B0930A4297FE5E924C6C1 /* SlideVisionAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideVisionAnalyzerTests.swift; sourceTree = "<group>"; };
 		429088ABAAB561CE5382EE67 /* PowerPointWindowScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointWindowScanner.swift; sourceTree = "<group>"; };
 		42C9215A5BA5559FDF4EE0E2 /* CaptureLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureLifecycleTests.swift; sourceTree = "<group>"; };
+		472580826135FC751CCCB04D /* PowerPointAppleEventDescriptorCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointAppleEventDescriptorCodecTests.swift; sourceTree = "<group>"; };
 		4ACB177C9DEFC6A7ED9A9986 /* PowerPointSlideIdentityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointSlideIdentityProvider.swift; sourceTree = "<group>"; };
 		4C0EA92CF3A0B5423014404B /* SlideCanvasCropper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideCanvasCropper.swift; sourceTree = "<group>"; };
 		4DE751E95121001B5CC8751E /* RuntimeVerificationPermissionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationPermissionPolicy.swift; sourceTree = "<group>"; };
+		4ED8EEE257D1AE08F5FFB98A /* PowerPointManagedSlideShowAppleEventClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowAppleEventClient.swift; sourceTree = "<group>"; };
 		55A345C0DC1E4887ADBE0CC9 /* RuntimeVerificationHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationHostView.swift; sourceTree = "<group>"; };
+		5A756AD12AA1134234B51C26 /* PowerPointManagedSlideShowRoleCaptureEvidenceBroker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowRoleCaptureEvidenceBroker.swift; sourceTree = "<group>"; };
 		66D800008C4AA26556CF4B74 /* CaptureDeliveryMetricsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDeliveryMetricsTests.swift; sourceTree = "<group>"; };
+		6BD31DB4BC53DE240B3777AE /* ManagedSlideShowBindingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowBindingCoordinatorTests.swift; sourceTree = "<group>"; };
 		6CE5A06FD66D0421B4FCDB73 /* RuntimeVerificationReportWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationReportWriter.swift; sourceTree = "<group>"; };
 		6D65BCB707258FE845C04C66 /* RuntimeVerificationRunnerIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationRunnerIntegrationTests.swift; sourceTree = "<group>"; };
+		7715D9A32A2BFF00934FDCF2 /* ManagedSlideShowTransactionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowTransactionCoordinatorTests.swift; sourceTree = "<group>"; };
 		7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionOverlayEligibilityProviderTests.swift; sourceTree = "<group>"; };
+		8DF7A2747A92B151A2C717CB /* ManagedSlideShowRoleChallengeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowRoleChallengeCoordinator.swift; sourceTree = "<group>"; };
 		99E0A32CABE7EE68D1E7C093 /* FreshPowerPointWindowSample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FreshPowerPointWindowSample.swift; sourceTree = "<group>"; };
 		9B499872216DD6E899C79E0C /* DigitalInkStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalInkStyle.swift; sourceTree = "<group>"; };
 		9C4BEFE7878AD8CA03EE430A /* RuntimeVerificationSnapshotProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationSnapshotProjector.swift; sourceTree = "<group>"; };
@@ -125,15 +150,19 @@
 		B144247EF3C6005A68A5BC61 /* SlideCanvasCalibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideCanvasCalibration.swift; sourceTree = "<group>"; };
 		B67ED979FFCBC3875345D1B6 /* RuntimeVerificationWindowSelectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationWindowSelectorTests.swift; sourceTree = "<group>"; };
 		BB48E27694DDD7D750304ECA /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		BC60E5887D42F96AF55049C3 /* PowerPointManagedSlideShowAppleEventClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowAppleEventClientTests.swift; sourceTree = "<group>"; };
 		BFD73C2F862C1EB06AECDAA7 /* ProductionOverlayEligibilityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionOverlayEligibilityProvider.swift; sourceTree = "<group>"; };
 		C2A933ACEEBCE6CE87BD3D07 /* RuntimeVerificationRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationRunner.swift; sourceTree = "<group>"; };
 		C8848AFFCB2883C4DBFC994F /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C986A054E3F3513A2B175520 /* ManagedSlideShowTransactionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowTransactionCoordinator.swift; sourceTree = "<group>"; };
+		CA6EA33B47C036292516A378 /* ManagedSlideShowBindingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowBindingCoordinator.swift; sourceTree = "<group>"; };
 		CF5656CA14C9CC8E0001F8F6 /* ScreenCaptureSetupPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureSetupPolicyTests.swift; sourceTree = "<group>"; };
 		D151DFBB724F1F892CF322C3 /* SlideVisionAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideVisionAnalyzer.swift; sourceTree = "<group>"; };
 		D1DAF0B44265BC7421ACDAE3 /* SlideCanvasOverlayMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideCanvasOverlayMapper.swift; sourceTree = "<group>"; };
 		D69D068382DE470573027124 /* RuntimeVerificationWindowSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationWindowSelector.swift; sourceTree = "<group>"; };
 		D97ECBF169A76FA69A221EE0 /* RuntimeVerificationSnapshotProjectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationSnapshotProjectorTests.swift; sourceTree = "<group>"; };
 		DA3395EFB908D5DD6084507C /* AppSlideCanvasIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSlideCanvasIntegrationTests.swift; sourceTree = "<group>"; };
+		DB8D6B356E04B45B8361831B /* PowerPointManagedSlideShowRoleChallengeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowRoleChallengeClient.swift; sourceTree = "<group>"; };
 		DEB9CFDB562CEB858A6223A5 /* AppleSpeechRecognizerProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechRecognizerProvider.swift; sourceTree = "<group>"; };
 		E04EF776DA4EBC416EA06D9D /* DemoBoardSceneFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoBoardSceneFactory.swift; sourceTree = "<group>"; };
 		E27AF28CC1C1B769574C1FDC /* CGImageRasterizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGImageRasterizer.swift; sourceTree = "<group>"; };
@@ -144,7 +173,12 @@
 		F3C2C608ADD9A862BE8A054E /* RuntimeVerificationPermissionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeVerificationPermissionPolicyTests.swift; sourceTree = "<group>"; };
 		F453CD2C95C2282F00144BE6 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		F6E833C97DC00FE614908CF0 /* PermissionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionServiceTests.swift; sourceTree = "<group>"; };
+		F71E5F780D02AA6BEBA31546 /* AppModelSessionExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelSessionExportTests.swift; sourceTree = "<group>"; };
+		F75600A5E351A72282EB752B /* PowerPointAutomationPermissionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointAutomationPermissionServiceTests.swift; sourceTree = "<group>"; };
+		F7B342A3CD0728A475DDFDFE /* PowerPointManagedSlideShowRoleChallengeClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowRoleChallengeClientTests.swift; sourceTree = "<group>"; };
+		F89705DC206BE4F1613F8713 /* ManagedSlideShowRoleChallengeCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowRoleChallengeCoordinatorTests.swift; sourceTree = "<group>"; };
 		FBA29FBA6A9428279D53EFCC /* PowerPointSlideIdentityProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointSlideIdentityProviderTests.swift; sourceTree = "<group>"; };
+		FE7085F06F636DA0BC868884 /* PowerPointAutomationPermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointAutomationPermissionService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -187,6 +221,13 @@
 		3F179E87DD5E6B4ED77AE18F /* SlideIdentity */ = {
 			isa = PBXGroup;
 			children = (
+				CA6EA33B47C036292516A378 /* ManagedSlideShowBindingCoordinator.swift */,
+				8DF7A2747A92B151A2C717CB /* ManagedSlideShowRoleChallengeCoordinator.swift */,
+				C986A054E3F3513A2B175520 /* ManagedSlideShowTransactionCoordinator.swift */,
+				16DFB6EF9C104ABFA2C3A77F /* PowerPointAppleEventDescriptorCodec.swift */,
+				FE7085F06F636DA0BC868884 /* PowerPointAutomationPermissionService.swift */,
+				4ED8EEE257D1AE08F5FFB98A /* PowerPointManagedSlideShowAppleEventClient.swift */,
+				DB8D6B356E04B45B8361831B /* PowerPointManagedSlideShowRoleChallengeClient.swift */,
 				4ACB177C9DEFC6A7ED9A9986 /* PowerPointSlideIdentityProvider.swift */,
 			);
 			path = SlideIdentity;
@@ -272,6 +313,7 @@
 				A278657D170BEE56FC7CA483 /* AppContentChangeIntegrationTests.swift */,
 				E6762B018CA178D4534CD0A3 /* AppFreshContentSampleIntegrationTests.swift */,
 				2FC879B22ADEB760BE850009 /* AppModelPermissionTests.swift */,
+				F71E5F780D02AA6BEBA31546 /* AppModelSessionExportTests.swift */,
 				DA3395EFB908D5DD6084507C /* AppSlideCanvasIntegrationTests.swift */,
 				1D7C61CD4E4190A5CDA3B42A /* AppSlideIdentityIntegrationTests.swift */,
 				192DFEC86F8158C07F62928F /* CaptureControlPolicyTests.swift */,
@@ -279,7 +321,15 @@
 				42C9215A5BA5559FDF4EE0E2 /* CaptureLifecycleTests.swift */,
 				EE3481B81CFD853D292EFE12 /* CGImageRasterizerTests.swift */,
 				1A260C8874F1DCC60F8B435B /* LocalizationResourceTests.swift */,
+				6BD31DB4BC53DE240B3777AE /* ManagedSlideShowBindingCoordinatorTests.swift */,
+				F89705DC206BE4F1613F8713 /* ManagedSlideShowRoleChallengeCoordinatorTests.swift */,
+				7715D9A32A2BFF00934FDCF2 /* ManagedSlideShowTransactionCoordinatorTests.swift */,
 				F6E833C97DC00FE614908CF0 /* PermissionServiceTests.swift */,
+				472580826135FC751CCCB04D /* PowerPointAppleEventDescriptorCodecTests.swift */,
+				F75600A5E351A72282EB752B /* PowerPointAutomationPermissionServiceTests.swift */,
+				BC60E5887D42F96AF55049C3 /* PowerPointManagedSlideShowAppleEventClientTests.swift */,
+				383E10EBBF4D0F4AFFE73F13 /* PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests.swift */,
+				F7B342A3CD0728A475DDFDFE /* PowerPointManagedSlideShowRoleChallengeClientTests.swift */,
 				FBA29FBA6A9428279D53EFCC /* PowerPointSlideIdentityProviderTests.swift */,
 				E78A6B7F5758FCB240CA36DA /* PowerPointWindowIdentityTests.swift */,
 				7FFA53877E254D232080AEE7 /* ProductionOverlayEligibilityProviderTests.swift */,
@@ -324,6 +374,7 @@
 			children = (
 				F2F5A3F602842353D19BC808 /* CaptureDeliveryMetrics.swift */,
 				99E0A32CABE7EE68D1E7C093 /* FreshPowerPointWindowSample.swift */,
+				5A756AD12AA1134234B51C26 /* PowerPointManagedSlideShowRoleCaptureEvidenceBroker.swift */,
 				36EBA2242EDDEAFFC9EC70E3 /* PowerPointWindowCapture.swift */,
 			);
 			path = Capture;
@@ -462,6 +513,7 @@
 				A94CFE60E848E7A8640904F8 /* AppContentChangeIntegrationTests.swift in Sources */,
 				D5130E4B5883D16D68F6401D /* AppFreshContentSampleIntegrationTests.swift in Sources */,
 				F1FEBFE97ACB4D8D35C3E2B2 /* AppModelPermissionTests.swift in Sources */,
+				122571556BE1C3E0F06CE230 /* AppModelSessionExportTests.swift in Sources */,
 				A7EAB2B8DD0FC248EBDBF6B2 /* AppSlideCanvasIntegrationTests.swift in Sources */,
 				A4E7163F132C8E8545BA9376 /* AppSlideIdentityIntegrationTests.swift in Sources */,
 				E574DF31282514A1E8639F81 /* CGImageRasterizerTests.swift in Sources */,
@@ -469,7 +521,15 @@
 				C1E5CF6CF8A5B98C6408571D /* CaptureDeliveryMetricsTests.swift in Sources */,
 				53537409C4AF944D620CEEE3 /* CaptureLifecycleTests.swift in Sources */,
 				58032BACDC7958B9DF1816E7 /* LocalizationResourceTests.swift in Sources */,
+				000FE5786D0841D8E4DEDEC8 /* ManagedSlideShowBindingCoordinatorTests.swift in Sources */,
+				BA3FBE954128885F1947D31C /* ManagedSlideShowRoleChallengeCoordinatorTests.swift in Sources */,
+				84D4EFC5964DFF6E2ADCDA57 /* ManagedSlideShowTransactionCoordinatorTests.swift in Sources */,
 				7A73BFDCA604A4E2603BF2D2 /* PermissionServiceTests.swift in Sources */,
+				7C6D786FDF84BC62939150D6 /* PowerPointAppleEventDescriptorCodecTests.swift in Sources */,
+				94418237B48EC0527610C121 /* PowerPointAutomationPermissionServiceTests.swift in Sources */,
+				9423C69BBB53071F104B4D55 /* PowerPointManagedSlideShowAppleEventClientTests.swift in Sources */,
+				2DCC4F81FA20B454EBF1FCB6 /* PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests.swift in Sources */,
+				B43C75EA062043BEDA4DD91C /* PowerPointManagedSlideShowRoleChallengeClientTests.swift in Sources */,
 				0B13D3DDEDE73A8CA04EBB73 /* PowerPointSlideIdentityProviderTests.swift in Sources */,
 				B9CE3E736D7119F11F2F8E43 /* PowerPointWindowIdentityTests.swift in Sources */,
 				DDE3CDC591EAB8E3961F7A4E /* ProductionOverlayEligibilityProviderTests.swift in Sources */,
@@ -504,8 +564,16 @@
 				1A85DA374EDE97B270CE9672 /* FreshPowerPointWindowSample.swift in Sources */,
 				5FCFB9CC3030B9EA0311AB64 /* LectureBoardAIApp.swift in Sources */,
 				5F3046B9FDDCA5989CE8FC26 /* MainView.swift in Sources */,
+				22DFD947044A5022ECB26185 /* ManagedSlideShowBindingCoordinator.swift in Sources */,
+				C4BB10DA1694545A2978C6DA /* ManagedSlideShowRoleChallengeCoordinator.swift in Sources */,
+				6D6BDCC652C113BD75B4FF3A /* ManagedSlideShowTransactionCoordinator.swift in Sources */,
 				CF826F4110B15951FC312EA1 /* OverlayWindowController.swift in Sources */,
 				E904C6056388B007AD5463BF /* PermissionService.swift in Sources */,
+				3EF29BAC41A40CD344492507 /* PowerPointAppleEventDescriptorCodec.swift in Sources */,
+				E9AE164C03DA927A7A51EFDF /* PowerPointAutomationPermissionService.swift in Sources */,
+				B7DD3E9D2B16CD4B503CF999 /* PowerPointManagedSlideShowAppleEventClient.swift in Sources */,
+				550A9E824C2EA113FCC16A4F /* PowerPointManagedSlideShowRoleCaptureEvidenceBroker.swift in Sources */,
+				9FF3E3C681EFBF961D25E399 /* PowerPointManagedSlideShowRoleChallengeClient.swift in Sources */,
 				597500E2A3C45B1370F5FCAB /* PowerPointSlideIdentityProvider.swift in Sources */,
 				FB6E814A1A2348D441594CAD /* PowerPointWindowCapture.swift in Sources */,
 				15FFBF0DF73C011FD03FC62F /* PowerPointWindowScanner.swift in Sources */,
@@ -638,12 +706,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LectureBoardAI/Config/LectureBoardAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "LectureBoard AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "LectureBoard AI uses Automation only after you explicitly start a managed PowerPoint slide show, to read its current slide identity and perform a brief reversible role check.";
 				INFOPLIST_KEY_NSHighResolutionCapable = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Tomohiro Akiyama";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board.";
@@ -654,7 +724,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.akiyama709.LectureBoardAI;
 				PRODUCT_NAME = "LectureBoard AI";
 				SDKROOT = macosx;
@@ -665,12 +735,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LectureBoardAI/Config/LectureBoardAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "LectureBoard AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "LectureBoard AI uses Automation only after you explicitly start a managed PowerPoint slide show, to read its current slide identity and perform a brief reversible role check.";
 				INFOPLIST_KEY_NSHighResolutionCapable = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Tomohiro Akiyama";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board.";
@@ -681,7 +753,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.akiyama709.LectureBoardAI;
 				PRODUCT_NAME = "LectureBoard AI";
 				SDKROOT = macosx;

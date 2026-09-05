@@ -60,4 +60,20 @@ git -C "$fixture_root" add \
   scripts/test-runtime-launch-preflight.sh
 "$fixture_root/scripts/check-publication-sources.sh" >/dev/null
 
+mv "$fixture_root/LectureBoardAI/Tests" \
+  "$fixture_root/LectureBoardAI/Tests.unavailable"
+enumeration_failure_output="$fixture_root/enumeration-failure-output.txt"
+if "$fixture_root/scripts/check-publication-sources.sh" \
+  >"$enumeration_failure_output" 2>&1; then
+  printf 'The publication source check accepted an incomplete source enumeration.\n' >&2
+  exit 1
+fi
+if ! grep -Fq 'Publication source enumeration failed.' \
+  "$enumeration_failure_output"; then
+  printf 'The publication source check did not report its source-enumeration failure.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/LectureBoardAI/Tests.unavailable" \
+  "$fixture_root/LectureBoardAI/Tests"
+
 printf 'Publication source tracking tests passed.\n'

@@ -73,11 +73,11 @@ git remote add origin https://github.com/akiyama709/lectureboard-ai.git
 - Implement human pen-ink layer
 - Define evidence-constrained AI provider schema
 - Evaluate Japanese-English code switching
-- Add signed and notarized alpha release pipeline
+- Add a distribution verification pipeline（当時案．現行の無償配布方針はADR 0013を参照）
 
 ## 6．当時のプレリリース案（未実施）
 
-　初回公開時には`v0.1.0-alpha`というGitHub Release案があったが，実施していない．`v0.1.0-alpha`を含め，α版，β版又はRCのGitHub Releaseが公開済みであるとは記述しない．将来プレリリースを公開する場合も，完成品ではないこと，検証範囲及び既知の制約を明記する．
+　初回公開時には`v0.1.0-alpha`というGitHub Release案があったが，実施していない．現行方針では，`v0.1.0-alpha`を含むα版，β版又はRCのGitHub Releaseは公開せず，最初のapplication Releaseを正式版`v1.0.0`とする．
 
 ## 7．初回公開スクリプト（履歴・再実行禁止）
 
@@ -93,4 +93,4 @@ git remote add origin https://github.com/akiyama709/lectureboard-ai.git
 
 ## 8．完成版公開への移行
 
-　`v1.0.0`では，公開予定コミットと同一の成果物について，Developer ID署名，Hardened Runtime，Apple notarization，インストール及び新規Macでの起動を検証する．その後，明示的な最終確認を得て，署名・notarization済みのインストール可能なmacOS成果物，リリースノート及びSHA-256を含む公開GitHub Releaseを作成する．公開物を再取得して検証し，その証拠を記録した時点を完成とする．
+　`v1.0.0`では，公開予定コミットからHardened Runtimeを有効にしたarm64 Appを構築し，ad hoc署名，SHA-256，SPDX SBOM及びcommit-bound provenanceを検証する．有料又は教育機関名義のApple Developer membershipは使用せず，Developer ID署名又はApple notarization済みとは表示しない．AppleのApp単位の「このまま開く」を用いる導入，初回起動及び対応機能を検証した後，正確なcommitとarchive SHA-256を示して明示的な最終確認を得る．公開`v1.0.0`を再取得し，同一byte，署名，metadata，導入及び起動を再検証して証拠を記録した時点を完成とする．

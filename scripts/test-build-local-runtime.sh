@@ -6,7 +6,7 @@ repository_root="$(cd -- "$script_directory/.." && pwd)"
 runtime_script="$script_directory/build-local-runtime.sh"
 signing_requirement_script="$script_directory/runtime-signing-requirement.sh"
 
-bash -n "$runtime_script" "$signing_requirement_script"
+/bin/bash -p -n "$runtime_script" "$signing_requirement_script"
 source "$signing_requirement_script"
 
 accepted_quoted_requirement='# designated => identifier "io.github.akiyama709.LectureBoardAI" and anchor apple generic and certificate leaf[subject.OU] = "TESTTEAM01"'
@@ -110,6 +110,10 @@ expect_config_line \
 expect_config_line \
   "LOCAL_PACKAGE_LINK=$repository_root/DerivedData/RuntimeBuild/GeneratedProject/Packages"
 expect_config_line "LOCAL_PACKAGE_TARGET=$repository_root/Packages"
+expect_config_line \
+  "ENTITLEMENTS_PATH=$repository_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
+expect_config_line \
+  "GENERATED_ENTITLEMENTS_LINK=$repository_root/DerivedData/RuntimeBuild/GeneratedProject/LectureBoardAI/Config/LectureBoardAI.entitlements"
 expect_config_line \
   "APP_PATH=$repository_root/DerivedData/RuntimeBuild/Build/Products/Debug/LectureBoard AI.app"
 expect_config_line 'BUNDLE_IDENTIFIER=io.github.akiyama709.LectureBoardAI'

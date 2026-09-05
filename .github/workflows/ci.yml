@@ -1,4 +1,4 @@
-name: Core Swift CI
+name: macOS 26 Full CI
 
 on:
   push:
@@ -13,23 +13,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  core-tests:
-    name: LectureBoardCore tests
-    runs-on: macos-15
-    timeout-minutes: 20
+  full-verification:
+    name: Core, native app, and publication gates
+    runs-on: macos-26
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Show Swift toolchain
-        run: swift --version
+      - name: Select the verified Xcode toolchain
+        run: sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
 
-      - name: Lint Swift sources
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Show verification toolchain
         run: |
-          swift format lint --recursive \
-            Packages/LectureBoardCore/Sources \
-            Packages/LectureBoardCore/Tests
+          sw_vers
+          xcodebuild -version
+          swift --version
+          xcodegen --version
 
-      - name: Build and test platform-neutral core
-        run: swift test --package-path Packages/LectureBoardCore
+      - name: Run the complete verification gate
+        run: ./scripts/prepublish-check.sh
+
+      - name: Confirm generated-project reproducibility
+        run: git diff --exit-code -- LectureBoardAI.xcodeproj
+
+      - name: Retain the native test result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-xcresult-${{ github.run_id }}
+          path: DerivedData/AppTests/Logs/Test/*.xcresult
+          if-no-files-found: error
+          retention-days: 30

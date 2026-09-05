@@ -1,9 +1,41 @@
+import Speech
 import Testing
 
 @testable import LectureBoard_AI
 
 @MainActor
 struct PermissionServiceTests {
+  @Test
+  func onDeviceSpeechPolicyRequiresAnAvailableLocalRecognizer() {
+    #expect(
+      OnDeviceSpeechRecognitionPolicy.decision(
+        recognizerAvailable: true,
+        supportsOnDeviceRecognition: true
+      ) == .accept
+    )
+    #expect(
+      OnDeviceSpeechRecognitionPolicy.decision(
+        recognizerAvailable: false,
+        supportsOnDeviceRecognition: true
+      ) == .recognizerUnavailable
+    )
+    #expect(
+      OnDeviceSpeechRecognitionPolicy.decision(
+        recognizerAvailable: true,
+        supportsOnDeviceRecognition: false
+      ) == .onDeviceRecognitionUnavailable
+    )
+  }
+
+  @Test
+  func onDeviceSpeechPolicyConfiguresANetworkProhibitedRequest() {
+    let request = OnDeviceSpeechRecognitionPolicy.makeRequest()
+
+    #expect(request.requiresOnDeviceRecognition)
+    #expect(request.shouldReportPartialResults)
+    #expect(request.addsPunctuation)
+  }
+
   @Test
   func readsScreenCaptureStatusWithoutRequestingAccess() {
     let client = ScreenCapturePermissionClientSpy(

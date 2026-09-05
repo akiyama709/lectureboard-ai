@@ -749,9 +749,19 @@ protocol PowerPointWindowCapturing: Sendable {
     identity: PowerPointWindowIdentity,
     requestID: FreshSampleRequestID
   ) async throws -> FreshPowerPointWindowSample
+
+  func managedSlideShowRoleCaptureEvidenceLease(
+    operationID: CaptureOperationID
+  ) async throws -> PowerPointManagedSlideShowRoleCaptureEvidenceLease
 }
 
 extension PowerPointWindowCapturing {
+  func managedSlideShowRoleCaptureEvidenceLease(
+    operationID: CaptureOperationID
+  ) async throws -> PowerPointManagedSlideShowRoleCaptureEvidenceLease {
+    throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
+  }
+
   func captureFreshSample(
     operationID: CaptureOperationID,
     identity: PowerPointWindowIdentity,
@@ -830,9 +840,11 @@ enum ReenumeratedPowerPointWindowResolver {
 actor PowerPointWindowCapture: PowerPointWindowCapturing {
   private var lifecycle = CaptureSessionLifecycle()
   private var freshSampleLifecycle = FreshSampleCaptureLifecycle()
+  private var roleEvidenceCaptureGeneration: UInt64 = 0
 
   private var stream: SCStream?
   private var output: CaptureOutput?
+  private var roleEvidenceLease: PowerPointManagedSlideShowRoleCaptureEvidenceLease?
 
   func start(
     operationID: CaptureOperationID,
@@ -879,10 +891,16 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
 
     let previousStream = stream
     let previousOutput = output
+    let previousRoleEvidenceLease = roleEvidenceLease
     stream = nil
     output = nil
+    roleEvidenceLease = nil
 
-    if let previousStream {
+    if let previousRoleEvidenceLease {
+      await previousRoleEvidenceLease.stop()
+    }
+
+    if previousRoleEvidenceLease == nil, let previousStream {
       try? await previousStream.stopCapture()
       if let previousOutput {
         try? previousStream.removeStreamOutput(previousOutput, type: .screen)
@@ -924,13 +942,34 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     }
     let window = content.windows[windowIndex]
 
+    guard roleEvidenceCaptureGeneration < UInt64.max else {
+      lifecycle.finishFailedStart(operationID)
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.malformedLease
+    }
+    roleEvidenceCaptureGeneration += 1
+    let roleEvidenceComponents: PowerPointManagedSlideShowRoleScreenCaptureEvidenceLeaseComponents
+    do {
+      roleEvidenceComponents =
+        try PowerPointManagedSlideShowRoleScreenCaptureEvidenceLeaseFactory
+        .make(
+          captureOperationID: operationID,
+          captureGeneration: roleEvidenceCaptureGeneration,
+          candidateWindow: window,
+          retainedPowerPointWindows: content.windows
+        )
+    } catch {
+      lifecycle.finishFailedStart(operationID)
+      throw error
+    }
+
     let filter = SCContentFilter(desktopIndependentWindow: window)
     let configuration = makeConfiguration(for: filter)
     let output = CaptureOutput(
       windowID: identity.windowID,
       frameHandler: onFrame,
       contentUnavailableHandler: onContentUnavailable,
-      failureHandler: onFailure
+      failureHandler: onFailure,
+      roleEvidenceRecorder: roleEvidenceComponents.primaryRecorder
     )
     let stream = SCStream(
       filter: filter,
@@ -942,22 +981,29 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
       type: .screen,
       sampleHandlerQueue: output.sampleHandlerQueue
     )
+    let roleEvidenceStopHandle = PowerPointManagedSlideShowRolePrimaryStreamStopHandle(
+      stream: stream,
+      output: output
+    )
+    try roleEvidenceComponents.primaryRecorder.installStopAction {
+      await roleEvidenceStopHandle.stop()
+    }
 
     do {
       try await stream.startCapture()
       guard lifecycle.isCurrent(operationID) else {
-        try? await stream.stopCapture()
-        try? stream.removeStreamOutput(output, type: .screen)
+        await roleEvidenceComponents.lease.stop()
         throw CancellationError()
       }
       self.output = output
       self.stream = stream
+      roleEvidenceLease = roleEvidenceComponents.lease
       freshSampleLifecycle.activate(
         operationID: operationID,
         identity: identity
       )
     } catch {
-      try? stream.removeStreamOutput(output, type: .screen)
+      await roleEvidenceComponents.lease.stop()
       lifecycle.finishFailedStart(operationID)
       throw error
     }
@@ -968,13 +1014,32 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
     freshSampleLifecycle.deactivate()
     let stream = stream
     let output = output
+    let roleEvidenceLease = roleEvidenceLease
     self.stream = nil
     self.output = nil
+    self.roleEvidenceLease = nil
+    if let roleEvidenceLease {
+      await roleEvidenceLease.stop()
+    }
+    guard roleEvidenceLease == nil else { return }
     guard let stream else { return }
     try? await stream.stopCapture()
     if let output {
       try? stream.removeStreamOutput(output, type: .screen)
     }
+  }
+
+  /// Returns only the lease created from the exact `SCWindow` objects retained at capture start.
+  func managedSlideShowRoleCaptureEvidenceLease(
+    operationID: CaptureOperationID
+  ) async throws -> PowerPointManagedSlideShowRoleCaptureEvidenceLease {
+    guard lifecycle.isCurrent(operationID), stream != nil, output != nil,
+      let roleEvidenceLease,
+      roleEvidenceLease.captureOperationID == operationID
+    else {
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
+    }
+    return roleEvidenceLease
   }
 
   func captureFreshSample(
@@ -1192,6 +1257,22 @@ enum FreshPowerPointSampleBufferConverter {
   }
 }
 
+/// Exact primary stream/output pair retained by the role-evidence lease's bounded stop task.
+private final class PowerPointManagedSlideShowRolePrimaryStreamStopHandle: @unchecked Sendable {
+  private let stream: SCStream
+  private let output: CaptureOutput
+
+  init(stream: SCStream, output: CaptureOutput) {
+    self.stream = stream
+    self.output = output
+  }
+
+  func stop() async {
+    try? await stream.stopCapture()
+    try? stream.removeStreamOutput(output, type: .screen)
+  }
+}
+
 private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   @unchecked Sendable
 {
@@ -1204,6 +1285,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   private let frameHandler: CaptureFrameHandler
   private let contentUnavailableHandler: CaptureContentUnavailableHandler
   private let terminalFailureRouter: CaptureTerminalFailureRouter
+  private let roleEvidenceRecorder: PowerPointManagedSlideShowRoleCaptureDeliveryBuffer
   private let imageContext = CIContext(options: [.cacheIntermediates: false])
   private var sequenceNumber: UInt64 = 0
   private var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
@@ -1212,11 +1294,13 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     windowID: CGWindowID,
     frameHandler: @escaping CaptureFrameHandler,
     contentUnavailableHandler: @escaping CaptureContentUnavailableHandler,
-    failureHandler: @escaping CaptureFailureHandler
+    failureHandler: @escaping CaptureFailureHandler,
+    roleEvidenceRecorder: PowerPointManagedSlideShowRoleCaptureDeliveryBuffer
   ) {
     self.windowID = windowID
     self.frameHandler = frameHandler
     self.contentUnavailableHandler = contentUnavailableHandler
+    self.roleEvidenceRecorder = roleEvidenceRecorder
     terminalFailureRouter = CaptureTerminalFailureRouter(failureHandler: failureHandler)
   }
 
@@ -1229,6 +1313,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     precondition(sequenceNumber < UInt64.max, "Capture delivery sequence exhausted.")
     sequenceNumber += 1
     let deliverySequenceNumber = sequenceNumber
+    let callbackMachAbsoluteTime = mach_absolute_time()
     guard sampleBuffer.isValid else {
       reportContentUnavailable(sequenceNumber: deliverySequenceNumber)
       return
@@ -1238,15 +1323,18 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     case .idleRepeat:
       emitRepeatedFrameIfAvailable(
         from: sampleBuffer,
-        sequenceNumber: deliverySequenceNumber
+        sequenceNumber: deliverySequenceNumber,
+        callbackMachAbsoluteTime: callbackMachAbsoluteTime
       )
     case .newFrame:
       emitNewFrame(
         from: sampleBuffer,
-        sequenceNumber: deliverySequenceNumber
+        sequenceNumber: deliverySequenceNumber,
+        callbackMachAbsoluteTime: callbackMachAbsoluteTime
       )
     case .terminalFailure:
       continuity.markContentUnavailable()
+      roleEvidenceRecorder.recordGap()
       terminalFailureRouter.reportSampleStatusStopped(
         message: NSLocalizedString("error.captureWindowInactive", comment: "")
       )
@@ -1257,10 +1345,12 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   }
 
   func stream(_ stream: SCStream, didStopWithError error: any Error) {
+    roleEvidenceRecorder.recordGap()
     terminalFailureRouter.reportDelegateStopped(error: error)
   }
 
   func streamDidBecomeInactive(_ stream: SCStream) {
+    roleEvidenceRecorder.recordGap()
     terminalFailureRouter.reportDelegateBecameInactive(
       message: NSLocalizedString("error.captureWindowInactive", comment: "")
     )
@@ -1268,7 +1358,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
 
   private func emitRepeatedFrameIfAvailable(
     from sampleBuffer: CMSampleBuffer,
-    sequenceNumber: UInt64
+    sequenceNumber: UInt64,
+    callbackMachAbsoluteTime: UInt64
   ) {
     let currentAttachments = frameAttachments(in: sampleBuffer)
     guard
@@ -1288,12 +1379,17 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     // malformed, or conflicting geometry, a later metadata-empty idle delivery
     // cannot revive geometry from the older new frame; only a later new frame
     // can re-establish it.
+    roleEvidenceRecorder.recordIdle(
+      deliverySequence: sequenceNumber,
+      callbackMachAbsoluteTime: callbackMachAbsoluteTime
+    )
     frameHandler(repeatedFrame)
   }
 
   private func emitNewFrame(
     from sampleBuffer: CMSampleBuffer,
-    sequenceNumber: UInt64
+    sequenceNumber: UInt64,
+    callbackMachAbsoluteTime: UInt64
   ) {
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
       reportContentUnavailable(sequenceNumber: sequenceNumber)
@@ -1311,11 +1407,12 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
     }
 
     let attachments = frameAttachments(in: sampleBuffer)
+    let displayTime = CaptureFrameDisplayTimeParser.parse(attachments?[.displayTime])
     let frame = CapturedPowerPointFrameFactory.makeNewFrame(
       windowID: windowID,
       sequenceNumber: sequenceNumber,
       capturedAt: Date(),
-      displayTime: CaptureFrameDisplayTimeParser.parse(attachments?[.displayTime]),
+      displayTime: displayTime,
       captureSurfaceGeometry: CaptureSurfaceGeometryParser.parse(
         attachments,
         outputPixelWidth: image.width,
@@ -1326,11 +1423,18 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
       fingerprint: fingerprint
     )
     continuity.acceptNewPayload(frame)
+    roleEvidenceRecorder.recordGenerated(
+      fingerprint: fingerprint,
+      displayTime: displayTime,
+      deliverySequence: sequenceNumber,
+      callbackMachAbsoluteTime: callbackMachAbsoluteTime
+    )
     frameHandler(frame)
   }
 
   private func reportContentUnavailable(sequenceNumber: UInt64) {
     continuity.markContentUnavailable()
+    roleEvidenceRecorder.recordGap()
     contentUnavailableHandler(sequenceNumber)
   }
 
@@ -1357,7 +1461,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate,
   }
 }
 
-private enum FrameFingerprintSampler {
+enum FrameFingerprintSampler {
   static let sampleColumns = 32
   static let sampleRows = 18
 

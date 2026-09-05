@@ -1,4 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
+case "$-" in
+  *p*) ;;
+  *) /usr/bin/printf "Release shell entry requires Bash privileged mode.\n" >&2; exit 78 ;;
+esac
 set -euo pipefail
 
 script_directory="$(cd "$(dirname "$0")" && pwd)"

@@ -5,7 +5,7 @@ script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd -- "$script_directory/.." && pwd)"
 app_test_script="$script_directory/test-local-app.sh"
 
-bash -n "$app_test_script"
+/bin/bash -p -n "$app_test_script"
 
 config_output="$("$app_test_script" --print-config)"
 
@@ -24,6 +24,10 @@ expect_config_line \
 expect_config_line \
   "LOCAL_PACKAGE_LINK=$repository_root/DerivedData/AppTests/GeneratedProject/Packages"
 expect_config_line "LOCAL_PACKAGE_TARGET=$repository_root/Packages"
+expect_config_line \
+  "ENTITLEMENTS_PATH=$repository_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
+expect_config_line \
+  "GENERATED_ENTITLEMENTS_LINK=$repository_root/DerivedData/AppTests/GeneratedProject/LectureBoardAI/Config/LectureBoardAI.entitlements"
 expect_config_line 'SCHEME=LectureBoardAI'
 expect_config_line 'ARCHITECTURE=arm64'
 expect_config_line 'CONFIGURATION=Debug'

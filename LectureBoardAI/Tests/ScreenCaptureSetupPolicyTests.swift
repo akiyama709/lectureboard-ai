@@ -3,6 +3,16 @@ import Testing
 @testable import LectureBoard_AI
 
 struct ScreenCaptureSetupPolicyTests {
+  @Test func permissionButtonIsShownOnlyWhilePreflightIsDenied() {
+    #expect(ScreenCaptureSetupPolicy.showsPermissionButton(preflightGranted: false))
+    #expect(!ScreenCaptureSetupPolicy.showsPermissionButton(preflightGranted: true))
+  }
+
+  @Test func windowRefreshIsEnabledOnlyAfterPreflightSucceeds() {
+    #expect(!ScreenCaptureSetupPolicy.enablesWindowRefresh(preflightGranted: false))
+    #expect(ScreenCaptureSetupPolicy.enablesWindowRefresh(preflightGranted: true))
+  }
+
   @Test func refreshesOnAppearanceWhenPreflightIsGranted() {
     #expect(
       ScreenCaptureSetupPolicy.action(

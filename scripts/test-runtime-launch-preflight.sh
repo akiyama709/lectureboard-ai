@@ -14,8 +14,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bash -n "$preflight_script"
-bash -n "$smoke_script"
+/bin/bash -p -n "$preflight_script"
+/bin/bash -p -n "$smoke_script"
 source "$preflight_script"
 
 core_schema_version="$(

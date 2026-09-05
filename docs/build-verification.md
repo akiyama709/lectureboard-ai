@@ -397,6 +397,12 @@ The final runtime executable reproduced checkpoint SHA-256 `3ee3e83ee69386891d41
 
 ### Public-v1 completion definition and PowerPoint identity hardening at 16:28 JST
 
+> Historical checkpoint: the next two paragraphs record the then-current ADR 0007 decision.
+> ADR 0013 now supersedes its Developer ID and Apple-notarization requirements; the authoritative
+> `v1.0.0` path is the hardened-runtime, ad hoc-signed no-fee archive in
+> `docs/no-fee-release-process.md`. This clarification does not convert any historical build into
+> current release evidence.
+
 The project completion definition was extended beyond the lecture-ready alpha gate. Completion now means a public `v1.0.0` GitHub Release that contains an installable macOS artifact with hardened runtime, Developer ID distribution signing, Apple notarization, and successful post-publication re-download verification. Repository creation, source availability, alpha, beta, and release-candidate builds remain intermediate gates. The authoritative checklist is `docs/v1-release-checklist.md`; ADR 0007 records the decision. The initial `scripts/publish-to-github.sh` and its associated publication checklists are now explicitly historical and must not be reused for branch updates or the final release.
 
 A release-definition checker and negative fixture test were added. They require the public-v1 completion statement; alpha, beta, and release-candidate status as intermediate gates; the beta, release-candidate, and public-v1 milestones; hardened runtime; Developer ID signing; notarization; public-artifact re-download and independent re-verification; the Japanese and English definitions; the v1 checklist; corrected CHANGELOG language that does not claim independent slide identity or current-build runtime evidence; the completed initial-source-publication review and separate v1-scope reassessment in ADR 0006; and ADR 0007. The negative fixtures separately reject a missing v1 checklist, public-v1 milestone, README completion definition, prerelease-intermediate statement, hardened-runtime gate, public-artifact re-download gate, downloaded-artifact security rechecks, removal of the cautious visual/content-change wording, removal of the historical-evidence boundary, removal of the unverified production identity-provider gate, and corrected ADR 0006 status. Three additional fixtures preserve all required cautious wording while appending the specific known false claims that slide-change detection is implemented, historical runtime evidence verifies the current build, or PowerPoint slide identity is complete; the checker rejects each appended claim explicitly. This is a regression guard for those exact forbidden statements, not a general natural-language overclaim detector.
@@ -813,7 +819,7 @@ An independent final documentation audit then found one P2 wording defect: sever
 - Live capture-failure source classification in either schema 10 or the current schema 11 source; its bounded first-terminal-event routing, compatibility, normalization, privacy, reset, stale-operation, concurrency, and final-JSON paths currently have automated coverage only
 - Live PowerPoint exercise of the implemented bounded one-shot coarse or dense fresh-sample source; the current fixed build recorded six revisions and the paired operator-captured sidecar supports six input-window attributions but is not cryptographically bound or release-grade, while its five coarse and one continuous-dense revision did not use `boundedFreshSample`
 - Generality of successful exact mach-interval attribution beyond the single current-build six-input, eight-second diagnostic; the earlier four-second stress checkpoint remains valid negative evidence, and representative cadence, animation, ink density, and long-duration conditions are uncalibrated
-- A production PowerPoint slide-identity provider with exact ScreenCaptureKit-window binding; the read-only probe returned no exact scripting window ID, and historical image-difference builds do not verify slide transitions
+- Live execution of the implemented managed PowerPoint slide-identity provider with exact retained Apple Event object and exact ScreenCaptureKit-window binding; deterministic tests cover the fail-closed binding, role challenge, restoration, cancellation, tombstones, and deferred cleanup, but historical image-difference builds do not verify current slide transitions
 - Automatic exact-window fresh-frame acquisition after a semantic identity boundary and live waiting, timeout, and recovery behavior with a production identity provider; the static schema-8 diagnostic delivered frames without a production identity, and the historical schema-7 zero-frame timeout does not verify this path
 - User-confirmed slide-canvas localization accuracy, exclusion of PowerPoint controls, slideshow and presenter modes, live resize invalidation, display-scale changes, ScreenCaptureKit surface padding and `contentRect` mapping, and actual idle-sample attachment behavior; the schema-8 full-frame confirmation was explicitly diagnostic rather than user-confirmed
 - PowerPoint window closure, reselection, PowerPoint restart, and display reconnection recovery
@@ -823,11 +829,122 @@ An independent final documentation audit then found one P2 wording defect: sever
 - Transparent overlay position, size, Core Graphics z-order and bounds policy, lease timing, click-through behavior, and non-interference with mouse or pen-tablet input; `mapped` metadata does not verify visible rendering, and the safe default identity provider cannot authorize production display
 - Japanese and English microphone transcription and Japanese–English code switching
 - Representative multi-display arrangements, display swap or reconnection, and online-sharing composition beyond the historical capture-only two-display case above; the current duplicated-bounds read-only snapshot did not exercise overlay mapping
-- Contextual AI board rendering and session export during a lecture
-- Developer ID distribution signing, hardened runtime, and notarization
+- Contextual AI board rendering and the implemented JSON/SVG public-scene export during a live lecture
+- The final hardened-runtime, ad hoc-signed no-fee distribution archive and its install flow; Developer ID signing and Apple notarization are intentionally outside the accepted distribution model
 
 These items must remain described as prototypes or unverified behavior until each one is exercised and recorded on the lecture Mac.
 
 ## Local macOS handoff
 
-The repository includes `AGENTS.md`, `.codex/config.toml`, `make doctor`, `make local-setup`, native Core and app test targets, an ad hoc runtime build, a no-permission-request launch smoke test, and Japanese local-development and handoff documentation. Native compilation and the explicitly identified historical schema-8, schema-9, and schema-11 fixed-build runtime paths above are verified on this Mac only within their stated bounds. Fixed schema-9 diagnostics include narrow idle continuity, visual content updates, visible synthetic mouse strokes, and visual erase restoration. The frozen schema-11 interval app adds narrow static capture and interval-metadata evidence, but its four-second stress run failed exact per-input attribution. After negative-count decoder hardening, the current schema-11 source passes 153 Core tests in 15 suites, 259 app tests in 30 suites, and the complete 14-stage gate. A separately frozen decoder-hardened artifact now also has build-specific authorized preflight, static capture, six recorded visual revisions with paired non-cryptographic helper support for input-window attribution, one visible red stroke, a separate erase-phase revision, final Vision completion, and byte-identical captured-scene restoration. These runs retain unavailable semantic identity and diagnostic-full-frame canvas provenance, and no live revision used the bounded one-shot source. Production slide identity, bounded-fresh live exercise, user canvas localization, visible overlay alignment, microphone behavior, semantic ink classification, LaunchServices capture authorization, Developer ID signing, notarization, and `v1.0.0` completion remain listed separately.
+The repository includes `AGENTS.md`, `.codex/config.toml`, `make doctor`, `make local-setup`, native Core and app test targets, an ad hoc runtime build, a no-permission-request launch smoke test, and Japanese local-development and handoff documentation. Native compilation and the explicitly identified historical schema-8, schema-9, and schema-11 fixed-build runtime paths above are verified on this Mac only within their stated bounds. Fixed schema-9 diagnostics include narrow idle continuity, visual content updates, visible synthetic mouse strokes, and visual erase restoration. The frozen schema-11 interval app adds narrow static capture and interval-metadata evidence, but its four-second stress run failed exact per-input attribution. After negative-count decoder hardening, the current schema-11 source passes 153 Core tests in 15 suites, 259 app tests in 30 suites, and the complete 14-stage gate. A separately frozen decoder-hardened artifact now also has build-specific authorized preflight, static capture, six recorded visual revisions with paired non-cryptographic helper support for input-window attribution, one visible red stroke, a separate erase-phase revision, final Vision completion, and byte-identical captured-scene restoration. These runs retain unavailable semantic identity and diagnostic-full-frame canvas provenance, and no live revision used the bounded one-shot source. Live managed slide identity, bounded-fresh live exercise, user canvas localization, visible overlay alignment, microphone behavior, semantic ink classification, LaunchServices capture authorization, the hardened no-fee archive, and `v1.0.0` completion remain listed separately. Developer ID signing and Apple notarization are intentionally not release requirements under ADR 0013.
+
+## Managed workflow, session export, and no-fee preparation on 2026-09-05–06
+
+The current development tree adds an explicit managed PowerPoint transaction that retains the exact Apple Event slide-show object, accepts only the windowed show type, binds it to one exact retained ScreenCaptureKit window through a reversible role challenge, restores the challenged property, activates the App binding before semantic identity polling, and reads exact slide IDs and indices from the same object. One-shot, session, tombstone, cancellation, failure, and deferred-cleanup boundaries fail closed. A production-assembly regression replaced a forced concrete-lease cast with a typed rejection path; all 8 targeted coordinator tests passed in `/tmp/lectureboard-targeted-assembly/Logs/Test/Test-LectureBoardAI-2026.09.05_23-58-12-+0900.xcresult`. These are deterministic native-test results, not live Apple Event or PowerPoint-transition evidence.
+
+The user-facing App now presents the managed supported workflow as the primary action and places passive capture under an advanced diagnostic disclosure. The main notice no longer labels the application alpha or prototype, and the passive path explicitly states that it cannot display production board output. The changed view compiled and its localization regression passed in `/tmp/lectureboard-targeted-assembly/Logs/Test/Test-LectureBoardAI-2026.09.06_00-02-43-+0900.xcresult`. This verifies compilation and resource consistency only, not the visible behavior of a release artifact.
+
+The managed transaction now awaits exact App-binding activation before starting identity polling and rejects an activation failure with exact cleanup. The transaction, App identity-integration, and public-scene export selection contained 34 passing targeted tests in `/tmp/lectureboard-targeted-assembly/Logs/Test/Test-LectureBoardAI-2026.09.06_00-04-09-+0900.xcresult`. Separately, all 26 targeted App slide-identity tests passed in `/tmp/lectureboard-targeted-auto-transcription/Logs/Test/Test-LectureBoardAI-2026.09.06_00-16-01-+0900.xcresult`; those regressions verify that a still-requested transcription resumes only after current identity, canvas, post-boundary frame synchronization, and visual analysis are ready, while manual stop prevents resumption and a temporary content gap remains closed until fresh analysis. Live microphone behavior remains unverified.
+
+The public-scene exporter is implemented as a JSON file plus sibling SVG. It includes only confirmed or pinned public board scenes, coalesces consecutive updates to one slide, preserves later revisits, resets for a new capture, remains available after normal stop, and excludes transcript, OCR text, source images, window metadata, runtime identifiers, and non-public intents. Targeted Core and App tests passed during this work. Live export from a managed release artifact has not yet been exercised.
+
+The no-fee release script now binds the SBOM namespace to the actual `SBOM.spdx.json` asset and records and verifies the canonical exact entitlement object SHA-256 `2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0`. Bash syntax and `./scripts/test-no-fee-release-v1.sh` passed. This is release-script fixture evidence; no final archive was produced and no GitHub Release was published.
+
+`make build-runtime` completed for the current tree on 2026-09-06 and produced the Debug arm64 app at `DerivedData/RuntimeBuild/Build/Products/Debug/LectureBoard AI.app`. Its executable SHA-256 is `2dcf6d4e5a1d1579a59f3cda6cb86a250cbde726f035049bef721a95743a46ed`, its ad hoc CDHash is `97d052f7cf697d64474eae46d8325e7d20820455`, its identifier is `io.github.akiyama709.LectureBoardAI`, its team identifier is unset, and strict complete-bundle signature verification passed. Hardened runtime is disabled in this Debug build, so it is not the final no-fee distribution artifact.
+
+The same app path was opened without rebuilding against a working copy of the synthetic PowerPoint deck. The standard Screen Recording request was invoked exactly once; System Settings showed `LectureBoard AI.app` enabled, and only the app and the System Settings window opened by this work were quit before the same app path was relaunched. No repeated permission request was made. PowerPoint enumeration, managed start, capture, canvas selection, microphone, visible overlay, mouse input, export, and cleanup were not completed. A subsequent Accessibility-coordinate attempt did not reach the intended App control and the local session entered the lock screen; GUI automation stopped immediately, no further input was sent, and no runtime report was produced. This is a stopped preliminary setup attempt, not live functional evidence. The Mac must be unlocked before the fixed app can resume the controlled live gate.
+
+The complete integrated `make verify` gate has not been rerun for this development tree. The latest complete gate remains the 2026-09-01 result recorded above. One final integrated gate is intentionally deferred until the source and documentation are settled, to avoid treating repeated expensive builds as additional product evidence.
+
+After the current managed-provider, final-only release-stage, and no-fee wording was synchronized, Bash syntax, all release-definition negative fixtures, the live release-definition consistency check, stale alpha/beta milestone absence checks, and `git diff --check` passed. These are documentation and policy-regression results only; they do not add live application evidence.
+
+The setup UI now hides the Screen Recording request button whenever the current preflight check is already authorized and disables PowerPoint-window refresh while that preflight is denied. This prevents an always-visible request control from being mistaken for evidence that authorization is missing. All 9 `ScreenCaptureSetupPolicyTests` passed on arm64 macOS in `/tmp/lectureboard-permission-ui-tests/Logs/Test/Test-LectureBoardAI-2026.09.06_00-48-54-+0900.xcresult`. An earlier invocation stopped during compilation because the edited opaque-return view property lacked an explicit `return`; that source defect was corrected before the passing run. These tests verify deterministic UI policy and compilation only. Post-restart permission persistence and the visible fixed-app behavior remain unverified because the Mac was locked before the controlled live gate could resume.
+
+The exact-candidate publication gate now requires a separate owner-run acceptance using one self-selected local PPTX copy. `docs/user-acceptance-ja.md` fixes the order, privacy boundary, supported configuration, single-request permission behavior, managed-workflow observations, JSON/SVG privacy inspection, byte-size and SHA-256 before/after checks, fail criteria, and metadata-only record template. Its initial state is explicitly `unperformed`; adding the procedure is not evidence that the acceptance passed. The release-definition fixture rejects either a missing procedure or replacement of its unperformed state with an unsupported completion claim, and the complete release-definition regression fixture passed on 2026-09-06. The private PPTX, slide images, audio, transcript, exports, and file digests are excluded from GitHub; only a content-free result will be recorded publicly after the exact candidate is actually exercised.
+
+A privacy audit of the user procedure found that the Apple Speech request had not explicitly required on-device recognition even though the release scope prohibited sending lecture content to a cloud provider. The provider now checks both recognizer availability and `supportsOnDeviceRecognition`, constructs every accepted request with `requiresOnDeviceRecognition = true`, and fails closed with a specific localized error when local recognition is unsupported. Apple documents that the request prevents network audio transmission only when both properties permit on-device use. The policy, request configuration, permission-service, and localization run passed 6 tests in 2 suites in `/tmp/lectureboard-permission-ui-tests/Logs/Test/Test-LectureBoardAI-2026.09.06_01-11-00-+0900.xcresult`; the subsequently strengthened exact Japanese/English localization assertion passed in `/tmp/lectureboard-permission-ui-tests/Logs/Test/Test-LectureBoardAI-2026.09.06_01-11-39-+0900.xcresult`.
+
+A read-only `SFSpeechRecognizer` capability probe on this Mac reported `available=true` and `supportsOnDeviceRecognition=true` for both `ja-JP` and `en-US`. It did not request microphone or Speech authorization, start an audio engine, submit audio, or produce a transcript. It therefore verifies only the OS-reported local capability on this Mac; Japanese and English live microphone recognition remain unverified. The English and Japanese privacy statements and user guides now require on-device-only recognition, forbid network fallback, document the no-fee per-App Gatekeeper path, and identify unsupported permission or configuration states as stop conditions. Release-definition fixtures reject missing guides, missing privacy statements, unsafe Gatekeeper wording, and speech-network-fallback wording; the complete fixture passed afterward. The guides remain explicitly procedural drafts until exercised against the exact candidate and public re-download.
+
+### Local v1.0.0 source-candidate metadata freeze on 2026-09-06
+
+The local source candidate now identifies repository version `1.0.0`, bundle marketing version
+`1.0.0`, build `1`, and date `2026-09-06` consistently across `CITATION.cff`, `CHANGELOG.md`,
+`project.yml`, and the regenerated Xcode project. `./scripts/check-version-consistency.sh` and its
+negative regression fixture passed. This is a local metadata freeze only: no tag, GitHub push, or
+GitHub Release was created, and the application is not complete or public merely because its
+candidate metadata is `1.0.0`.
+
+The historical 2026-08-30 completion checkpoint is now explicitly marked as superseded by ADR
+0013 so that its then-current Developer ID and Apple-notarization requirement cannot be mistaken
+for the accepted no-fee completion path. The release-definition checker requires that
+qualification, and a negative fixture removes it and verifies that the checker fails. The complete
+release-definition regression fixture and live consistency check passed after the correction.
+
+The integrated `make verify` gate has not yet been run for this `1.0.0` source candidate. Live
+managed PowerPoint capture, the supported synthetic workflow, the owner-selected private-PPTX
+acceptance, exact Release archive production, Gatekeeper installation, and public re-download all
+remain unverified at this checkpoint.
+
+The first `./scripts/prepublish-check.sh` attempt for this candidate stopped before tests in the
+restricted execution context because Swift could not write its user module cache. The same command
+was restarted in the normal Mac context; Core tests passed, but the native run reported one issue
+and Xcode 26 then stalled while symbolizing that issue. The partial result bundles created by the
+manual interruption are cancellation evidence only and are not counted as passing or failing
+complete gates. Enabling Swift Testing's console event output identified the original issue as a
+timeout in
+`unavailableCaptureContentHidesOverlayAndStaleSessionNoticeIsIgnored()` after capture-content
+recovery.
+
+The cause was nondeterministic test bookkeeping rather than an observed product failure. The test
+preserved the user's transcription request across the content gap, allowing the App's required
+automatic resume, and then also requested a manual resume. Depending on task scheduling, its fixed
+handler index could therefore address either the current callback or a stale callback. The
+regression now waits for exactly the automatic second handler, verifies that the retained first
+handler remains rejected, and sends the accepted observations only through that current handler.
+Its asynchronous wait failures also carry bounded phase labels so that a future timeout is not
+misreported as an unidentified cancellation. The complete 27-test
+`AppSlideCanvasIntegrationTests` suite passed with zero failures or skips in
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_01-47-05-+0900.xcresult`. This is a
+targeted deterministic regression result; the complete candidate gate remains unverified until the
+subsequent full run recorded below succeeds.
+
+The next integrated gate passed stages 1 through 15, including all Core and native app tests, both
+native builds, strict ad hoc bundle verification, the no-request runtime smoke, permission and
+version contracts, and release-definition checks. It stopped at stage 16 because the release
+artifact helper still pinned the reviewed pre-managed-workflow `project.yml` and generated Xcode
+project digests. The reviewed source now includes the exact managed-workflow sources, Automation
+usage string, entitlements path, and `1.0.0` marketing version. After those command-free inputs and
+their generated project were rechecked, the helper's exact SHA-256 pins were advanced to their
+current bytes. New negative fixtures independently change the source-specification version and the
+generated-project version and require both variants to fail closed. The complete
+`test-release-artifact-tools.sh`, version-consistency check, and permission-contract check then
+passed. The interrupted 16-stage run is not a complete-gate success; a stage-1 restart for the exact
+corrected tree remains required below.
+
+The authoritative stage-1 restart of `./scripts/prepublish-check.sh` then passed all 26 stages on
+the same corrected source candidate at approximately 01:52 JST on 2026-09-06. The gate included
+strict recursive Swift formatting, all 204 Core tests in 18 suites, all 416 authoritative native
+app tests, both native builds, strict ad hoc Debug-bundle verification, the no-permission-request
+runtime smoke, source tracking, README and historical-claim boundaries, permission and version
+contracts, release-definition and artifact fixtures, deterministic release-app and exclusive-output
+fixtures, packaging and preflight fixtures, release-code verification, shell security, no-fee
+tooling, tracked-output exclusion, common-secret-pattern exclusion, and lecture-data exclusion. The
+native result bundle is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_01-52-46-+0900.xcresult`;
+`xcresulttool` reports `Passed`, authoritative total 416, failed 0, skipped 0, and expected failure
+0. Its per-device passed value is 478 because 14 parameterized tests produced 76 runs. A subsequent
+`swift test --skip-build` observation reconfirmed the 204 Core-test count without rebuilding the
+candidate.
+
+The gate's Debug runtime executable is arm64 with SHA-256
+`99cd38683e663965ebb738080543c2fdf894dcb34291d25b2a7b4e6ca9c19575`, ad hoc CDHash
+`295b7ce10be99eeb6210c4ab57e3a4b71ee9840d`, bundle identifier
+`io.github.akiyama709.LectureBoardAI`, no team identifier, and a valid strict complete-bundle
+signature. As expected for this Debug gate artifact, its code-signing flags are `0x2(adhoc)` rather
+than Hardened Runtime. This complete automated gate is source-candidate evidence only. It does not
+verify live managed PowerPoint behavior, the supported synthetic workflow, a user-confirmed canvas,
+visible overlay alignment, mouse priority, microphone transcription, session export, the
+owner-selected private-PPTX acceptance, the final isolated Hardened Runtime Release archive,
+Gatekeeper installation, GitHub Actions, publication, or public re-download. Those gates remain
+open and must not be inferred from this automated result.

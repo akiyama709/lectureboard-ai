@@ -63,6 +63,7 @@ protocol TranscriptionProvider: AnyObject {
 enum TranscriptionError: LocalizedError {
   case authorizationDenied
   case recognizerUnavailable
+  case onDeviceRecognitionUnavailable
   case noAudioInput
 
   var errorDescription: String? {
@@ -71,6 +72,8 @@ enum TranscriptionError: LocalizedError {
       return String(localized: "error.authorizationDenied")
     case .recognizerUnavailable:
       return String(localized: "error.recognizerUnavailable")
+    case .onDeviceRecognitionUnavailable:
+      return String(localized: "error.onDeviceRecognitionUnavailable")
     case .noAudioInput:
       return String(localized: "error.noAudioInput")
     }

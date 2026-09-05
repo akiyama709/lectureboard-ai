@@ -1,6 +1,6 @@
 # LectureBoard AI ローカル開発引継ぎ
 
-更新日：2026年9月1日
+更新日：2026年9月6日
 
 ## 1．この文書の目的
 
@@ -25,11 +25,11 @@
 - 日本語，英語，および日英混在講義へ段階的に対応する．
 - 当面はmacOS版の完成度を優先し，Windows・Linux版は実装しない．
 - 公開GitHubリポジトリは`akiyama709/lectureboard-ai`である．
-- 本プロジェクトの「完成」は，検証済みで署名・notarization済みのインストール可能なmacOS配布物を伴う，公開`v1.0.0` GitHub Releaseの成立を指す．公開リポジトリ作成，ソース公開，α版，β版及びRelease Candidateは中間段階であり，完成とは呼ばない．
+- 本プロジェクトの「完成」は，検証済みarm64 App archive，正確なsource commit，checksum，SBOM，provenance及び公開後の再取得検証を伴う，正式な公開`v1.0.0` GitHub Releaseの成立を指す．有料又は教育機関名義のApple Developer membershipは使用しないため，archiveはad hoc署名とし，Developer ID署名又はApple notarization済みとは表示しない．α版，β版又はRelease Candidateのapplication Releaseは公開しない．
 
 ## 3．現時点の成果物
 
-　リポジトリには，macOSアプリの骨格，透明オーバーレイの試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得実装，利用者確認式のスライド面切出し，現在frameの画面位置に基づくfail-closedなoverlay座標変換，切出し後の安定フレーム・視覚更新判定，160×90のRGB指紋による持続的内容更新判定，post-baseline coarse候補又はpending dense候補に限定した最大2回のone-shot sample経路，安定した視覚フレームを対象とするVision文字・矩形解析，長辺640ピクセル以下のRGBラスタと筆跡候補解析，正規化占有領域の構築，Apple Speechによる一言語文字起こし，文脈判断コア，ベクトル板書モデル，空白配置試作，単体テスト，英語・日本語を同一ファイルに収録したREADME，設計文書，GitHub Actions，公開前検査が含まれる．
+　リポジトリには，macOSアプリの骨格，透明オーバーレイの試作，PowerPointウィンドウ検出，選択ウィンドウの連続取得実装，利用者確認式のスライド面切出し，現在frameの画面位置に基づくfail-closedなoverlay座標変換，切出し後の安定フレーム・視覚更新判定，160×90のRGB指紋による持続的内容更新判定，post-baseline coarse候補又はpending dense候補に限定した最大2回のone-shot sample経路，安定した視覚フレームを対象とするVision文字・矩形解析，長辺640ピクセル以下のRGBラスタと筆跡候補解析，正規化占有領域の構築，端末内認識を必須としnetwork fallbackを許さないApple Speech一言語文字起こし，文脈判断コア，ベクトル板書モデル，空白配置試作，単体テスト，英語・日本語を同一ファイルに収録したREADME，設計文書，GitHub Actions，公開前検査が含まれる．
 
 　2026年9月1日現在，現行schema 11 sourceの中核Swift packageは153テスト・15 suite，ネイティブmacOS Appは259テスト・30 suiteがMac上で通過している．最終監査と文書同期後のcurrent treeに対する全14段階の`make verify`も23時50分頃から23時51分頃JSTに合格した．complete-gate native result bundleは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_23-50-45-+0900.xcresult`であり，authoritative total 259，failed 0，skipped 0，expected failure 0である．生成したarm64 runtime executableのSHA-256は`a6407496c7bd0044c3f30982e749a5556bd2b8e9a751ebd7ed476f59e9151cc9`，ad hoc CDHashは`7a60426b1fb628f6fd3dce9b1c3516092d5a799a`であり，strict bundle検査へ合格したが，Developer ID署名，hardened runtime及びnotarization済みではない．自動gateはlive schema 11 bounded-fresh確認，動的入力又はmouse inkの証拠ではない．この結果pointerはgate後の文書限定変更であり，commit前の文書及び公開検査は個別に再確認して合格した．142 Core／251 App時点のschema 10 gate及びそれ以前のgateは，各時点のsourceに関する履歴証拠として保持する．
 
@@ -63,7 +63,7 @@
 
 　粗い視覚差分又はdense内容更新が候補状態へ入った時点で旧解析を無効化する．dense fingerprintの欠落又は不正も旧解析を直ちに無効化し，valid dense fingerprintのないcoarse confirmed frameでは解析を開始しない．baselineへ戻った後も，current frameの再解析が完了するまで板書提案を閉じる．意味的なslide，canvas又はcapture境界では現在の板書文脈を更新し，境界以前の発話を再提案しない．占有領域が空の解析結果も板書配置を許可しない．capture終了時には最新安定frame，解析及び板書sceneを消去する．
 
-　文字起こしはApp側とApple provider側の二重generation guardを用いる．意味的なslide，canvas又はcapture境界でproviderを停止し，旧callback及び旧segmentを拒否する．安全側として利用者が明示的に再開するまで文字起こしを閉じたままとする．実microphone挙動は未検証である．capture開始時にはdemo sceneを消去し，capture中又はcapture provider停止処理中にはdemo生成を許可しない．これらは制御可能なprovider及びnative fixtureで確認した安全境界であり，実PowerPoint，live canvas精度，microphone又はoverlay alignmentの検証結果ではない．
+　文字起こしはApp側とApple provider側の二重generation guardを用いる．意味的なslide又は一時的なcapture-content unavailable境界でproviderを停止し，旧callback及び旧segmentを拒否する．利用者の開始要求が継続している場合だけ，current identity，canvas，post-identity frame gate及びcurrent visual analysisが全て再びreadyとなった後に自動再開する．利用者の停止，canvas境界及びcapture終了は再開要求を消去する．この挙動は決定論的testで確認したが，実microphone挙動は未検証である．capture開始時にはdemo sceneを消去し，capture中又はcapture provider停止処理中にはdemo生成を許可しない．これらは制御可能なprovider及びnative fixtureで確認した安全境界であり，実PowerPoint，live canvas精度，microphone又はoverlay alignmentの検証結果ではない．
 
 　runtime検証reportの現行形式はschema 11である．schema 6はスライド面状態，schema 7はoverlay mapping状態及び拒否理由，schema 8は`slideCanvasConfirmationMode`，schema 9はbounded canvas failure理由，schema 10は9種類の`captureFailureSource`及び21種類の公開`captureSCStreamErrorCode`を追加した．schema 11は，正の`contentRevisionCount`ごとに，最新revisionのordinal，最初のqualifying stream observationのmach絶対時刻，確定mach絶対時刻及び5種類のbounded sourceを記録する．current schemaでcountが負，countとeventが不整合，又は時刻が0若しくは逆転する場合はfail closedでdecodeしない．特に負数を0へ丸めてeventなしとして受理しない．schema 1からschema 10は追加eventを無視し，当時のcounter semanticsを保持する．terminal capture failureについては，sample stopped，delegate error，inactive stream及びstart failureが一つの同期routerへ入り，最初のeventだけを採用する．画像，認識文字列，座標，display ID，window title，入力時刻，raw error domain，raw numeric code，description又は`userInfo`は保存しない．schema 11のintervalはdetector evidenceの範囲であり，それ自体は意味的slide identity又は入力との因果を証明しない．
 
@@ -79,7 +79,7 @@
 
 　その後，DerivedData内のschema 8 runtime executableを直接起動した15秒のlive静的exact-window診断は成功し，window ID 13577から152件のnew frame，stable frame 1件，Vision `completed`，text 39件，rectangle 14件，`strokeCandidateRegions` 69件及びoccupied region 3件を記録した．reportは`diagnosticFullFrame`，canvas `confirmed`，overlay mapping `mapped`，identity `unavailable`，content revision 0件及びslide change 0件を記録した．external verification directory内のreport `LectureBoard-Runtime-Schema8-ExactWindow-Static-2026-08-31.json`のSHA-256は`593cc70cd666498c8d68cd9f3b8156b617c45d066cc955992106c5c1e18a8b84`である．これは，明示flagで取得window全体を診断用canvasとして用いたdirect verifier文脈の静的capture及びmetadata生成の証拠である．利用者確認式canvasの精度，PowerPoint UI除外，overlayの目視alignment又はproduction rendering，動的slide切替，mouse ink及び意味的slide identityは未検証である．
 
-　実PowerPointに対する読取り専用probeでは，Automation preflightが`0`，PowerPointのslide show windowが1件，Core Graphics windowが2件であることを確認した．しかし，PowerPointから継承される`window.id`は`nil`であり，意味的なslide IDを取得対象の正確なwindow IDへ照合できなかった．名称，列挙順又は概略座標による弱いfallbackは採用していない．既定identity providerは，受理した取得開始ごとに，Automation許可を要求せず，Apple Eventも送らず，`unavailable`を1回通知する．固定schema 9のfixed-path診断では4回の制御入力に対応する4 content revisionsを確認したが，identityは`unavailable`のままでslide changeも0件であった．したがって，production adapter及び実PowerPointの意味的slide transitionは未実装又は未検証である．固定schema 9診断で確認した見えるmouse strokeを，意味的又は入力ごとのink分類，既存ink検出，現行schema 11又はproduction canvasへ一般化してはならない．OCR文字列，座標，検出率，代表的資料，長時間運転及び実講義での有用性も未検証である．
+　過去の実PowerPoint読取り専用probeでは，PowerPointから継承される`window.id`が`nil`であり，意味的なslide IDを取得対象の正確なwindow IDへ照合できなかった．現行sourceは，この問題を弱い名称，列挙順又は近似geometry fallbackで回避せず，利用者が明示的に開始するmanaged workflowを実装した．PowerPointが返した正確なslide-show objectを保持し，windowed show typeだけを受理し，そのobjectへの短い可逆的なrole challengeによって新規の正確なScreenCaptureKit windowを特定し，property復元後にApp bindingを確立してから，同じobjectからslide ID及びindexを読む．one-shot，session，tombstone，取消し及び遅延cleanup境界には決定論的testがある．通常のpassive取得は引き続きAutomationを要求せずidentity `unavailable`となる．実PowerPointに対するApple Event実行，managed exact-window binding，意味的slide transition及びcleanupの一連のlive挙動はまだ未検証である．固定schema 9診断で確認した見えるmouse strokeを，意味的又は入力ごとのink分類，既存ink検出，現行source又はproduction canvasへ一般化してはならない．OCR文字列，座標，検出率，代表的資料，長時間運転及び実講義での有用性も未検証である．
 
 　画面収録の許可は起動文脈とbuild identityごとに区別する．過去のschema 1・競合修正後実行fileをCodexの許可下から直接起動した経路ではpreflightが`authorized`であったが，LaunchServicesを介した同時期の別起動では`unknown`となり，許可要求を行わず`screenRecordingUnavailable`で終了した．これらは当時のschema 8 buildのlive frame取得確認ではない．既定の`make build-runtime`はbuildごとに`cdhash`が変わり得るad hoc署名であり，同じApp名とbundle identifierでも再許可が必要になる場合がある．したがって，次の実機再試行では固定保存した同一Appをbuild・置換・移動せずに用いる．
 
@@ -133,14 +133,14 @@ make test-runtime-launch-smoke
 
 　次の作業は，次の順で進める．固定schema 8，schema 9，schema 10及びschema 11 App，report，helper sidecar及び画像はbuild，置換，移動又は改名せず，それぞれのbuild固有証拠として保持する．新規reportはsystem temporary directory内の一意なpathへ書き，内容を検証してからexternal verification directoryへcopyし，`cmp`とSHA-256で保存結果を確認する．
 
-1. 意味的なスライド情報を，選択済みの正確なScreenCaptureKit window IDへfail closedで結び付けられるproduction identity providerを実装する．PowerPointの`window.id`が`nil`である間は弱い名称，列挙順又は近似geometry fallbackを採用しない．
-2. 既存thresholdを弱めず，decoder-hardening後又は後続release-candidate artifactで，実際に`boundedFreshSample`を発生させる限定live checkpointを設計・実行する．通常continuous sourceだけの成功をbounded one-shot成功へ読み替えない．
-3. 利用者確認式スライド面とproduction overlay座標変換を，window表示，full-screen，発表者表示，複数display，異なるscale factor，window移動，resize及び再選択で別々に検証する．diagnostic full-frame及びmetadata-only `mapped`を，利用者確認又は目視alignmentへ一般化しない．
-4. OCR，existing ink，占有領域及び空白配置を代表資料で較正し，日本語，英語，日英混在，animation及び長時間運転を分離して確認する．
-5. speaker notes及び`.pptx`解析，final transcript，context engine，confirmed board scene，AI board rendering並びにsession JSON／SVG exportを，根拠linkを保持して段階的に接続する．
-6. LaunchServices capture authorization，post-restart permission persistence，PowerPoint windowの終了・再選択・再起動，display再接続，click-through，pen tablet，microphone，online共有，accessibility及びprivacyを独立した検証項目として扱う．
-7. Developer ID署名，hardened runtime，notarization，clean-Mac install，Gatekeeper，更新・削除及びwithdrawal手順を完成させる．
-8. 最終受入後，ユーザーの明示確認を得た場合だけpublic `v1.0.0` GitHub Releaseを作成し，再downloadしたartifactのSHA-256，署名，notarization，Gatekeeper及び起動を再確認する．
+1. 固定した現行Appを再build又は置換せず，対応範囲であるPowerPoint資料1件，windowed slide show，display 1台の条件で，managed object／window／slide binding及び正常cleanupをlive検証する．
+2. 利用者確認式canvas，current visual analysis，production overlayの目視alignment及びclick-through mouse priorityを同じ対応範囲で確認する．diagnostic full-frame及びmetadata-only `mapped`を成功証拠へ読み替えない．
+3. 日本語と英語を別sessionで，microphoneからfinal transcript，current `SlideContext`，context engine，confirmed board scene及びvisible board renderingまで確認する．
+4. 公開board sceneだけを含むsession JSON／SVG exportをlive検証し，元`.pptx`が不変であることをhash及びZIP整合性で確認する．
+5. 正常停止，取消し，許可拒否，window終了及びcapture中断のcleanup／recoveryを同じ対応範囲で反復確認する．
+6. 代表的な日本語・英語資料，privacy，accessibility，license，既知の制限，導入，初回講義及びtroubleshooting文書を完成させる．full-screen，Presenter View，複数display，日英code switching，physical pen tablet，speaker notes import及びcloud adapterはpost-v1範囲とし，成功を推定しない．
+7. current treeで最終`make verify`を一度だけ実行し，Hardened Runtime，ad hoc署名，checksum，SBOM及びcommit-bound provenanceを備える正確な`v1.0.0` archiveを生成して，App単位の「このまま開く」を検証する．
+8. 正確なcommitとarchive SHA-256を示してユーザーの明示確認を得た場合だけpublic `v1.0.0` GitHub Releaseを作成し，再downloadしたartifactのbyte同一性，SHA-256，ad hoc署名，Hardened Runtime，metadata，導入及び起動を再確認する．
 
 　確認結果は，成功・失敗を問わず`docs/build-verification.md`へ記録する．
 
@@ -148,7 +148,7 @@ make test-runtime-launch-smoke
 
 　選択したPowerPoint windowの連続取得からoverlayのfail-closedな座標変換までの決定論的基盤に加え，schema 10のbounded capture-terminal診断，schema 11のcontent revision interval及びpost-baseline coarse／dense候補に限定したbounded one-shot sample経路を実装した．現行sourceはCore 153件・15 suite，App 259件・30 suite及び全14段階gateに合格する．decoder-hardening後の固定Appは，static exact-window capture，6件のdynamic visual revision及びsingle-stroke／eraseを完了した．operator-captured helper sidecarとの組合せは，8秒間隔の6入力windowへのattributionを支持するが，runtime reportへ暗号的に結合されておらず，release-grade provenanceではない．dynamic sourceはcoarse 5件及びcontinuous dense idle repeat 1件，stroke runもcontinuous dense 2件であり，`boundedFreshSample`をliveには通っていない．手書き後の赤線と消去後のbyte-identical復元はpixel証拠であり，意味的又は入力ごとのink／erase分類，既存ink検出，semantic slide identity，利用者確認精度，目視alignment，AI rendering又はproduction挙動の証拠ではない．
 
-　直近の作業単位は，exact-window-bound production identity providerを弱いfallbackなしで実装すること，current bounded fresh pathを限定条件で実際にexerciseすること，及び利用者確認式canvasと実PowerPoint上のvisible production overlayを表示modeごとに独立検証することである．その後にOCR，existing ink，代表資料，長時間運転，speaker notes／`.pptx`，microphone，board rendering及びsession exportを接続する．全固定App及び証拠fileは移動・置換しない．
+　exact-window-bound managed identity provider，条件付き文字起こし自動再開，公開scene限定JSON／SVG export及びno-fee release metadataは現行sourceへ実装済みであり，それぞれ対象testが合格している．2026年9月6日に現行Debug runtimeを固定pathから起動し，画面収録の標準許可導線を一度だけ実行した．システム設定では`LectureBoard AI.app`が有効であることを確認し，同じAppを終了・再起動したが，managed開始前にlocal sessionがlock状態となったため，PowerPoint再検出以降のlive検証は行っていない．ロック解除後は同じAppを再buildせず，前節1から順に対応範囲だけを検証する．全固定App及び証拠fileは移動・置換しない．
 
 　AIやクラウドサービスを先に接続してはならない．まず，何を見て，どのスライドを対象とし，どこが空いており，どの発話を根拠としたかを観察・記録できる基盤を完成させる．
 
@@ -164,7 +164,7 @@ AGENTS.md，docs/local-codex-handoff-ja.md，ROADMAP.md，docs/build-verificatio
 
 　公開リポジトリ`akiyama709/lectureboard-ai`は2026年8月29日に作成済みであるが，リポジトリが公開されていること自体は製品完成を意味しない．`main`ではプルリクエストと`LectureBoardCore tests`の成功が必須であり，force pushとブランチ削除は禁止されている．
 
-　公開段階は，α版，β版，Release Candidate，`v1.0.0`正式版の順とする．α版は機能・安全性・実機証拠を形成する開発版，β版は`v1.0.0`の機能範囲を固定して代表環境で検証する版，Release Candidateは機能凍結後に配布・署名・プライバシー・アクセシビリティ・クリーン導入を確認する候補である．検証済み配布物を公開`v1.0.0` GitHub Releaseとして一般取得可能にし，公開後の再ダウンロード，ハッシュ，署名，Gatekeeper及び起動を確認した時点だけを完成とする．
+　α版，β版又はRelease Candidateのapplication GitHub Releaseは公開しない．開発中の内部検証は，制御条件，代表条件，機能凍結後の最終artifactという順で進めるが，いずれも公開版又は完成とは扱わない．検証済み配布物を正式な公開`v1.0.0` GitHub Releaseとして一般取得可能にし，公開後の再ダウンロード，byte同一性，ハッシュ，ad hoc署名，Hardened Runtime，metadata，導入及び起動を確認した時点だけを完成とする．
 
 　公開前には必ず次を実行する．
 
@@ -172,4 +172,4 @@ AGENTS.md，docs/local-codex-handoff-ja.md，ROADMAP.md，docs/build-verificatio
 make verify
 ```
 
-　`scripts/publish-to-github.sh`は初回リポジトリ公開専用であり，再実行しない．今後は作業ブランチをpushし，プルリクエストの必須CI成功後に`main`へ統合する．正式版は，Release Candidateの受入検証後，バージョン整合性を確認し，`v1.0.0`タグ，リリースノート，署名・notarization済み配布物及びSHA-256を備えたGitHub Releaseとして公開する．外部公開に当たるpush，PR，タグ及びReleaseの実行は，それぞれ必要な確認を得て行う．
+　`scripts/publish-to-github.sh`は初回リポジトリ公開専用であり，再実行しない．今後は作業ブランチをpushし，プルリクエストの必須CI成功後に`main`へ統合する．正式版は，最終candidateの受入検証後，バージョン整合性を確認し，`v1.0.0`タグ，リリースノート，ad hoc署名済みApp archive，SHA-256，SBOM及びprovenanceを備えたGitHub Releaseとして公開する．Developer ID署名又はApple notarization済みとは表示しない．外部公開に当たるpush，PR，タグ及びReleaseの実行は，それぞれ必要な確認を得て行う．

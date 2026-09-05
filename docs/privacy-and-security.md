@@ -10,6 +10,11 @@ LectureBoard AI may encounter microphone audio, live screen frames, presentation
 - Do not persist raw audio by default.
 - Do not persist full screen recordings by default.
 - Do not send data to a network provider unless the lecturer explicitly enables that provider.
+- Require Apple Speech recognition to stay on device. If the selected locale lacks an available
+  on-device recognizer, transcription fails closed instead of permitting a network fallback.
+  Apple documents that `requiresOnDeviceRecognition` prevents the request from sending audio over
+  the network only when `supportsOnDeviceRecognition` is also true; the implementation enforces
+  both conditions: <https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition>.
 - Keep analytics disabled by default.
 - Clearly show active capture and provider state.
 

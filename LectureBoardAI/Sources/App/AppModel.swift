@@ -132,7 +132,10 @@ final class AppModel: ObservableObject {
   @Published var selectedPowerPointWindowID: CGWindowID?
   @Published var selectedLanguage: LanguageTag = .japanese
   @Published var liveTranscript = ""
-  @Published var boardScene = BoardScene(slideNumber: 1)
+  @Published var boardScene = BoardScene(slideNumber: 1) {
+    didSet { recordPublicBoardScene(boardScene) }
+  }
+  @Published private(set) var lectureSessionScenes: [BoardScene] = []
   @Published var digitalInkStyle = DigitalInkStyle.clean
   @Published private(set) var captureStatus: CaptureStatus = .stopped
   @Published private(set) var captureFailureSource: RuntimeCaptureFailureSource?
@@ -194,6 +197,7 @@ final class AppModel: ObservableObject {
   private var activeCaptureSessionID: CaptureOperationID?
   private var activeCaptureWindowID: CGWindowID?
   private var activeCaptureIdentity: PowerPointWindowIdentity?
+  private var activeCaptureUsesManagedSlideShow = false
   private var lastAcceptedCaptureSequenceNumber: UInt64?
   private var captureContentRequiresNewFrame = false
   private var slideIdentityTracker = SlideIdentityTracker()
@@ -219,12 +223,17 @@ final class AppModel: ObservableObject {
   private var boardCandidateContext = BoardCandidateContext()
   private var boardSceneAnalysisGeneration: Int?
   private var transcriptionOperationGate = TranscriptionOperationGate()
+  private var transcriptionRequestedByUser = false
+  private var automaticTranscriptionResumeTask: Task<Void, Never>?
   private var overlayDemoSceneIsLoaded = false
   private var productionOverlayIsManuallySuppressed = false
   private var latestOverlayPlacement: SlideCanvasOverlayPlacement?
   private var renderedProductionOverlayState: RenderedProductionOverlayState?
   private var productionOverlayLeaseGeneration: UInt64 = 0
   private var productionOverlayLeaseIsValid = false
+  private var managedSlideShowTransaction: ManagedSlideShowTransactionCoordinator?
+  private var managedSlideShowTransactionReleaseTask: Task<Void, Never>?
+  private var sessionSceneRecordingEnabled = false
 
   init(
     permissionService: PermissionService = PermissionService(),
@@ -276,6 +285,8 @@ final class AppModel: ObservableObject {
 
   deinit {
     freshContentSampleTask?.cancel()
+    managedSlideShowTransactionReleaseTask?.cancel()
+    automaticTranscriptionResumeTask?.cancel()
     let leaseScheduler = productionOverlayLeaseScheduler
     let safetyEventProvider = productionOverlaySafetyEventProvider
     Task { @MainActor in
@@ -298,6 +309,42 @@ final class AppModel: ObservableObject {
 
   var canShowOverlayDemo: Bool {
     captureStatus == .stopped && inFlightCaptureStopCount == 0
+  }
+
+  var canExportLectureSession: Bool {
+    guard !lectureSessionScenes.isEmpty, inFlightCaptureStopCount == 0 else { return false }
+    switch captureStatus {
+    case .stopped, .error:
+      return true
+    case .starting, .capturing:
+      return false
+    }
+  }
+
+  /// Writes the retained public scenes to JSON and its sibling SVG.  The view owns the
+  /// explicit save-panel choice; this method remains GUI-free for deterministic tests.
+  @discardableResult
+  func exportLectureSession(to jsonURL: URL) throws -> LectureSessionExportURLs {
+    try LectureSessionExporter(scenes: lectureSessionScenes).write(to: jsonURL)
+  }
+
+  private func resetLectureSessionScenesForCapture() {
+    lectureSessionScenes.removeAll(keepingCapacity: true)
+    sessionSceneRecordingEnabled = true
+  }
+
+  private func recordPublicBoardScene(_ scene: BoardScene) {
+    guard sessionSceneRecordingEnabled,
+      captureStatus != .stopped,
+      !overlayDemoSceneIsLoaded,
+      !scene.elements.isEmpty
+    else { return }
+
+    if lectureSessionScenes.last?.slideNumber == scene.slideNumber {
+      lectureSessionScenes[lectureSessionScenes.count - 1] = scene
+    } else {
+      lectureSessionScenes.append(scene)
+    }
   }
 
   func beginSlideCanvasSelection() {
@@ -466,12 +513,14 @@ final class AppModel: ObservableObject {
     }
 
     let operationID = nextCaptureOperationID()
+    resetLectureSessionScenesForCapture()
     captureFailureSource = nil
     captureSCStreamErrorCode = nil
     productionOverlayIsManuallySuppressed = false
     activeCaptureSessionID = operationID
     activeCaptureWindowID = selectedPowerPointWindowID
     activeCaptureIdentity = selectedIdentity
+    activeCaptureUsesManagedSlideShow = false
     captureStatus = .starting
     capturedFrameCount = 0
     captureDeliveryMetrics.reset()
@@ -517,9 +566,11 @@ final class AppModel: ObservableObject {
       guard activeCaptureSessionID == operationID else { return }
       guard selectedIdentity == self.selectedWindow?.identity else {
         let stopOperationID = nextCaptureOperationID()
+        sessionSceneRecordingEnabled = false
         activeCaptureSessionID = nil
         activeCaptureWindowID = nil
         activeCaptureIdentity = nil
+        activeCaptureUsesManagedSlideShow = false
         invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
         resetVisualDetectors()
         lastAcceptedCaptureSequenceNumber = nil
@@ -546,6 +597,8 @@ final class AppModel: ObservableObject {
       activeCaptureSessionID = nil
       activeCaptureWindowID = nil
       activeCaptureIdentity = nil
+      activeCaptureUsesManagedSlideShow = false
+      sessionSceneRecordingEnabled = false
       invalidateSlideIdentityAfterCaptureEnd(state: failedIdentityState)
       captureFailureSource = event.source
       captureSCStreamErrorCode = event.scStreamErrorCode
@@ -556,6 +609,104 @@ final class AppModel: ObservableObject {
       resetSlideAnalysis()
       let stopOperationID = nextCaptureOperationID()
       await stopCaptureProviders(operationID: stopOperationID)
+    }
+  }
+
+  /// Explicitly starts a new managed slide show.  Unlike ordinary observation capture, this is
+  /// allowed to use Automation and briefly performs a reversible role challenge on the exact
+  /// object returned by PowerPoint.  Passive refresh and the existing diagnostic start remain
+  /// Automation-free.
+  func startManagedSlideShowCapture() async {
+    guard let selectedIdentity = selectedWindow?.identity else { return }
+    guard
+      CaptureControlPolicy.canStart(
+        screenCaptureAccessGranted: permissionService.screenCaptureAccessGranted,
+        hasSelectedWindow: true,
+        captureStatus: captureStatus
+      ),
+      managedSlideShowTransaction == nil
+    else { return }
+
+    let operationID = nextCaptureOperationID()
+    resetLectureSessionScenesForCapture()
+    captureFailureSource = nil
+    captureSCStreamErrorCode = nil
+    productionOverlayIsManuallySuppressed = false
+    activeCaptureSessionID = operationID
+    activeCaptureWindowID = nil
+    activeCaptureIdentity = nil
+    activeCaptureUsesManagedSlideShow = true
+    captureStatus = .starting
+    capturedFrameCount = 0
+    captureDeliveryMetrics.reset()
+    newCapturedFrameCount = 0
+    repeatedCapturedFrameCount = 0
+    lastNewFrameAt = nil
+    latestDifferenceFromStableFrame = nil
+    stableFrameCount = 0
+    slideChangeCount = 0
+    resetContentRevisions()
+    latestStableFrame = nil
+    prepareSlideCanvasForNewCapture()
+    resetVisualDetectors()
+    lastAcceptedCaptureSequenceNumber = nil
+    captureContentRequiresNewFrame = false
+    latestVisualFreshnessBoundaryMachTime = nil
+    prepareSlideIdentityForNewCapture()
+    resetSlideAnalysis()
+
+    let transaction = ManagedSlideShowTransactionFactory.make(
+      frozenWindowIdentity: selectedIdentity,
+      capture: windowCapture
+    )
+    managedSlideShowTransaction = transaction
+    let result = await transaction.start(
+      operationID: operationID,
+      onFrame: { [weak self] frame in
+        Task { @MainActor [weak self] in self?.receive(frame, sessionID: operationID) }
+      },
+      onContentUnavailable: { [weak self] sequenceNumber in
+        Task { @MainActor [weak self] in
+          self?.receiveCaptureContentUnavailable(
+            sequenceNumber: sequenceNumber, sessionID: operationID)
+        }
+      },
+      onFailure: { [weak self] event in
+        Task { @MainActor [weak self] in
+          await self?.handleCaptureFailure(event, sessionID: operationID)
+        }
+      },
+      activateBinding: { [weak self] binding in
+        await MainActor.run {
+          guard let self, self.activeCaptureSessionID == operationID,
+            self.activeCaptureUsesManagedSlideShow
+          else { return false }
+          self.activeCaptureWindowID = binding.windowIdentity.windowID
+          self.activeCaptureIdentity = binding.windowIdentity
+          return true
+        }
+      },
+      onIdentityObservation: { [weak self] observation in
+        Task { @MainActor [weak self] in self?.receive(observation, sessionID: operationID) }
+      }
+    )
+    guard activeCaptureSessionID == operationID else { return }
+    switch result {
+    case .success:
+      captureStatus = .capturing
+    case .failure:
+      releaseManagedSlideShowTransactionWhenSafe(transaction)
+      activeCaptureSessionID = nil
+      activeCaptureWindowID = nil
+      activeCaptureIdentity = nil
+      activeCaptureUsesManagedSlideShow = false
+      sessionSceneRecordingEnabled = false
+      invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
+      resetVisualDetectors()
+      lastAcceptedCaptureSequenceNumber = nil
+      invalidateSlideCanvasAfterCaptureEnd()
+      resetSlideAnalysis()
+      captureStatus = .error(NSLocalizedString("error.managedStartFailed", comment: ""))
     }
   }
 
@@ -575,9 +726,11 @@ final class AppModel: ObservableObject {
 
   private func stopWindowCaptureForOperation() async -> CaptureOperationID {
     let operationID = nextCaptureOperationID()
+    sessionSceneRecordingEnabled = false
     activeCaptureSessionID = nil
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
+    activeCaptureUsesManagedSlideShow = false
     invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
     resetVisualDetectors()
     lastAcceptedCaptureSequenceNumber = nil
@@ -593,13 +746,13 @@ final class AppModel: ObservableObject {
 
   func showOverlayDemo() {
     guard canShowOverlayDemo else { return }
+    overlayDemoSceneIsLoaded = true
     productionOverlayIsManuallySuppressed = false
     invalidateProductionOverlayLease(hidePanel: false)
     renderedProductionOverlayState = nil
     boardScene = DemoBoardSceneFactory.make(language: selectedLanguage)
     boardSceneAnalysisGeneration = nil
     overlayController.showDemo(scene: boardScene, style: digitalInkStyle, on: NSScreen.main)
-    overlayDemoSceneIsLoaded = true
     status = .overlayVisible
   }
 
@@ -610,7 +763,13 @@ final class AppModel: ObservableObject {
   }
 
   func startTranscription() async {
-    invalidateTranscriptionContext()
+    transcriptionRequestedByUser = true
+    await startTranscriptionOperation()
+  }
+
+  private func startTranscriptionOperation() async {
+    guard transcriptionRequestedByUser else { return }
+    invalidateTranscriptionContext(preserveUserRequest: true)
     let operationID = transcriptionOperationGate.begin()
     liveTranscript = ""
     do {
@@ -627,6 +786,7 @@ final class AppModel: ObservableObject {
       status = .listening
     } catch {
       guard transcriptionOperationGate.invalidate(ifCurrent: operationID) else { return }
+      transcriptionRequestedByUser = false
       speechProvider.stop()
       liveTranscript = ""
       status = .error(error.localizedDescription)
@@ -634,6 +794,7 @@ final class AppModel: ObservableObject {
   }
 
   func stopTranscription() {
+    transcriptionRequestedByUser = false
     invalidateTranscriptionContext(forceReadyStatus: true)
   }
 
@@ -732,7 +893,8 @@ final class AppModel: ObservableObject {
 
   private func receive(_ frame: CapturedPowerPointFrame, sessionID: CaptureOperationID) {
     guard sessionID == activeCaptureSessionID,
-      frame.windowID == selectedPowerPointWindowID
+      frame.windowID == activeCaptureWindowID,
+      activeCaptureSelectionIsConsistent
     else {
       return
     }
@@ -1138,6 +1300,8 @@ final class AppModel: ObservableObject {
     activeCaptureSessionID = nil
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
+    activeCaptureUsesManagedSlideShow = false
+    sessionSceneRecordingEnabled = false
     invalidateSlideIdentityAfterCaptureEnd(state: failedIdentityState)
     resetVisualDetectors()
     lastAcceptedCaptureSequenceNumber = nil
@@ -1162,7 +1326,7 @@ final class AppModel: ObservableObject {
     lastAcceptedCaptureSequenceNumber = sequenceNumber
     cancelFreshContentSampling(resetEpisode: true)
     captureContentRequiresNewFrame = true
-    invalidateTranscriptionContext()
+    invalidateTranscriptionContext(preserveUserRequest: true)
     latestEligibleWindowFrame = nil
     resetVisualDetectors()
     latestDifferenceFromStableFrame = nil
@@ -1333,7 +1497,7 @@ final class AppModel: ObservableObject {
       captureStatus == .capturing,
       let activeCaptureSessionID,
       let activeCaptureIdentity,
-      activeCaptureIdentity == selectedWindow?.identity,
+      activeCaptureSelectionIsConsistent,
       let lastAcceptedCaptureSequenceNumber,
       lastAcceptedCaptureSequenceNumber == anchoredStreamSequenceNumber,
       !captureContentRequiresNewFrame,
@@ -1627,8 +1791,8 @@ final class AppModel: ObservableObject {
       captureStatus == .capturing,
       activeCaptureSessionID == request.captureOperationID,
       activeCaptureIdentity == request.captureIdentity,
-      selectedWindow?.identity == request.captureIdentity,
       activeCaptureWindowID == request.captureIdentity.windowID,
+      activeCaptureSelectionIsConsistent,
       lastAcceptedCaptureSequenceNumber == request.anchoredStreamSequenceNumber,
       !captureContentRequiresNewFrame,
       latestEligibleWindowFrame?.sequenceNumber == request.anchoredStreamSequenceNumber,
@@ -1702,9 +1866,28 @@ final class AppModel: ObservableObject {
 
   private func stopCaptureProviders(operationID: CaptureOperationID) async {
     inFlightCaptureStopCount += 1
-    await windowCapture.stop(operationID: operationID)
+    if let managedSlideShowTransaction {
+      await managedSlideShowTransaction.stop()
+      releaseManagedSlideShowTransactionWhenSafe(managedSlideShowTransaction)
+    } else {
+      await windowCapture.stop(operationID: operationID)
+    }
     await slideIdentityProvider.stop(operationID: operationID)
     inFlightCaptureStopCount -= 1
+  }
+
+  private func releaseManagedSlideShowTransactionWhenSafe(
+    _ transaction: ManagedSlideShowTransactionCoordinator
+  ) {
+    managedSlideShowTransactionReleaseTask?.cancel()
+    managedSlideShowTransactionReleaseTask = Task { @MainActor [weak self] in
+      await transaction.waitUntilReplacementIsSafe()
+      guard !Task.isCancelled, let self,
+        self.managedSlideShowTransaction === transaction
+      else { return }
+      self.managedSlideShowTransaction = nil
+      self.managedSlideShowTransactionReleaseTask = nil
+    }
   }
 
   private func receive(
@@ -1720,7 +1903,8 @@ final class AppModel: ObservableObject {
       requestGeneration == analysisGeneration,
       requestSlideIdentityGeneration == slideIdentityGeneration,
       requestSlideCanvasGeneration == slideCanvasGeneration,
-      frame.windowID == selectedPowerPointWindowID
+      frame.windowID == activeCaptureWindowID,
+      activeCaptureSelectionIsConsistent
     else {
       return
     }
@@ -1729,6 +1913,7 @@ final class AppModel: ObservableObject {
     slideAnalysisNeedsRefresh = false
     latestCompletedAnalysisGeneration = requestGeneration
     slideAnalysisTask = nil
+    scheduleAutomaticTranscriptionResumeIfReady()
     if origin == .continuousStream {
       renderAlignedOverlayIfPossible()
     }
@@ -1747,7 +1932,8 @@ final class AppModel: ObservableObject {
       requestGeneration == analysisGeneration,
       requestSlideIdentityGeneration == slideIdentityGeneration,
       requestSlideCanvasGeneration == slideCanvasGeneration,
-      frame.windowID == selectedPowerPointWindowID
+      frame.windowID == activeCaptureWindowID,
+      activeCaptureSelectionIsConsistent
     else {
       return
     }
@@ -1771,7 +1957,8 @@ final class AppModel: ObservableObject {
       requestGeneration == analysisGeneration,
       requestSlideIdentityGeneration == slideIdentityGeneration,
       requestSlideCanvasGeneration == slideCanvasGeneration,
-      frame.windowID == selectedPowerPointWindowID
+      frame.windowID == activeCaptureWindowID,
+      activeCaptureSelectionIsConsistent
     else {
       return
     }
@@ -1969,7 +2156,7 @@ final class AppModel: ObservableObject {
   ) {
     guard sessionID == activeCaptureSessionID,
       observation.targetIdentity == activeCaptureIdentity,
-      activeCaptureIdentity == selectedWindow?.identity
+      activeCaptureSelectionIsConsistent
     else {
       return
     }
@@ -2036,7 +2223,7 @@ final class AppModel: ObservableObject {
 
   private func resetVisualStateForSlideIdentityBoundary(clearBoardScene: Bool) {
     cancelFreshContentSampling(resetEpisode: true)
-    invalidateTranscriptionContext()
+    invalidateTranscriptionContext(preserveUserRequest: true)
     slideIdentityGeneration += 1
     latestEligibleWindowFrame = nil
     resetVisualDetectors()
@@ -2068,6 +2255,10 @@ final class AppModel: ObservableObject {
 
   private func resetBoardCandidateContext() {
     boardCandidateContext.reset()
+  }
+
+  private var activeCaptureSelectionIsConsistent: Bool {
+    activeCaptureUsesManagedSlideShow || activeCaptureIdentity == selectedWindow?.identity
   }
 
   private func abandonSlideIdentityCandidate(acceptedMachTime: UInt64) {
@@ -2139,7 +2330,49 @@ final class AppModel: ObservableObject {
     operationID.rawValue == nextCaptureOperationRawValue
   }
 
-  private func invalidateTranscriptionContext(forceReadyStatus: Bool = false) {
+  private func scheduleAutomaticTranscriptionResumeIfReady() {
+    guard
+      transcriptionRequestedByUser,
+      !transcriptionOperationGate.hasActiveOperation,
+      automaticTranscriptionResumeTask == nil,
+      captureStatus == .capturing,
+      slideCanvasStatus == .confirmed,
+      slideIdentityState == .identified,
+      !slideIdentityQuarantineActive,
+      !slideIdentityFrameGate.requiresFreshFrame,
+      slideAnalysisStatus == .ready,
+      !slideAnalysisNeedsRefresh,
+      latestCompletedAnalysisGeneration == analysisGeneration
+    else { return }
+
+    automaticTranscriptionResumeTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { self.automaticTranscriptionResumeTask = nil }
+      guard
+        self.transcriptionRequestedByUser,
+        !self.transcriptionOperationGate.hasActiveOperation,
+        self.captureStatus == .capturing,
+        self.slideCanvasStatus == .confirmed,
+        self.slideIdentityState == .identified,
+        !self.slideIdentityQuarantineActive,
+        !self.slideIdentityFrameGate.requiresFreshFrame,
+        self.slideAnalysisStatus == .ready,
+        !self.slideAnalysisNeedsRefresh,
+        self.latestCompletedAnalysisGeneration == self.analysisGeneration
+      else { return }
+      await self.startTranscriptionOperation()
+    }
+  }
+
+  private func invalidateTranscriptionContext(
+    forceReadyStatus: Bool = false,
+    preserveUserRequest: Bool = false
+  ) {
+    automaticTranscriptionResumeTask?.cancel()
+    automaticTranscriptionResumeTask = nil
+    if !preserveUserRequest {
+      transcriptionRequestedByUser = false
+    }
     let hadActiveOperation = transcriptionOperationGate.hasActiveOperation
     transcriptionOperationGate.invalidate()
     if hadActiveOperation {

@@ -7,6 +7,9 @@ test_derived_data="$repository_root/DerivedData/AppTests"
 generated_project_directory="$test_derived_data/GeneratedProject"
 generated_project="$generated_project_directory/LectureBoardAI.xcodeproj"
 local_package_link="$generated_project_directory/Packages"
+entitlements_file="$repository_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
+generated_entitlements_directory="$generated_project_directory/LectureBoardAI/Config"
+generated_entitlements_link="$generated_entitlements_directory/LectureBoardAI.entitlements"
 scheme="LectureBoardAI"
 
 usage() {
@@ -19,6 +22,8 @@ print_config() {
   printf 'GENERATED_PROJECT_PATH=%s\n' "$generated_project"
   printf 'LOCAL_PACKAGE_LINK=%s\n' "$local_package_link"
   printf 'LOCAL_PACKAGE_TARGET=%s\n' "$repository_root/Packages"
+  printf 'ENTITLEMENTS_PATH=%s\n' "$entitlements_file"
+  printf 'GENERATED_ENTITLEMENTS_LINK=%s\n' "$generated_entitlements_link"
   printf 'SCHEME=%s\n' "$scheme"
   printf 'ARCHITECTURE=arm64\n'
   printf 'CONFIGURATION=Debug\n'
@@ -60,6 +65,12 @@ for required_command in xcodegen xcodebuild; do
   fi
 done
 
+if [[ ! -f "$entitlements_file" || -L "$entitlements_file" ]]; then
+  printf 'The native-app-test entitlements file is missing or symbolic: %s\n' \
+    "$entitlements_file" >&2
+  exit 1
+fi
+
 mkdir -p "$generated_project_directory"
 
 if [[ -L "$local_package_link" ]]; then
@@ -73,6 +84,22 @@ elif [[ -e "$local_package_link" ]]; then
   exit 1
 else
   ln -s "$repository_root/Packages" "$local_package_link"
+fi
+
+mkdir -p "$generated_entitlements_directory"
+if [[ -L "$generated_entitlements_link" ]]; then
+  actual_entitlements_target="$(readlink "$generated_entitlements_link")"
+  if [[ "$actual_entitlements_target" != "$entitlements_file" ]]; then
+    printf 'Unexpected generated entitlements link target: %s\n' \
+      "$actual_entitlements_target" >&2
+    exit 1
+  fi
+elif [[ -e "$generated_entitlements_link" ]]; then
+  printf 'The generated entitlements link path is occupied: %s\n' \
+    "$generated_entitlements_link" >&2
+  exit 1
+else
+  ln -s "$entitlements_file" "$generated_entitlements_link"
 fi
 
 printf 'Generating an isolated Xcode project for native app tests...\n'

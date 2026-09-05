@@ -4,9 +4,9 @@
 
 ## 完成の定義と現在地
 
-　本プロジェクトの完成は，公開GitHubリポジトリ`akiyama709/lectureboard-ai`において，Developer ID署名及びAppleのnotarizationを完了したインストール可能なmacOS成果物を含む`v1.0.0` GitHub Releaseを正式公開し，公開物を再取得して最終検証を終えた時点とする．公開リポジトリ作成，ソース公開，α版，β版及びRelease Candidate（RC）は中間ゲートであり，完成とは呼ばない．
+　本プロジェクトの完成は，公開GitHubリポジトリ`akiyama709/lectureboard-ai`において，検証済みarm64 App archive，正確なsource commit，checksum，SBOM及びprovenanceを含む正式な`v1.0.0` GitHub Releaseを公開し，公開物を再取得して最終検証を終えた時点とする．有料又は教育機関名義のApple Developer membershipは使用せず，archiveはad hoc署名とし，Developer ID署名又はApple notarization済みとは表示しない．α版，β版又はRCのapplication Releaseは公開しない．
 
-　現在はα段階の開発基盤であり，α版，β版，RC又は`v1.0.0`のGitHub Releaseはまだ公開していない．実装済み，履歴上の実機証拠及び現行版で未検証の事項は，[`build-verification.md`](build-verification.md)の区別を維持する．
+　現在は公開前の開発基盤であり，application GitHub Releaseはまだ公開していない．実装済み，履歴上の実機証拠及び現行版で未検証の事項は，[`build-verification.md`](build-verification.md)の区別を維持する．
 
 ## M0：公開リポジトリ基盤
 
@@ -57,47 +57,47 @@
 
 完了条件：繰り返し手動で言語を切り替えず，日英混在講義が動作する．
 
-## M4：講義対応αゲート
+## M4：対応範囲の実機受入
 
-- プレゼンター制御ウィンドウ
-- オンライン共有用合成ウィンドウ
-- PowerPoint再起動及びディスプレイ再接続からの復旧
-- プライバシーを保護する講義書出し
+- 資料1件，windowed slide show，display 1台のmanaged講義経路を完成する
+- 利用者確認式canvas，可視overlay alignment，click-through mouse priority及びpublic-scene exportを検証する
+- 正常停止，取消し，許可拒否，window終了及びcapture中断時のcleanupを検証する
+- 元PowerPoint fileが不変であることを確認する
 - アクセシビリティ評価
-- 未完成であることを明示した制御テスター向けα配布
+- privacy，license，既知の制限，導入，初回講義及びfallback文書を完成する
 
-完了条件：文書化されたフォールバック手順を備え，制御された実講義で反復利用できる．αは完成版ではない．
+完了条件：文書化されたfallback手順を備え，対応範囲の講義経路を反復実行できる．この内部検証gate自体は公開又は完成ではない．
 
-## M5：βゲート
+## M5：代表条件の検証
 
-- 代表的な日本語，英語及び段階的日英混在資料を反復検証する
+- 代表的な日本語及び英語資料を別sessionで反復検証する
 - OCR，図形，座標，占有領域及び板書有用性を校正する
-- PowerPoint再起動，画面再接続，窓再選択及びセッション復旧を検証する
-- マイク，透明オーバーレイ，ペンタブ非干渉及びオンライン共有を検証する
+- managed開始，正常停止，取消し及び対応範囲の復旧経路を反復検証する
+- microphone，透明overlay及びmouse input非干渉を検証する
 - プライバシー，アクセシビリティ，ライセンス及び第三者表示を確認する
-- βテスト手順及び既知の制約を公開可能な形で整備する
+- 利用手順及び既知の制約を公開可能な形で整備する
 
-完了条件：対応Mac上で招待テスターが機能範囲の固定された版を反復利用でき，重要な失敗及び制約がすべて追跡される．βも完成版ではない．
+完了条件：対応Mac上で機能範囲の固定されたbuildを反復利用でき，重要な失敗及び制約がすべて追跡される．この内部検証gateも完成ではない．
 
-## M6：Release Candidate
+## M6：正確なv1.0.0公開候補
 
 - `v1.0.0`の機能範囲及び対応環境を凍結する
 - リリースを阻害する不具合を解消し，残る問題を分類する
 - 再現可能な配布ビルドを作る
-- Developer ID配布署名及びHardened Runtimeを適用する
-- Apple notarizationを取得し，対応形式ではticketをstapleする
+- Hardened Runtime及びad hoc署名を適用し，entitlement allowlistを検証する
+- App archive，SHA-256，SBOM及びcommit-bound provenanceを生成する
 - 新規の対応MacでGatekeeper，インストール，初回起動，権限及び中核講義経路を確認する
 - リリースノート，導入，プライバシー，セキュリティ，トラブル対応及びフォールバック文書を完成させる
 
-完了条件：公開予定と同一の候補成果物が，[`v1-release-checklist.md`](v1-release-checklist.md)の公開前項目をすべて満たす．RCも完成版ではない．
+完了条件：公開予定と同一の候補成果物が，[`v1-release-checklist.md`](v1-release-checklist.md)の公開前項目をすべて満たす．公開及び公開後gateが完了するまでは，本プロジェクトの完成ではない．
 
 ## M7：GitHub正式版v1.0.0
 
 - 公開対象コミットで必須CI及びローカルリリース検証を完了する
 - 外部公開操作に対する明示的な最終確認を得る
 - 承認済みコミットへ`v1.0.0`タグを付ける
-- 署名・notarization済みmacOS成果物，リリースノート及びSHA-256を含むGitHub Releaseを公開する
-- 公開成果物を再取得し，checksum，署名，notarization，Gatekeeper，インストール及び起動を再検証する
+- ad hoc署名済みmacOS App archive，リリースノート，SHA-256，SBOM及びprovenanceを含むGitHub Releaseを公開する
+- 公開成果物を再取得し，checksum，bundle identity，ad hoc署名，Hardened Runtime，AppleのApp単位の「このまま開く」経路，インストール及び起動を再検証する
 - 公開URL及び最終証拠を検証記録へ保存する
 
 完了条件：公開`v1.0.0` GitHub Releaseを一般利用者が取得でき，再取得した成果物が最終検証に合格する．この時点だけを本プロジェクトの完成とする．
