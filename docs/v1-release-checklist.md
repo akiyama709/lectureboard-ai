@@ -2,13 +2,13 @@
 
 ## Definition of completion
 
-LectureBoard AI is complete when the public, non-prerelease `v1.0.0` GitHub Release is available from `akiyama709/lectureboard-ai`, includes the verified arm64 application archive and its checksum, SBOM, provenance, and exact source commit, and the archive downloaded from that public release passes the final verification below.
+LectureBoard AI is complete when the public, immutable, non-prerelease `v1.0.0` GitHub Release is available from `akiyama709/lectureboard-ai`, includes exactly `LectureBoard-AI-v1.0.0-arm64.zip`, `LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json` bound to the exact source commit, and all five attached assets downloaded from that public release pass the final verification below.
 
 The public source repository is the development venue, not the completed product. No alpha, beta, or release-candidate GitHub Release will be published. Internal validation phases do not satisfy the completion definition.
 
 ## Current status
 
-No application GitHub Release has been published. The current repository is a pre-release development scaffold. Existing local builds are development artifacts; the currently verified runtime bundle is ad hoc signed and is not Apple notarized.
+No application GitHub Release has been published. The current repository is a pre-release development scaffold. Existing local builds and the dated runtime checkpoints in `build-verification.md` are development artifacts, not the final release archive; they are ad hoc signed and are not Apple notarized.
 
 Every item below must be evaluated against the exact release commit and exact candidate artifact. Earlier tests and historical runtime reports may inform readiness, but they do not automatically check a release item.
 
@@ -61,14 +61,18 @@ Passing this gate establishes representative-use evidence only; it does not auth
 
 - [ ] The installable application archive is produced traceably from the approved release commit and declared toolchain; reproducibility means traceable regeneration and does not assert byte-identical compiler output.
 - [ ] Release preflight rejects a dirty tree, untracked files, a lightweight or incorrectly targeted tag, origin or CI-commit mismatch, inconsistent version metadata, generated-project drift, and an unexpected Xcode version before any build begins.
+- [ ] `no-fee-release-v1.sh evidence --source-dir DIR --commit OID --output-dir DIR` runs the complete prepublication gate in an isolated checkout of the clean exact commit and produces one new authoritative native `.xcresult`, its private `prepublication-gate.log`, and the content-free public test-evidence JSON.
+- [ ] The private gate log and frozen `.xcresult` are retained as local evidence and are not attached to the GitHub Release; only `LectureBoard-AI-v1.0.0-test-results.json` from that evidence transaction enters the exact five-asset public set.
 - [ ] The distribution build runs from an isolated checkout or worktree and has no Debug or Apple Development signing fallback.
+- [ ] `prepare` consumes the exact public test JSON, frozen `.xcresult`, and private gate log from the same evidence transaction through `--test-result`, `--test-result-bundle`, and `--gate-log`, and binds them to the same full commit identifier.
 - [ ] The application uses the hardened runtime and an ad hoc signature with no team identity or secure timestamp.
 - [ ] Strict verification succeeds for the application and every nested executable component; the runtime flag, absence of an Apple team identity, architecture, bundle metadata, and exact entitlement allowlist are checked.
-- [ ] The ZIP contains only the intended application bundle, preserves required macOS metadata, rejects path traversal and unexpected entries, and passes structural extraction checks.
-- [ ] The release includes SHA-256 checksums, an SBOM, and provenance binding the archive, executable, bundle version, toolchain, test result, tag, and exact commit.
+- [ ] The ZIP contains only the intended application bundle, preserves required Unix modes, omits unneeded AppleDouble/resource-fork/extended-attribute entries, rejects path traversal and unexpected entries, and retains a valid strict application signature after both macOS `ditto` and `/usr/bin/unzip` extraction.
+- [ ] The release includes SHA-256 checksums, an SBOM, the content-free test-evidence JSON, and provenance binding the archive, executable, bundle version, toolchain, public test evidence, tag, and exact commit.
+- [ ] The complete `verify` command passes for the exact five prepared files and full approved commit identifier before publication approval.
 - [ ] A quarantine-preserving transfer produces the expected Gatekeeper warning, and installation is verified using only Apple's per-application Open Anyway exception. Instructions never disable Gatekeeper globally or remove quarantine metadata.
 - [ ] Download, installation, first launch, Screen Recording, microphone, Speech, and normal relaunch are verified without development-only entitlements or paths.
-- [ ] The final archive checksum, size, code-directory hashes, exact test-result digest, and version metadata are recorded after packaging; no later rebuild, signing, or packaging changes those bytes.
+- [ ] The final archive checksum, size, code-directory hashes, exact public test-evidence digest and local result-bundle tree digest, and version metadata are recorded after packaging; no later rebuild, signing, or packaging changes those bytes.
 
 ### Documentation and operations
 
@@ -86,21 +90,25 @@ Passing this gate establishes an exact candidate ready for the final publication
 - [ ] The release commit on `main` is reviewed and has no unintended changes.
 - [ ] Explicit user approval is obtained immediately before the external publication action and identifies the exact release commit and final application-archive SHA-256.
 - [ ] An annotated `v1.0.0` tag is created from the approved release commit and pushed without rewriting history.
-- [ ] All assets and release notes are assembled and verified in a draft GitHub Release before the release becomes public.
-- [ ] A public GitHub Release is created for `v1.0.0`; it is not marked as a prerelease, and immutable-release controls are enabled when available.
+- [ ] Exactly five attached assets—`LectureBoard-AI-v1.0.0-arm64.zip`, `LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json`—and the separate release-note body are assembled and verified in a draft GitHub Release before it becomes public.
+- [ ] A public GitHub Release is created for `v1.0.0`; it is non-draft, is not marked as a prerelease, and has immutable-release controls enabled. A mutable Release does not satisfy this gate.
 - [ ] The hardened-runtime, ad hoc-signed arm64 application archive is attached without any Developer ID or Apple-notarization claim.
 - [ ] Release notes, supported environment, installation instructions, known limitations, privacy information, SHA-256 checksum, SBOM, and provenance are included.
-- [ ] Source archives and attached artifacts correspond to the approved tag and recorded provenance.
+- [ ] `LectureBoard-AI-v1.0.0-test-results.json` is attached and matches both `SHA256SUMS` and the provenance record without exposing test logs or local paths.
+- [ ] GitHub's source archives and all five attached assets correspond to the approved tag and recorded provenance.
 
 ## 5. Post-publication verification — completion gate
 
-- [ ] The public release page and artifact are accessible without repository-owner credentials.
-- [ ] The artifact is downloaded from the public GitHub Release into a clean verification environment.
-- [ ] The downloaded artifact's SHA-256 matches the published checksum.
+- [ ] The public release page and all five attached assets are accessible without repository-owner credentials.
+- [ ] All five attached assets are downloaded from the public GitHub Release into a clean verification environment, have the exact approved names, and match the approved local files byte for byte.
+- [ ] The unauthenticated public REST metadata is retained locally and reports the exact repository, `v1.0.0` tag, non-draft and non-prerelease state, `immutable: true`, and exactly the five approved asset names and sizes; any digest field supplied by GitHub matches the downloaded bytes.
+- [ ] The unauthenticated public tag-ref snapshot is retained locally and contains exactly the annotated `v1.0.0` tag object and its peeled approved commit.
+- [ ] The complete `verify-public --source-dir DIR --approved-dir DIR --commit OID --output-dir DIR` transaction passes. Its downloaded assets, `public-release.json`, `public-tag-refs.txt`, and `verification-receipt.json` are retained as local post-publication evidence, not Release attachments.
+- [ ] The four downloaded payload SHA-256 values match the downloaded and byte-identical `SHA256SUMS` manifest.
 - [ ] Bundle identity, ad hoc signature, hardened runtime, architecture, version, entitlement allowlist, SBOM, and provenance are independently rechecked.
 - [ ] The expected Gatekeeper warning and Apple's per-application Open Anyway exception are independently verified without disabling Gatekeeper globally or removing quarantine metadata.
 - [ ] Installation, first launch, required permission flow, relaunch, and the supported core lecture path succeed from the downloaded artifact.
-- [ ] The public release URL, tag commit, artifact filename, checksum, ad hoc signature evidence, test environment, and final results are recorded in `docs/build-verification.md`.
+- [ ] The public release URL, release-metadata digest, annotated tag object and peeled commit, five asset filenames and digests, ad hoc signature evidence, test environment, and final results are recorded in `docs/build-verification.md`.
 - [ ] Any discrepancy is resolved before the release is described as complete.
 
 ## 6. Withdrawal and rollback triggers
@@ -123,7 +131,7 @@ Withdrawal is not completion. After correction, a new reviewed commit and artifa
 release-candidate and publication checks. A published tag is never moved or force-updated; a
 replacement release uses the next appropriate semantic version.
 
-Only when every item in Sections 1–5 has passed, with Sections 3–5 evaluated against the same `v1.0.0` commit and public artifact, may the project be described as complete.
+Only when every item in Sections 1–5 has passed, with Sections 3–5 evaluated against the same `v1.0.0` commit and exact five-asset public Release, may the project be described as complete.
 
 ## Historical initial-publication material
 

@@ -13,6 +13,21 @@ generated_config_directory="$generated_project_directory/LectureBoardAI/Config"
 generated_info_plist_link="$generated_config_directory/Info.plist"
 generated_entitlements_link="$generated_config_directory/LectureBoardAI.entitlements"
 scheme="LectureBoardAI"
+source_commit="$(
+  /usr/bin/env -i \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    LC_ALL=C \
+    GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_GLOBAL=/dev/null \
+    GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_NO_REPLACE_OBJECTS=1 \
+    /usr/bin/git --no-replace-objects \
+      -c core.hooksPath=/dev/null \
+      -c core.attributesFile=/dev/null \
+      -C "$repository_root" rev-parse --verify HEAD^{commit}
+)" || { printf 'Native-app-test source commit could not be resolved.\n' >&2; exit 1; }
+[[ "$source_commit" =~ ^[0-9a-f]{40}$ || "$source_commit" =~ ^[0-9a-f]{64}$ ]] \
+  || { printf 'Native-app-test source commit is malformed.\n' >&2; exit 1; }
 
 usage() {
   printf 'Usage: %s [--help|--print-config]\n' "$(basename -- "$0")"
@@ -29,6 +44,7 @@ print_config() {
   printf 'ENTITLEMENTS_PATH=%s\n' "$entitlements_file"
   printf 'GENERATED_ENTITLEMENTS_LINK=%s\n' "$generated_entitlements_link"
   printf 'SCHEME=%s\n' "$scheme"
+  printf 'SOURCE_COMMIT=%s\n' "$source_commit"
   printf 'ARCHITECTURE=arm64\n'
   printf 'CONFIGURATION=Debug\n'
   printf 'SIGNATURE_TYPE=ad hoc\n'
@@ -153,4 +169,5 @@ xcodebuild \
   CODE_SIGNING_REQUIRED=YES \
   ARCHS=arm64 \
   ONLY_ACTIVE_ARCH=YES \
+  LECTUREBOARD_RELEASE_COMMIT="$source_commit" \
   test

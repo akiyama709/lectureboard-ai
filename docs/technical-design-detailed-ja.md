@@ -493,7 +493,7 @@ LectureBoard Sessions/
 - クラウド利用時は送信対象を画面上に明示する
 - クラウド障害時はローカルの安全な縮退動作へ移る
 - 自動更新を導入する場合は署名検証を必須とする
-- `v1.0.0`の一般配布はHardened Runtimeを有効にしたarm64 Appのad hoc署名，checksum，SBOM及びcommit-bound provenanceを用い，Developer ID署名又はApple notarization済みとは表示しない
+- `v1.0.0`の一般配布はHardened Runtimeを有効にしたarm64 Appのad hoc署名，checksum manifest，内容を含まないtest evidence，SBOM及びcommit-bound provenanceを用い，Developer ID署名又はApple notarization済みとは表示しない
 
 詳細は`privacy-security-ja.md`を参照する．
 
@@ -596,7 +596,7 @@ LectureBoard Sessions/
 4. `.pptx`，発表者ノート及び確定発話を用いる根拠付き文脈判断
 5. 人間の手書きを優先する安定板書及びセッション保存
 6. 制御講義，代表資料及び機能凍結後の最終artifactによる段階的検証
-7. Hardened Runtime，ad hoc署名，checksum，SBOM，provenance及びクリーンMacでのApp単位の「このまま開く」による受入試験
+7. Hardened Runtime，ad hoc署名，checksum manifest，内容を含まないtest evidence，SBOM，provenance，全5添付asset再取得及びクリーンMacでのApp単位の「このまま開く」による受入試験
 8. 公開`v1.0.0` GitHub Release及び公開成果物の再取得検証
 
 　公開リポジトリ作成及び内部検証artifactは中間ゲートである．α版，β版又はRCのapplication Releaseは公開しない．[`v1-release-checklist.md`](v1-release-checklist.md)の全項目を満たす公開`v1.0.0` GitHub Releaseの成立だけを，本プロジェクトの完成とする．

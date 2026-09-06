@@ -14,22 +14,29 @@ not identified or notarized its publisher.
 ## Decision
 
 The project will publish no alpha, beta, or release-candidate GitHub Release. Completion means a
-public, non-prerelease `v1.0.0` GitHub Release whose supported feature set has passed the release
-tests and documented live verification. The release will contain:
+public, immutable, non-prerelease `v1.0.0` GitHub Release whose supported feature set has passed
+the release tests and documented live verification. The release will identify the exact public
+source commit, provide reproducible local build instructions, and attach exactly these five files:
 
-- the exact public source commit and reproducible local build instructions;
-- an arm64 macOS application archive carrying an ad hoc code signature, with no claim that it is
-  Developer ID signed or Apple notarized;
-- SHA-256 checksums, an SBOM, release notes, supported-environment information, and a provenance
-  record binding the archive to the release commit; and
-- installation instructions using only Apple's per-application **Open Anyway** exception when
-  Gatekeeper blocks the downloaded archive. The project will not tell users to disable Gatekeeper
-  globally or remove quarantine metadata.
+- `LectureBoard-AI-v1.0.0-arm64.zip`;
+- `LectureBoard-AI-v1.0.0-test-results.json`;
+- `SBOM.spdx.json`;
+- `SHA256SUMS`; and
+- `provenance.json`.
+
+The application archive carries an ad hoc code signature, with no claim that it is Developer ID
+signed or Apple notarized. The provenance record binds the archive and content-free test evidence
+to the release commit. Release notes, supported-environment information, and installation
+instructions remain in the GitHub Release body rather than becoming a sixth attachment.
+Installation may use only Apple's per-application **Open Anyway** exception when Gatekeeper blocks
+the downloaded archive. The project will not tell users to disable Gatekeeper globally or remove
+quarantine metadata.
 
 Publication still requires explicit approval naming the exact release commit and application
-archive SHA-256. Completion is established only after downloading the public archive without
-repository-owner credentials and rechecking its checksum, bundle identity, ad hoc signature,
-architecture, version, launch, permissions, and supported core workflow on a supported Mac.
+archive SHA-256. Completion is established only after downloading all five public assets without
+repository-owner credentials, confirming their exact names and byte equality with the approved
+local set, and rechecking the archive checksum, bundle identity, ad hoc signature, architecture,
+version, launch, permissions, and supported core workflow on a supported Mac.
 
 ## Consequences
 

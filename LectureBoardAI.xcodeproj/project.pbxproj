@@ -37,6 +37,7 @@
 		5F3046B9FDDCA5989CE8FC26 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07B930BC193AF01B1D2DCD92 /* MainView.swift */; };
 		5FCFB9CC3030B9EA0311AB64 /* LectureBoardAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA791C51645A1AC2C207D65 /* LectureBoardAIApp.swift */; };
 		62E4D20F0F695EFC53BD25FF /* RuntimeVerificationApplicationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34351EA1ADCD2D88705AB4E /* RuntimeVerificationApplicationDelegate.swift */; };
+		66C3D04B5C869A021838BE96 /* BuildProvenanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD574FF29D70A24242A4C08D /* BuildProvenanceTests.swift */; };
 		688BEC5EF09CC3DB0CD7A231 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2FBD20EAAA499EF3E13F42 /* SettingsView.swift */; };
 		6B96BA4A022B9A508F238B82 /* ProductionOverlayEligibilityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD73C2F862C1EB06AECDAA7 /* ProductionOverlayEligibilityProvider.swift */; };
 		6D6BDCC652C113BD75B4FF3A /* ManagedSlideShowTransactionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C986A054E3F3513A2B175520 /* ManagedSlideShowTransactionCoordinator.swift */; };
@@ -178,6 +179,7 @@
 		F7B342A3CD0728A475DDFDFE /* PowerPointManagedSlideShowRoleChallengeClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointManagedSlideShowRoleChallengeClientTests.swift; sourceTree = "<group>"; };
 		F89705DC206BE4F1613F8713 /* ManagedSlideShowRoleChallengeCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSlideShowRoleChallengeCoordinatorTests.swift; sourceTree = "<group>"; };
 		FBA29FBA6A9428279D53EFCC /* PowerPointSlideIdentityProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointSlideIdentityProviderTests.swift; sourceTree = "<group>"; };
+		FD574FF29D70A24242A4C08D /* BuildProvenanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildProvenanceTests.swift; sourceTree = "<group>"; };
 		FE7085F06F636DA0BC868884 /* PowerPointAutomationPermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerPointAutomationPermissionService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -316,6 +318,7 @@
 				F71E5F780D02AA6BEBA31546 /* AppModelSessionExportTests.swift */,
 				DA3395EFB908D5DD6084507C /* AppSlideCanvasIntegrationTests.swift */,
 				1D7C61CD4E4190A5CDA3B42A /* AppSlideIdentityIntegrationTests.swift */,
+				FD574FF29D70A24242A4C08D /* BuildProvenanceTests.swift */,
 				192DFEC86F8158C07F62928F /* CaptureControlPolicyTests.swift */,
 				66D800008C4AA26556CF4B74 /* CaptureDeliveryMetricsTests.swift */,
 				42C9215A5BA5559FDF4EE0E2 /* CaptureLifecycleTests.swift */,
@@ -516,6 +519,7 @@
 				122571556BE1C3E0F06CE230 /* AppModelSessionExportTests.swift in Sources */,
 				A7EAB2B8DD0FC248EBDBF6B2 /* AppSlideCanvasIntegrationTests.swift in Sources */,
 				A4E7163F132C8E8545BA9376 /* AppSlideIdentityIntegrationTests.swift in Sources */,
+				66C3D04B5C869A021838BE96 /* BuildProvenanceTests.swift in Sources */,
 				E574DF31282514A1E8639F81 /* CGImageRasterizerTests.swift in Sources */,
 				F891F282AEFE78BA51F7731B /* CaptureControlPolicyTests.swift in Sources */,
 				C1E5CF6CF8A5B98C6408571D /* CaptureDeliveryMetricsTests.swift in Sources */,

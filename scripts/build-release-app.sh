@@ -539,6 +539,13 @@ else
     "$canonical_parent"/.lectureboard-release-output.*) ;;
     *) fail 'the atomic output stage is unsafe' ;;
   esac
+  output_parent_identity="$(/usr/bin/stat -f '%d %i' "$canonical_parent")" \
+    || fail 'the output-parent identity could not be captured'
+  output_stage_identity="$(/usr/bin/stat -f '%d %i' "$output_stage")" \
+    || fail 'the output-stage identity could not be captured'
+  [[ "$output_parent_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$output_stage_identity" =~ ^[0-9]+\ [0-9]+$ ]] \
+    || fail 'an output handoff identity is malformed'
   staged_app="$output_stage/$expected_product_name.app"
   if "${sanitized_environment[@]}" /usr/bin/ditto --noqtn "$archived_app" "$staged_app"; then
     copy_status='0'
@@ -703,7 +710,9 @@ else
   incomplete_marker="$output_stage/.lectureboard-release-incomplete"
   printf 'Release output is incomplete until all post-handoff checks pass.\n' \
     >"$incomplete_marker"
-  if "$rename_helper" "$output_stage" "$output_directory"; then
+  if "$rename_helper" "$output_stage" "$output_directory" \
+    "${output_parent_identity% *}" "${output_parent_identity#* }" \
+    "${output_stage_identity% *}" "${output_stage_identity#* }"; then
     handoff_status='0'
   else
     handoff_status='1'

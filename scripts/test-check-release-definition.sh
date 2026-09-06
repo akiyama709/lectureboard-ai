@@ -87,6 +87,105 @@ cp "$script_directory/../scripts/test-verify-release-code.sh" "$fixture_root/scr
 
 "$fixture_root/scripts/check-release-definition.sh" >/dev/null
 
+assert_rejects_missing_release_contract() {
+  local path="$1" required="$2" label="$3"
+  local backup="$path.contract-backup"
+  cp "$path" "$backup"
+  /usr/bin/python3 -I - "$path" "$required" <<'PY'
+import sys
+path,required=sys.argv[1:]
+data=open(path,encoding="utf-8").read()
+if required not in data: raise SystemExit(2)
+open(path,"w",encoding="utf-8").write(data.replace(required,"removed-release-contract"))
+PY
+  if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+    printf 'The release-definition check accepted removal of %s.\n' "$label" >&2
+    exit 1
+  fi
+  mv "$backup" "$path"
+}
+
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'prepare --source-dir DIR --tag v1.0.0 --commit OID --test-result FILE --test-result-bundle DIR --gate-log FILE --output-dir DIR' \
+  'the evidence-bound prepare interface'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  '/usr/bin/xcrun xcresulttool get log --type action' \
+  'native action-log provenance validation'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'not decompressor.eof or decompressor.unused_data or decompressor.unconsumed_tail' \
+  'raw DEFLATE completion validation'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'approved_snapshot="$public_stage/approved"' \
+  'pre-network approved-asset snapshotting'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  '-c core.fsmonitor=false -c core.untrackedCache=false' \
+  'repository-local fsmonitor suppression'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'blob in {"0"*40,"0"*64} or len(blob)!=len(c)' \
+  'null and mixed-format gate-script object rejection'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'for offset in (0,1):' \
+  'odd-offset UTF-16 private-path scanning'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  '[[ -z "$(/usr/bin/find "$result_bundle" -type l -print -quit)" ]] || return 1' \
+  'result-bundle symbolic-link rejection'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  '[[ "$build_toolchain_after" == "$build_toolchain_before" ]]' \
+  'build-time toolchain continuity'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  '[[ "$toolchain" == "$(toolchain_identity)" ]]' \
+  'build-to-package toolchain continuity'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'public_acquisition="$(/usr/bin/mktemp -d \' \
+  'separate public-input acquisition staging'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  '  public_inputs_match_snapshot \' \
+  'repeated public-input snapshot validation'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/release-exclusive-rename.c" \
+  '(uintmax_t)source_status.st_ino != expected_source_inode' \
+  'exclusive-handoff source identity validation'
+assert_rejects_missing_release_contract \
+  "$fixture_root/scripts/no-fee-release-v1.sh" \
+  'https://api.github.com/repos/akiyama709/lectureboard-ai/releases/tags/v1.0.0' \
+  'the fixed unauthenticated public metadata endpoint'
+assert_rejects_missing_release_contract \
+  "$fixture_root/docs/no-fee-release-process.md" \
+  '- `LectureBoard-AI-v1.0.0-test-results.json`;' \
+  'the exact public test-evidence asset name'
+assert_rejects_missing_release_contract \
+  "$fixture_root/docs/no-fee-release-process.md" \
+  '`prepublication-gate.log` as private evidence; neither is a GitHub Release asset.' \
+  'the private evidence/public asset boundary'
+assert_rejects_missing_release_contract \
+  "$fixture_root/docs/no-fee-release-process.md" \
+  './scripts/no-fee-release-v1.sh verify-public \' \
+  'the authoritative unauthenticated public-verification command'
+assert_rejects_missing_release_contract \
+  "$fixture_root/docs/no-fee-release-process.md" \
+  'publish only those five attachments in an immutable,' \
+  'the immutable exact-five publication requirement'
+assert_rejects_missing_release_contract \
+  "$fixture_root/docs/adr/0013-no-fee-public-v1-distribution.md" \
+  'public, immutable, non-prerelease `v1.0.0` GitHub Release' \
+  'the ADR immutable final-release requirement'
+assert_rejects_missing_release_contract \
+  "$fixture_root/docs/adr/0013-no-fee-public-v1-distribution.md" \
+  '- `LectureBoard-AI-v1.0.0-arm64.zip`;' \
+  'the ADR exact application-archive filename'
+
 for required_release_tool in \
   release-artifact-tools.sh \
   release-make-gate.sh \
@@ -449,7 +548,7 @@ fi
 mv "$fixture_root/ROADMAP.backup" "$fixture_root/ROADMAP.md"
 
 cp "$fixture_root/README.md" "$fixture_root/README.backup"
-sed 's/Completion means publication of the public, non-prerelease `v1.0.0` GitHub Release/Completion definition removed/' \
+sed 's/Completion means publication of the public, immutable, non-prerelease `v1.0.0` GitHub Release/Completion definition removed/' \
   "$fixture_root/README.backup" >"$fixture_root/README.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted a missing README completion definition.\n' >&2
@@ -648,7 +747,7 @@ mv "$fixture_root/docs/v1-release-checklist.backup" \
 
 cp "$fixture_root/docs/v1-release-checklist.md" \
   "$fixture_root/docs/v1-release-checklist.backup"
-sed 's/The artifact is downloaded from the public GitHub Release into a clean verification environment/The public release page is inspected/' \
+sed 's/All five attached assets are downloaded from the public GitHub Release into a clean verification environment/Only the archive page is inspected/' \
   "$fixture_root/docs/v1-release-checklist.backup" \
   >"$fixture_root/docs/v1-release-checklist.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
@@ -665,6 +764,84 @@ sed 's/Bundle identity, ad hoc signature, hardened runtime, architecture, versio
   >"$fixture_root/docs/v1-release-checklist.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted missing downloaded-artifact security rechecks.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/v1-release-checklist.backup" \
+  "$fixture_root/docs/v1-release-checklist.md"
+
+for guide in docs/user-guide.md docs/user-guide-ja.md; do
+  cp "$fixture_root/$guide" "$fixture_root/$guide.backup"
+  sed 's/shasum -a 256 -c SHA256SUMS/shasum -a 256 "LectureBoard-AI-1.0.0-macos-arm64.zip"/' \
+    "$fixture_root/$guide.backup" >"$fixture_root/$guide"
+  if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+    printf 'The release-definition check accepted an obsolete archive verification command in %s.\n' \
+      "$guide" >&2
+    exit 1
+  fi
+  mv "$fixture_root/$guide.backup" "$fixture_root/$guide"
+done
+
+for guide in docs/user-guide.md docs/user-guide-ja.md; do
+  cp "$fixture_root/$guide" "$fixture_root/$guide.backup"
+  sed 's|cd -- "/absolute/path/to/downloaded-release-assets"|cd -- "/wrong/directory"|' \
+    "$fixture_root/$guide.backup" >"$fixture_root/$guide"
+  if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+    printf 'The release-definition check accepted checksum verification outside the downloaded-asset directory in %s.\n' \
+      "$guide" >&2
+    exit 1
+  fi
+  mv "$fixture_root/$guide.backup" "$fixture_root/$guide"
+done
+
+cp "$fixture_root/docs/no-fee-release-process.md" \
+  "$fixture_root/docs/no-fee-release-process.backup"
+sed 's/after both macOS `ditto` and `\/usr\/bin\/unzip` extraction\./after one extraction method./' \
+  "$fixture_root/docs/no-fee-release-process.backup" \
+  >"$fixture_root/docs/no-fee-release-process.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted removal of the dual-extractor signature gate.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/no-fee-release-process.backup" \
+  "$fixture_root/docs/no-fee-release-process.md"
+
+cp "$fixture_root/docs/no-fee-release-process.md" \
+  "$fixture_root/docs/no-fee-release-process.backup"
+sed 's/`compare-public` command is available only when the five public assets and both public metadata/Only one downloaded ZIP is compared/' \
+  "$fixture_root/docs/no-fee-release-process.backup" \
+  >"$fixture_root/docs/no-fee-release-process.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted removal of the five-asset public comparison.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/no-fee-release-process.backup" \
+  "$fixture_root/docs/no-fee-release-process.md"
+
+cp "$fixture_root/README.md" "$fixture_root/README.backup"
+sed 's/正確な5件だけを添付した/個数不明のassetを添付した/' \
+  "$fixture_root/README.backup" >"$fixture_root/README.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted missing Japanese test-evidence disclosure.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/README.backup" "$fixture_root/README.md"
+
+cp "$fixture_root/ROADMAP.md" "$fixture_root/ROADMAP.backup"
+sed 's/Run the unauthenticated `verify-public` transaction to retain public REST metadata and annotated-tag refs/Download only the public ZIP/' \
+  "$fixture_root/ROADMAP.backup" >"$fixture_root/ROADMAP.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted a ZIP-only public re-download roadmap.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/ROADMAP.backup" "$fixture_root/ROADMAP.md"
+
+cp "$fixture_root/docs/v1-release-checklist.md" \
+  "$fixture_root/docs/v1-release-checklist.backup"
+sed 's/omits unneeded AppleDouble\/resource-fork\/extended-attribute entries/preserves archive metadata/' \
+  "$fixture_root/docs/v1-release-checklist.backup" \
+  >"$fixture_root/docs/v1-release-checklist.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted removal of the AppleDouble exclusion gate.\n' >&2
   exit 1
 fi
 mv "$fixture_root/docs/v1-release-checklist.backup" \
@@ -707,7 +884,7 @@ fi
 mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
 
 cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
-sed 's/A byte-identical current runtime preserved as `LectureBoard AI Schema 11 Decoder Hardened Verification.app`/Current live runtime evidence removed/' \
+sed 's/The byte-identical 2026-09-01 checkpoint runtime preserved as `LectureBoard AI Schema 11 Decoder Hardened Verification.app`/Historical runtime evidence removed/' \
   "$fixture_root/CHANGELOG.backup" >"$fixture_root/CHANGELOG.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted removal of the current live changelog sentinel.\n' >&2

@@ -6,17 +6,18 @@
 
 　[`supported-environment.md`](supported-environment.md)に定めた狭い構成だけを使用する．Apple silicon Mac，local display 1台，PowerPoint資料1件，既存slide showなし，PowerPointのwindow表示slide show及びsessionごとに日本語又は英語1言語である．
 
-　無償配布AppはHardened Runtimeを有効にしてad hoc署名するが，Developer ID署名又はApple notarizationは行わない．そのため，Appleは公開者の識別又はnotarizationによる安全確認を行えない．ZIPとchecksumは本projectのpublic GitHub Releaseだけから取得し，開く前に次を実行する．
+　無償配布AppはHardened Runtimeを有効にしてad hoc署名するが，Developer ID署名又はApple notarizationは行わない．そのため，Appleは公開者の識別又はnotarizationによる安全確認を行えない．`LectureBoard-AI-v1.0.0-arm64.zip`，`LectureBoard-AI-v1.0.0-test-results.json`，`SBOM.spdx.json`，`SHA256SUMS`及び`provenance.json`の正確な5件だけを，本projectのpublic・immutable・non-prereleaseな`v1.0.0` GitHub Releaseから取得する．5件を同じdirectoryへ置き，そのdirectoryへ移動してから，ZIPを開く前に次を実行する．
 
 ```bash
-shasum -a 256 "LectureBoard-AI-1.0.0-macos-arm64.zip"
+cd -- "/absolute/path/to/downloaded-release-assets"
+/usr/bin/shasum -a 256 -c SHA256SUMS
 ```
 
-　表示値がRelease記載値と完全一致しなければ，Appを開かず停止する．
+　ZIP，test evidence，SBOM及びprovenanceの4件すべてに`OK`と表示されなければ，Appを開かず停止する．
 
 ## Installと初回起動
 
-1. 検証済みZIPを展開し，`LectureBoard AI.app`を改名せず`/Applications`へ移す．
+1. 検証済みZIPをFinderでダブルクリックし，download quarantineを保持したまま展開する．`LectureBoard AI.app`を改名せず`/Applications`へ移す．release verifierは汎用`unzip`との互換性も確認するが，Gatekeeper受入ではFinderを用いる．
 2. FinderからAppを1回開く．Appleへ登録・notarizeされていないため，macOSが初回起動を止めることを想定する．
 3. Apple公式の[開発元が不明なMacアプリを開く](https://support.apple.com/ja-jp/guide/mac-help/mh40616/mac)に従い，「システム設定」→「プライバシーとセキュリティ」で当該Appだけの「このまま開く」を選び，認証して開く．
 4. Gatekeeper全体を無効化せず，Terminalでquarantine metadataを除去しない．

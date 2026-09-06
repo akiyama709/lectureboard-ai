@@ -904,6 +904,13 @@ case "$output_stage" in
   "$canonical_output_parent"/.lectureboard-release-package-output.*) ;;
   *) fail 'the release-package output stage is unsafe' ;;
 esac
+output_parent_identity="$(run_clean /usr/bin/stat -f '%d %i' "$canonical_output_parent")" \
+  || fail 'the release-package output-parent identity could not be captured'
+output_stage_identity="$(run_clean /usr/bin/stat -f '%d %i' "$output_stage")" \
+  || fail 'the release-package output-stage identity could not be captured'
+[[ "$output_parent_identity" =~ ^[0-9]+\ [0-9]+$ \
+  && "$output_stage_identity" =~ ^[0-9]+\ [0-9]+$ ]] \
+  || fail 'a release-package handoff identity is malformed'
 evidence_directory="$output_stage/notarization-evidence"
 run_clean /bin/mkdir "$evidence_directory"
 run_clean /bin/cp "$final_dmg" "$output_stage/$dmg_name" \
@@ -1020,6 +1027,8 @@ assert_approved_source_state \
 [[ ! -e "$output_directory" && ! -L "$output_directory" ]] \
   || fail 'the output directory appeared before exclusive handoff'
 "$rename_helper" "$output_stage" "$output_directory" \
+  "${output_parent_identity% *}" "${output_parent_identity#* }" \
+  "${output_stage_identity% *}" "${output_stage_identity#* }" \
   || fail 'the verified release-package output could not be handed off exclusively'
 output_stage=''
 [[ -d "$output_directory" && ! -L "$output_directory" \

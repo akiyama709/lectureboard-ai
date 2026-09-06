@@ -207,7 +207,7 @@ verify_reviewed_xcode_source() {
   local source_root="$1"
   local project_spec project_file project_spec_digest project_file_digest
   local expected_project_spec_digest='00764473ec28961c2c687a1afdd670c47a665b97e9c6062bd02bc0dfbe3c15fa'
-  local expected_project_file_digest='3539386b339698d7ff308e32b7ee6d2033b09de0f442139d3138b0287c03da5d'
+  local expected_project_file_digest='65f3984165596fb6e160c0551d4adfd27bcecccf1d5ef8898867368d671ad9ca'
 
   [[ -d "$source_root" && ! -L "$source_root" ]] \
     || fail 'the reviewed Xcode source root must be a non-symbolic-link directory'

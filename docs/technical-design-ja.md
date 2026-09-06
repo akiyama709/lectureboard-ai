@@ -192,4 +192,4 @@ LectureBoard AI
 5. `.pptx`本文・図形・発表者ノートと実講義文字起こしを，根拠付き`BoardIntent`へ接続する
 6. ローカル／クラウドの交換可能な本番モデルproviderと，厳格な出力検証を実装する
 7. 文字，囲み，矢印，因果図の本番描画と，JSON，SVG，PDF，Markdownによるsession書出しを実装する
-8. 制御された日英講義，長時間・回復試験，Hardened Runtime，ad hoc署名，checksum，SBOM，provenance及び配布検証を順に完了する
+8. 制御された日英講義，長時間・回復試験，Hardened Runtime，ad hoc署名，checksum manifest，内容を含まないtest evidence，SBOM，provenance及び全5添付assetの配布検証を順に完了する

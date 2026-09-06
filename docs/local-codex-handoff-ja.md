@@ -25,7 +25,7 @@
 - 日本語，英語，および日英混在講義へ段階的に対応する．
 - 当面はmacOS版の完成度を優先し，Windows・Linux版は実装しない．
 - 公開GitHubリポジトリは`akiyama709/lectureboard-ai`である．
-- 本プロジェクトの「完成」は，検証済みarm64 App archive，正確なsource commit，checksum，SBOM，provenance及び公開後の再取得検証を伴う，正式な公開`v1.0.0` GitHub Releaseの成立を指す．有料又は教育機関名義のApple Developer membershipは使用しないため，archiveはad hoc署名とし，Developer ID署名又はApple notarization済みとは表示しない．α版，β版又はRelease Candidateのapplication Releaseは公開しない．
+- 本プロジェクトの「完成」は，検証済みarm64 App archive，正確なsource commit，checksum manifest，内容を含まないtest evidence，SBOM，provenance及び公開後の全5添付asset再取得検証を伴う，正式な公開`v1.0.0` GitHub Releaseの成立を指す．有料又は教育機関名義のApple Developer membershipは使用しないため，archiveはad hoc署名とし，Developer ID署名又はApple notarization済みとは表示しない．α版，β版又はRelease Candidateのapplication Releaseは公開しない．
 
 ## 3．現時点の成果物
 
@@ -139,7 +139,7 @@ make test-runtime-launch-smoke
 4. 公開board sceneだけを含むsession JSON／SVG exportをlive検証し，元`.pptx`が不変であることをhash及びZIP整合性で確認する．
 5. 正常停止，取消し，許可拒否，window終了及びcapture中断のcleanup／recoveryを同じ対応範囲で反復確認する．
 6. 代表的な日本語・英語資料，privacy，accessibility，license，既知の制限，導入，初回講義及びtroubleshooting文書を完成させる．full-screen，Presenter View，複数display，日英code switching，physical pen tablet，speaker notes import及びcloud adapterはpost-v1範囲とし，成功を推定しない．
-7. current treeで最終`make verify`を一度だけ実行し，Hardened Runtime，ad hoc署名，checksum，SBOM及びcommit-bound provenanceを備える正確な`v1.0.0` archiveを生成して，App単位の「このまま開く」を検証する．
+7. current treeで最終`make verify`を一度だけ実行し，Hardened Runtime，ad hoc署名，checksum manifest，内容を含まないtest evidence，SBOM及びcommit-bound provenanceを備える正確な`v1.0.0` archiveを生成して，App単位の「このまま開く」を検証する．
 8. 正確なcommitとarchive SHA-256を示してユーザーの明示確認を得た場合だけpublic `v1.0.0` GitHub Releaseを作成し，再downloadしたartifactのbyte同一性，SHA-256，ad hoc署名，Hardened Runtime，metadata，導入及び起動を再確認する．
 
 　確認結果は，成功・失敗を問わず`docs/build-verification.md`へ記録する．
@@ -172,4 +172,4 @@ AGENTS.md，docs/local-codex-handoff-ja.md，ROADMAP.md，docs/build-verificatio
 make verify
 ```
 
-　`scripts/publish-to-github.sh`は初回リポジトリ公開専用であり，再実行しない．今後は作業ブランチをpushし，プルリクエストの必須CI成功後に`main`へ統合する．正式版は，最終candidateの受入検証後，バージョン整合性を確認し，`v1.0.0`タグ，リリースノート，ad hoc署名済みApp archive，SHA-256，SBOM及びprovenanceを備えたGitHub Releaseとして公開する．Developer ID署名又はApple notarization済みとは表示しない．外部公開に当たるpush，PR，タグ及びReleaseの実行は，それぞれ必要な確認を得て行う．
+　`scripts/publish-to-github.sh`は初回リポジトリ公開専用であり，再実行しない．今後は作業ブランチをpushし，プルリクエストの必須CI成功後に`main`へ統合する．正式版は，最終candidateの受入検証後，バージョン整合性を確認し，`v1.0.0`タグ，リリースノート本文，ad hoc署名済みApp archive，SHA-256 checksum manifest，内容を含まないtest evidence，SBOM及びprovenanceの正確な5添付assetを備えたGitHub Releaseとして公開する．Developer ID署名又はApple notarization済みとは表示しない．外部公開に当たるpush，PR，タグ及びReleaseの実行は，それぞれ必要な確認を得て行う．

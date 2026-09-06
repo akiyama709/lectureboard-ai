@@ -93,4 +93,4 @@ git remote add origin https://github.com/akiyama709/lectureboard-ai.git
 
 ## 8．完成版公開への移行
 
-　`v1.0.0`では，公開予定コミットからHardened Runtimeを有効にしたarm64 Appを構築し，ad hoc署名，SHA-256，SPDX SBOM及びcommit-bound provenanceを検証する．有料又は教育機関名義のApple Developer membershipは使用せず，Developer ID署名又はApple notarization済みとは表示しない．AppleのApp単位の「このまま開く」を用いる導入，初回起動及び対応機能を検証した後，正確なcommitとarchive SHA-256を示して明示的な最終確認を得る．公開`v1.0.0`を再取得し，同一byte，署名，metadata，導入及び起動を再検証して証拠を記録した時点を完成とする．
+　`v1.0.0`では，公開予定コミットからHardened Runtimeを有効にしたarm64 Appを構築し，ad hoc署名，SHA-256 checksum manifest，内容を含まないtest evidence，SPDX SBOM及びcommit-bound provenanceを検証する．有料又は教育機関名義のApple Developer membershipは使用せず，Developer ID署名又はApple notarization済みとは表示しない．AppleのApp単位の「このまま開く」を用いる導入，初回起動及び対応機能を検証した後，正確なcommitとarchive SHA-256を示して明示的な最終確認を得る．公開`v1.0.0`の全5添付assetを再取得し，同一byte，署名，metadata，導入及び起動を再検証して証拠を記録した時点を完成とする．

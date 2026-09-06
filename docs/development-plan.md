@@ -2,19 +2,19 @@
 
 ## Completion and release status
 
-Project completion is the public, non-prerelease `v1.0.0` GitHub Release, containing a verified arm64 macOS application archive, its exact source commit, checksums, SBOM, provenance, and successful public-download verification. The project uses neither a paid nor an institutional Apple Developer Program membership, so the archive is hardened-runtime and ad hoc signed, and is explicitly not Developer ID signed or Apple notarized. The existing public source repository is the development venue, not the completed product.
+Project completion is the public, immutable, non-prerelease `v1.0.0` GitHub Release with exactly five attached assets: `LectureBoard-AI-v1.0.0-arm64.zip`, `LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json`. They must bind the verified arm64 application archive to its exact source commit and pass unauthenticated public re-download verification. Release notes remain in the Release body. The project uses neither a paid nor an institutional Apple Developer Program membership, so the archive is hardened-runtime and ad hoc signed, and is explicitly not Developer ID signed or Apple notarized. The existing public source repository is the development venue, not the completed product.
 
 Current status: this repository is a pre-release development scaffold. No application GitHub Release has been published, and no alpha, beta, or release-candidate Release will be published.
 
 ## Phase A — repository and deterministic baseline
 
-The current schema-11 decoder-hardened scaffold establishes a testable core, native application shell, permissions, exact PowerPoint-window discovery and capture boundaries, speech-permission and provider scaffolding, and a transparent-overlay prototype. The current automated gate has passed 153 Core tests, 259 native app tests, and all 14 `make verify` stages on the development Mac. This does not by itself establish a lecture-ready end-to-end path.
+The 2026-09-01 schema-11 decoder-hardened checkpoint established a testable core, native application shell, permissions, exact PowerPoint-window discovery and capture boundaries, speech-permission and provider scaffolding, and a transparent-overlay prototype. That checkpoint passed 153 Core tests, 259 native app tests, and all 14 then-current `make verify` stages on the development Mac. This is historical checkpoint evidence and does not verify the later release tree or establish a lecture-ready end-to-end path.
 
 ## Phase B — live observation
 
 - Continuous ScreenCaptureKit capture of the selected exact PowerPoint window is implemented; broader presentation-mode and long-duration validation remains open
 - Stable visual-frame detection and persistent visual-content-update detection are implemented and have deterministic tests plus narrow decoder-hardened fixed-build evidence; image differences and content revisions are not semantic slide identity
-- An exact-window-bound provider for semantic PowerPoint slide identity remains unimplemented; the safe default provider reports identity as unavailable, so current live reports with zero slide changes are not slide-transition evidence
+- An exact-window-bound managed provider for semantic PowerPoint slide identity is implemented and deterministically tested, but live managed Apple Event execution remains unverified; the safe passive default reports identity as unavailable, so historical live reports with zero slide changes are not slide-transition evidence
 - The bounded one-shot fresh-sample path for coarse and dense candidates is implemented and deterministically tested, but a live current-build event sourced from `boundedFreshSample` has not yet been observed
 - Deterministic fail-closed mapping from a user-confirmed captured canvas to one exact AppKit overlay rectangle is implemented; live PowerPoint alignment, window movement and resizing, multi-display conversion, z-order, and click-through behavior remain unverified
 - Production-overlay eligibility is fail-closed across exact PowerPoint identity, foreground ownership, Core Graphics window bounds and occlusion, manual suppression, visual-content availability, and an independently expiring lease; the full-display panel is demo-only and is not a production fallback
@@ -65,9 +65,10 @@ The current schema-11 decoder-hardened scaffold establishes a testable core, nat
 
 - Freeze the `v1.0.0` scope and supported environment
 - Resolve release-blocking defects
+- Run the complete `evidence` transaction against one clean exact commit; retain its private gate log and frozen authoritative `.xcresult`, and expose only its content-free JSON as a public asset
 - Produce the reproducible distribution artifact
 - Apply hardened runtime and ad hoc signing without an Apple team, Developer ID identity, or secure timestamp
-- Produce the ZIP, SHA-256 checksum, SPDX SBOM, and commit-bound provenance
+- Produce the ZIP, SHA-256 checksum manifest, content-free test evidence, SPDX SBOM, and commit-bound provenance
 - Verify installation through Apple's per-application Open Anyway flow, first launch, permissions, and the core lecture path on a clean supported Mac
 - Finalize installation, privacy, security, troubleshooting, and release documentation
 
@@ -78,8 +79,10 @@ The current schema-11 decoder-hardened scaffold establishes a testable core, nat
 - Verify the exact release commit and artifact
 - Obtain explicit approval immediately before external publication
 - Publish the `v1.0.0` tag and public GitHub Release
-- Attach the hardened-runtime, ad hoc-signed arm64 application archive, release notes, checksum, SBOM, and provenance without a Developer ID or notarization claim
-- Re-download the public artifact and verify its bytes, checksum, ad hoc signature, hardened-runtime state, metadata, installation, and launch
-- Record the release URL and final evidence
+- Attach the exact five-asset set—the hardened-runtime, ad hoc-signed arm64 application archive, checksum manifest, content-free test evidence, SBOM, and provenance—without a Developer ID or notarization claim; keep release notes in the GitHub Release body
+- Require an immutable, non-draft, non-prerelease Release containing exactly the approved five assets, with no private gate log or `.xcresult` attached
+- Run unauthenticated `verify-public` to retain the public REST metadata, annotated-tag refs, downloaded assets, and receipt; require exact byte equality and independently verify the archive
+- Verify installation, permissions, launch, and the supported workflow from the downloaded public archive
+- Record the release URL, metadata and tag-ref evidence, and final results
 
-**Completion gate:** the public `v1.0.0` GitHub Release and its re-downloaded artifact pass the complete release checklist.
+**Completion gate:** the public immutable `v1.0.0` GitHub Release and all five re-downloaded assets pass the complete release checklist.

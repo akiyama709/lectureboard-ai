@@ -112,7 +112,7 @@ PowerPointを遠隔操作しないMVPでは原則不要とする．将来必要�
 
 ## 10．配布
 
-　`v1.0.0`の無償配布では，Hardened Runtimeを有効にしたarm64 Appをad hoc署名し，checksum，SBOM及びcommit-bound provenanceを添付する．Developer ID署名又はApple notarization済みとは表示せず，導入案内はAppleのApp単位の「このまま開く」だけを用いる．Gatekeeper全体の無効化又はquarantine metadataの除去は案内しない．更新機能を将来追加する場合は，別途，改ざん耐性のある更新署名とkey管理を設計する．
+　`v1.0.0`の無償配布では，Hardened Runtimeを有効にしたarm64 Appをad hoc署名し，checksum manifest，内容を含まないtest evidence，SBOM及びcommit-bound provenanceを添付する．Developer ID署名又はApple notarization済みとは表示せず，導入案内はAppleのApp単位の「このまま開く」だけを用いる．Gatekeeper全体の無効化又はquarantine metadataの除去は案内しない．更新機能を将来追加する場合は，別途，改ざん耐性のある更新署名とkey管理を設計する．
 
 ## 11．脅威例
 

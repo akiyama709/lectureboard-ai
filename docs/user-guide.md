@@ -13,18 +13,24 @@ one lecture language per session.
 
 The no-fee release is hardened and ad hoc signed, but it is not Developer ID signed or Apple
 notarized. Apple therefore cannot identify its publisher or perform the notarization trust check.
-Download the ZIP and checksum only from the project's public GitHub Release and verify the ZIP
-before opening it:
+Download exactly `LectureBoard-AI-v1.0.0-arm64.zip`,
+`LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json`
+from the project's public, immutable, non-prerelease `v1.0.0` GitHub Release. Put the five files in
+one directory, change to that directory, and verify every payload before opening the ZIP:
 
 ```bash
-shasum -a 256 "LectureBoard-AI-1.0.0-macos-arm64.zip"
+cd -- "/absolute/path/to/downloaded-release-assets"
+/usr/bin/shasum -a 256 -c SHA256SUMS
 ```
 
-The value must exactly match the release checksum. A mismatch means stop; do not open the App.
+The command must report `OK` for the ZIP, test evidence, SBOM, and provenance. A missing file or
+mismatch means stop; do not open the App.
 
 ## Install and first open
 
-1. Expand the verified ZIP and move `LectureBoard AI.app` to `/Applications` without renaming it.
+1. Double-click the verified ZIP in Finder so that macOS preserves the download quarantine, then
+   move `LectureBoard AI.app` to `/Applications` without renaming it. The release verifier also
+   checks generic `unzip` compatibility, but the Gatekeeper acceptance test uses Finder.
 2. Open the App once from Finder. macOS is expected to block the first launch because the App is
    not registered or notarized by Apple.
 3. Follow Apple's per-application procedure in [Open a Mac app from an unknown

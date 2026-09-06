@@ -28,6 +28,19 @@ require_text() {
   fi
 }
 
+require_text_count() {
+  local path="$1"
+  local expected="$2"
+  local required_count="$3"
+  local observed_count
+  observed_count="$(/usr/bin/grep -Fc -- "$expected" "$path")" || true
+  if [[ "$observed_count" != "$required_count" ]]; then
+    printf 'Required release definition count is wrong in %s: %s (expected %s, found %s)\n' \
+      "$path" "$expected" "$required_count" "$observed_count" >&2
+    exit 1
+  fi
+}
+
 reject_text() {
   local path="$1"
   local forbidden="$2"
@@ -324,13 +337,82 @@ done
 require_text scripts/package-release-dmg.sh \
   'committed_evidence_tools="$approved_source_root/scripts/release-package-evidence-tools.sh"'
 require_text scripts/no-fee-release-v1.sh \
-  'prepare --source-dir DIR --tag v1.0.0 --commit OID --test-result FILE --output-dir DIR'
+  'evidence --source-dir DIR --commit OID --output-dir DIR'
+require_text scripts/no-fee-release-v1.sh \
+  'prepare --source-dir DIR --tag v1.0.0 --commit OID --test-result FILE --test-result-bundle DIR --gate-log FILE --output-dir DIR'
+require_text scripts/no-fee-release-v1.sh \
+  'compare-public --approved-dir DIR --downloaded-dir DIR --release-metadata FILE --tag-refs FILE --commit OID'
+require_text scripts/no-fee-release-v1.sh \
+  'verify-public --source-dir DIR --approved-dir DIR --commit OID --output-dir DIR'
 require_text scripts/no-fee-release-v1.sh \
   'buildIsolation":"git-archive-approved-commit"'
 require_text scripts/no-fee-release-v1.sh \
-  'public redownload bytes exactly match approved local archive'
+  'provided release asset set exactly matches approved local bytes'
 require_text scripts/no-fee-release-v1.sh \
   "Signature=adhoc"
+require_text scripts/no-fee-release-v1.sh \
+  'create_isolated_commit_source "$source_dir" "$commit" "$isolated_source"'
+require_text scripts/no-fee-release-v1.sh \
+  '"$source_dir" "$commit" "$isolated_repository"'
+require_text scripts/no-fee-release-v1.sh \
+  '/usr/bin/xcrun xcresulttool get log --type action'
+require_text scripts/no-fee-release-v1.sh \
+  'LectureBoard native-test embedded source commit:'
+require_text scripts/no-fee-release-v1.sh \
+  '-c core.fsmonitor=false -c core.untrackedCache=false'
+require_text scripts/no-fee-release-v1.sh \
+  'blob in {"0"*40,"0"*64} or len(blob)!=len(c)'
+require_text scripts/no-fee-release-v1.sh \
+  '[[ -z "$(/usr/bin/find "$result_bundle" -type l -print -quit)" ]] || return 1'
+require_text scripts/no-fee-release-v1.sh \
+  '/usr/bin/find "$app/Contents/MacOS"'
+require_text scripts/no-fee-release-v1.sh \
+  '| /usr/bin/tr -d'
+require_text scripts/no-fee-release-v1.sh \
+  'for offset in (0,1):'
+require_text scripts/no-fee-release-v1.sh \
+  'toolchain_value_is_valid "$build_toolchain_before"'
+require_text scripts/no-fee-release-v1.sh \
+  '[[ "$build_toolchain_after" == "$build_toolchain_before" ]]'
+require_text scripts/no-fee-release-v1.sh \
+  '[[ "$toolchain" == "$(toolchain_identity)" ]]'
+require_text scripts/no-fee-release-v1.sh \
+  "ZipFile(out,'x',compression=zipfile.ZIP_DEFLATED"
+require_text scripts/no-fee-release-v1.sh \
+  'not decompressor.eof or decompressor.unused_data or decompressor.unconsumed_tail'
+require_text scripts/no-fee-release-v1.sh \
+  'approved_snapshot="$public_stage/approved"'
+require_text scripts/no-fee-release-v1.sh \
+  'public_acquisition="$(/usr/bin/mktemp -d \'
+require_text_count scripts/no-fee-release-v1.sh \
+  '  public_inputs_match_snapshot \' 3
+require_text_count scripts/no-fee-release-v1.sh \
+  '  compare_public_release "$approved_snapshot" "$downloaded" "$metadata" "$refs" "$commit"' 3
+require_text_count scripts/no-fee-release-v1.sh \
+  '    "$parent_device" "$parent_inode" "$stage_device" "$stage_inode" \' 3
+require_text scripts/no-fee-release-v1.sh \
+  '"$commit:scripts/release-exclusive-rename.c" >"$helper_source"'
+require_text scripts/no-fee-release-v1.sh \
+  'https://api.github.com/repos/akiyama709/lectureboard-ai/releases/tags/v1.0.0'
+require_text scripts/no-fee-release-v1.sh \
+  'https://github.com/akiyama709/lectureboard-ai/releases/download/v1.0.0/$name'
+require_text scripts/no-fee-release-v1.sh \
+  'release.get("name")!="LectureBoard AI v1.0.0"'
+require_text scripts/no-fee-release-v1.sh \
+  'release.get("prerelease") is not False or release.get("immutable") is not True'
+require_text scripts/release-exclusive-rename.c 'if (argc != 7'
+require_text scripts/release-exclusive-rename.c \
+  '(uintmax_t)parent_status.st_ino != expected_parent_inode'
+require_text scripts/release-exclusive-rename.c \
+  '(uintmax_t)source_status.st_ino != expected_source_inode'
+require_text scripts/build-release-app.sh \
+  '"${output_parent_identity% *}" "${output_parent_identity#* }" \'
+require_text scripts/build-release-app.sh \
+  '"${output_stage_identity% *}" "${output_stage_identity#* }"'
+require_text scripts/package-release-dmg.sh \
+  '"${output_parent_identity% *}" "${output_parent_identity#* }" \'
+require_text scripts/package-release-dmg.sh \
+  '"${output_stage_identity% *}" "${output_stage_identity#* }" \'
 
 require_text .github/workflows/ci.yml 'runs-on: macos-26'
 require_text .github/workflows/ci.yml 'sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer'
@@ -356,15 +438,18 @@ require_text scripts/verify-release-code.sh 'ad hoc signatures are not release s
 require_text scripts/verify-release-code.sh 'the hardened-runtime code-directory flag is required'
 require_text scripts/verify-release-code.sh 'the embedded entitlements differ from the exact two-key allowlist'
 
-require_text ROADMAP.md 'Project completion means publishing a public, non-prerelease `v1.0.0` GitHub Release'
+require_text ROADMAP.md 'Project completion means publishing a public, immutable, non-prerelease `v1.0.0` GitHub Release'
 require_text ROADMAP.md 'No alpha, beta, or release-candidate GitHub Release will be published'
 require_text ROADMAP.md '## Milestone 4 — Supported-workflow acceptance'
 require_text ROADMAP.md '## Milestone 5 — Representative-use validation'
 require_text ROADMAP.md '## Milestone 6 — Exact v1.0.0 publication candidate'
 require_text ROADMAP.md 'Apply the hardened runtime and an ad hoc signature without expanding the entitlement allowlist'
 require_text ROADMAP.md '## Milestone 7 — Public v1.0.0 GitHub Release'
-require_text ROADMAP.md 'Re-download the public artifact and independently verify its checksum, bundle identity, ad hoc signature, architecture, version, installation, and launch'
-require_text README.md 'Completion means publication of the public, non-prerelease `v1.0.0` GitHub Release'
+require_text ROADMAP.md 'checksum manifest, content-free test evidence, SBOM, and provenance'
+require_text ROADMAP.md 'Run the unauthenticated `verify-public` transaction to retain public REST metadata and annotated-tag refs'
+require_text README.md 'Completion means publication of the public, immutable, non-prerelease `v1.0.0` GitHub Release'
+require_text README.md 'checksums, content-free test evidence, SBOM, provenance'
+require_text README.md '正確な5件だけを添付した'
 require_text README.md 'No alpha, beta, or release-candidate application Release will be published'
 require_text README.md '[English user guide](docs/user-guide.md)'
 require_text README.md '[公開前ユーザー受入](docs/user-acceptance-ja.md)'
@@ -416,12 +501,12 @@ require_text CHANGELOG.md 'Deterministic stable-frame and significant visual/con
 require_text CHANGELOG.md 'Build-specific historical synthetic PowerPoint evidence for static frame delivery, Vision execution, and pre-semantic dynamic calibration; not evidence for the current semantic build'
 require_text CHANGELOG.md 'Live validation of the implemented exact-window-bound managed PowerPoint slide-identity provider before actual slide transitions are claimed'
 require_text CHANGELOG.md 'A privacy-bounded JSON and SVG session exporter containing only confirmed or pinned public board scenes'
-require_text CHANGELOG.md 'An authoritative no-fee `v1.0.0` build and packaging path'
+require_text CHANGELOG.md 'An authoritative no-fee `v1.0.0` evidence, build, packaging, and public-verification path'
 require_text CHANGELOG.md 'Metadata-only schema-11 latest-content-revision evidence with exact ordinal'
 require_text CHANGELOG.md 'fail-closed decoding for negative counts'
 require_text CHANGELOG.md 'A shared bounded one-shot fresh-sample path for either an exact post-baseline coarse candidate or a pending dense candidate'
-require_text CHANGELOG.md 'Current decoder-hardened automated verification on the development Mac: 153 Core tests in 15 suites, 259 native app tests in 30 suites'
-require_text CHANGELOG.md 'A byte-identical current runtime preserved as `LectureBoard AI Schema 11 Decoder Hardened Verification.app`'
+require_text CHANGELOG.md 'The 2026-09-01 decoder-hardened checkpoint on the development Mac: 153 Core tests in 15 suites, 259 native app tests in 30 suites'
+require_text CHANGELOG.md 'The byte-identical 2026-09-01 checkpoint runtime preserved as `LectureBoard AI Schema 11 Decoder Hardened Verification.app`'
 require_text CHANGELOG.md 'c7a73f7cb1bdcaa46ec216218883872d480630f7cf4ff177170f8d1906c14a3c'
 require_text CHANGELOG.md '70e5772d5d4e8ab8947c725b854749fe2743b38f9189434530de2f0ad9aa63a1'
 require_text CHANGELOG.md 'that schema-8 attempt did not verify dynamic slides or mouse ink'
@@ -438,11 +523,13 @@ require_text docs/v1-release-checklist.md '## Definition of completion'
 require_text docs/v1-release-checklist.md 'No alpha, beta, or release-candidate GitHub Release will be published'
 require_text docs/v1-release-checklist.md 'The application uses the hardened runtime and an ad hoc signature with no team identity or secure timestamp'
 require_text docs/v1-release-checklist.md '## 5. Post-publication verification — completion gate'
-require_text docs/v1-release-checklist.md 'The artifact is downloaded from the public GitHub Release into a clean verification environment'
+require_text docs/v1-release-checklist.md 'All five attached assets are downloaded from the public GitHub Release into a clean verification environment'
 require_text docs/v1-release-checklist.md 'Bundle identity, ad hoc signature, hardened runtime, architecture, version, entitlement allowlist, SBOM, and provenance are independently rechecked'
 require_text docs/v1-release-checklist.md "Apple's per-application Open Anyway exception"
 require_text docs/v1-release-checklist.md 'identifies the exact release commit and final application-archive SHA-256'
 require_text docs/v1-release-checklist.md 'the project owner personally completes `user-acceptance-ja.md` against this exact candidate'
+require_text docs/v1-release-checklist.md 'omits unneeded AppleDouble/resource-fork/extended-attribute entries'
+require_text docs/v1-release-checklist.md 'the content-free test-evidence JSON'
 require_text docs/v1-release-checklist.md '## 6. Withdrawal and rollback triggers'
 require_text docs/v1-release-checklist.md 'Do not rerun the initial publication script'
 require_text docs/adr/0006-mit-license.md 'Accepted for the initial public source repository; review remains required for materially changed v1.0.0 scope'
@@ -457,8 +544,29 @@ require_text docs/adr/0012-causal-managed-slideshow-binding.md 'test verifies li
 require_text docs/adr/0012-causal-managed-slideshow-binding.md 'cannot detect a same-ID, same-PID, same-bundle lifecycle replacement'
 require_text docs/adr/0013-no-fee-public-v1-distribution.md 'Publish the final v1 release without paid Apple distribution services'
 require_text docs/adr/0013-no-fee-public-v1-distribution.md 'ad hoc code signature'
+require_text docs/adr/0013-no-fee-public-v1-distribution.md 'public, immutable, non-prerelease `v1.0.0` GitHub Release'
+require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `LectureBoard-AI-v1.0.0-arm64.zip`;'
+require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `LectureBoard-AI-v1.0.0-test-results.json`;'
+require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `SBOM.spdx.json`;'
+require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `SHA256SUMS`; and'
+require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `provenance.json`.'
+require_text AGENTS.md 'Project completion means a public, immutable, non-prerelease `v1.0.0` GitHub Release with exactly five attached assets'
 require_text docs/no-fee-release-process.md 'This is the authoritative distribution path for the public `v1.0.0` release'
 require_text docs/no-fee-release-process.md 'Never disable Gatekeeper globally or remove quarantine'
+require_text docs/no-fee-release-process.md 'after both macOS `ditto` and `/usr/bin/unzip` extraction.'
+require_text docs/no-fee-release-process.md 'The attached asset set contains exactly five regular files'
+require_text docs/no-fee-release-process.md '- `LectureBoard-AI-v1.0.0-arm64.zip`;'
+require_text docs/no-fee-release-process.md '- `LectureBoard-AI-v1.0.0-test-results.json`;'
+require_text docs/no-fee-release-process.md '- `SBOM.spdx.json`;'
+require_text docs/no-fee-release-process.md '- `SHA256SUMS`; and'
+require_text docs/no-fee-release-process.md '- `provenance.json`.'
+require_text docs/no-fee-release-process.md 'Retain the frozen `.xcresult` and'
+require_text docs/no-fee-release-process.md '`prepublication-gate.log` as private evidence; neither is a GitHub Release asset.'
+require_text docs/no-fee-release-process.md './scripts/no-fee-release-v1.sh evidence \'
+require_text docs/no-fee-release-process.md './scripts/no-fee-release-v1.sh prepare \'
+require_text docs/no-fee-release-process.md './scripts/no-fee-release-v1.sh verify-public \'
+require_text docs/no-fee-release-process.md 'publish only those five attachments in an immutable,'
+require_text docs/no-fee-release-process.md '`compare-public` command is available only when the five public assets and both public metadata'
 require_text docs/user-acceptance-ja.md '現在の状態は**未実施**である'
 require_text docs/user-acceptance-ja.md '元のPPTXを上書きしない'
 require_text docs/user-acceptance-ja.md '画面収録が許可済みなら，「画面収録を許可」を再度押さない'
@@ -468,10 +576,14 @@ require_text docs/user-guide.md 'Status: procedural draft'
 require_text docs/user-guide.md 'Never disable Gatekeeper globally and never remove quarantine metadata'
 require_text docs/user-guide.md 'fails closed instead of using a network fallback'
 require_text docs/user-guide.md 'Accessibility** and **Full Disk Access:** not required'
+require_text docs/user-guide.md 'shasum -a 256 -c SHA256SUMS'
+require_text docs/user-guide.md 'cd -- "/absolute/path/to/downloaded-release-assets"'
 require_text docs/user-guide-ja.md '状態：手順案'
 require_text docs/user-guide-ja.md 'Gatekeeper全体を無効化せず，Terminalでquarantine metadataを除去しない'
 require_text docs/user-guide-ja.md 'network fallbackを使わず停止する'
 require_text docs/user-guide-ja.md 'アクセシビリティ及びフルディスクアクセス'
+require_text docs/user-guide-ja.md 'shasum -a 256 -c SHA256SUMS'
+require_text docs/user-guide-ja.md 'cd -- "/absolute/path/to/downloaded-release-assets"'
 require_text docs/privacy-and-security.md 'transcription fails closed instead of permitting a network fallback'
 require_text docs/privacy-and-security.md 'requiresOnDeviceRecognition'
 require_text docs/privacy-security-ja.md 'network fallbackを許さず文字起こしを開始しない'
@@ -488,6 +600,8 @@ reject_text README.md 'decoder hardening後の現行sourceによるlive report�
 reject_text README.md 'no capture or input occurred and no static report exists'
 reject_text README.md 'capture，入力及びstatic reportはありません'
 reject_text README.md 'live current-source `SCScreenshotManager` attachments, timing, coarse confirmation, and post-erase behavior remain unverified'
+reject_text docs/user-guide.md 'LectureBoard-AI-1.0.0-macos-arm64.zip'
+reject_text docs/user-guide-ja.md 'LectureBoard-AI-1.0.0-macos-arm64.zip'
 reject_text README.md '実PowerPoint上のcoarse fresh確定及び別個のpost-erase revisionは未検証です'
 reject_text README.md '取得timing及び消去後revisionは未検証です'
 reject_text README.md 'a separately attributed post-erase content revision'

@@ -33,6 +33,9 @@ expect_config_line \
 expect_config_line \
   "GENERATED_ENTITLEMENTS_LINK=$repository_root/DerivedData/AppTests/GeneratedProject/LectureBoardAI/Config/LectureBoardAI.entitlements"
 expect_config_line 'SCHEME=LectureBoardAI'
+expect_config_line "SOURCE_COMMIT=$(
+  /usr/bin/git -C "$repository_root" rev-parse --verify HEAD^{commit}
+)"
 expect_config_line 'ARCHITECTURE=arm64'
 expect_config_line 'CONFIGURATION=Debug'
 expect_config_line 'SIGNATURE_TYPE=ad hoc'
@@ -56,6 +59,16 @@ for required_info_plist_boundary in \
   if ! grep -Fq "$required_info_plist_boundary" "$app_test_script"; then
     printf 'The native-app-test script lost an Info.plist boundary: %s\n' \
       "$required_info_plist_boundary" >&2
+    exit 1
+  fi
+done
+
+for required_commit_boundary in \
+  'GIT_NO_REPLACE_OBJECTS=1' \
+  'LECTUREBOARD_RELEASE_COMMIT="$source_commit"'; do
+  if ! grep -Fq "$required_commit_boundary" "$app_test_script"; then
+    printf 'The native-app-test script lost a source-commit boundary: %s\n' \
+      "$required_commit_boundary" >&2
     exit 1
   fi
 done

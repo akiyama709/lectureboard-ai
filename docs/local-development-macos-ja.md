@@ -91,8 +91,8 @@ gh api user --jq .login
 
 ## 8．完成版v1.0.0を公開する場合
 
-　本プロジェクトの完成は，検証済みarm64 App archive，正確なsource commit，SHA-256，SBOM及びprovenanceを含む公開`v1.0.0` GitHub Releaseを再取得し，最終検証を完了した時点である．α版，β版及びRelease Candidateのapplication Releaseは公開しない．現時点では，いずれのGitHub Releaseも公開していない．
+　本プロジェクトの完成は，検証済みarm64 App archive，正確なsource commit，SHA-256 checksum manifest，内容を含まないtest evidence，SBOM及びprovenanceの5添付assetを含む公開`v1.0.0` GitHub Releaseを再取得し，全添付assetの最終検証を完了した時点である．α版，β版及びRelease Candidateのapplication Releaseは公開しない．現時点では，いずれのGitHub Releaseも公開していない．
 
-　正式版公開時には，[`v1-release-checklist.md`](v1-release-checklist.md)を用いて，公開予定コミットと同一の成果物，必須CI，Hardened Runtime，ad hoc署名，新規MacでのApp単位の「このまま開く」による導入及び起動，説明文書，checksum，SBOM及びprovenanceを検証する．Developer ID署名又はApple notarization済みとは表示しない．外部公開の直前に，正確なcommitとarchive SHA-256を示して明示的な最終確認を得た後，`v1.0.0`タグ及びGitHub Releaseを公開し，公開成果物を再取得して最終検証する．
+　正式版公開時には，[`v1-release-checklist.md`](v1-release-checklist.md)を用いて，公開予定コミットと同一の成果物，必須CI，Hardened Runtime，ad hoc署名，新規MacでのApp単位の「このまま開く」による導入及び起動，説明文書，checksum manifest，内容を含まないtest evidence，SBOM及びprovenanceを検証する．Developer ID署名又はApple notarization済みとは表示しない．外部公開の直前に，正確なcommitとarchive SHA-256を示して明示的な最終確認を得た後，`v1.0.0`タグ及びGitHub Releaseを公開し，全5添付assetを再取得して最終検証する．
 
 　初回公開手順の履歴は[`github-publication-ja.md`](github-publication-ja.md)に残しているが，そのコマンド及びスクリプトは再利用しない．

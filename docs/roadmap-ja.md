@@ -4,7 +4,7 @@
 
 ## 完成の定義と現在地
 
-　本プロジェクトの完成は，公開GitHubリポジトリ`akiyama709/lectureboard-ai`において，検証済みarm64 App archive，正確なsource commit，checksum，SBOM及びprovenanceを含む正式な`v1.0.0` GitHub Releaseを公開し，公開物を再取得して最終検証を終えた時点とする．有料又は教育機関名義のApple Developer membershipは使用せず，archiveはad hoc署名とし，Developer ID署名又はApple notarization済みとは表示しない．α版，β版又はRCのapplication Releaseは公開しない．
+　本プロジェクトの完成は，公開GitHubリポジトリ`akiyama709/lectureboard-ai`において，`LectureBoard-AI-v1.0.0-arm64.zip`，`LectureBoard-AI-v1.0.0-test-results.json`，`SBOM.spdx.json`，`SHA256SUMS`及び`provenance.json`の正確な5件だけを添付した，immutableかつ非prereleaseの正式な`v1.0.0` GitHub Releaseを公開し，認証なしで全5添付assetを再取得して最終検証を終えた時点とする．Release noteは第6 assetではなくRelease本文へ置く．有料又は教育機関名義のApple Developer membershipは使用せず，archiveはad hoc署名とし，Developer ID署名又はApple notarization済みとは表示しない．α版，β版又はRCのapplication Releaseは公開しない．
 
 　現在は公開前の開発基盤であり，application GitHub Releaseはまだ公開していない．実装済み，履歴上の実機証拠及び現行版で未検証の事項は，[`build-verification.md`](build-verification.md)の区別を維持する．
 
@@ -85,7 +85,8 @@
 - リリースを阻害する不具合を解消し，残る問題を分類する
 - 再現可能な配布ビルドを作る
 - Hardened Runtime及びad hoc署名を適用し，entitlement allowlistを検証する
-- App archive，SHA-256，SBOM及びcommit-bound provenanceを生成する
+- cleanな正確なcommitに対して`evidence`を実行し，private gate log及び凍結`.xcresult`をlocal evidenceとして保持し，内容を含まないJSONだけをpublic assetとする
+- App archive，SHA-256 checksum manifest，内容を含まないtest evidence，SBOM及びcommit-bound provenanceを生成する
 - 新規の対応MacでGatekeeper，インストール，初回起動，権限及び中核講義経路を確認する
 - リリースノート，導入，プライバシー，セキュリティ，トラブル対応及びフォールバック文書を完成させる
 
@@ -96,11 +97,12 @@
 - 公開対象コミットで必須CI及びローカルリリース検証を完了する
 - 外部公開操作に対する明示的な最終確認を得る
 - 承認済みコミットへ`v1.0.0`タグを付ける
-- ad hoc署名済みmacOS App archive，リリースノート，SHA-256，SBOM及びprovenanceを含むGitHub Releaseを公開する
-- 公開成果物を再取得し，checksum，bundle identity，ad hoc署名，Hardened Runtime，AppleのApp単位の「このまま開く」経路，インストール及び起動を再検証する
-- 公開URL及び最終証拠を検証記録へ保存する
+- ad hoc署名済みmacOS App archive，SHA-256 checksum manifest，内容を含まないtest evidence，SBOM及びprovenanceの正確な5添付assetだけを含む，immutableかつnon-draft・non-prereleaseのGitHub Releaseを公開し，リリースノートはRelease本文へ置く
+- 認証なしの`verify-public`を実行し，public REST metadata及びannotated-tag refsを保存し，全5 assetの正確な名称，byte一致，commit結合並びにarchive検証を完了する
+- 再取得したpublic archiveを用いて，AppleのApp単位の「このまま開く」経路，permission，installation，launch及び対応workflowを再検証する
+- 公開URL，metadata，tag-ref及び最終証拠を検証記録へ保存する
 
-完了条件：公開`v1.0.0` GitHub Releaseを一般利用者が取得でき，再取得した成果物が最終検証に合格する．この時点だけを本プロジェクトの完成とする．
+完了条件：immutableな公開`v1.0.0` GitHub Releaseを一般利用者が取得でき，再取得した全5 assetが最終検証に合格する．この時点だけを本プロジェクトの完成とする．
 
 ## 完成後の探索項目
 
