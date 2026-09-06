@@ -816,6 +816,35 @@ final class AppModel: ObservableObject {
     status = .ready
   }
 
+  var canRequestTranscriptionStart: Bool {
+    switch transcriptionLifecycleState {
+    case .idle, .failed:
+      return true
+    case .starting, .waitingForContext, .listening, .finalizing:
+      return false
+    }
+  }
+
+  var canRequestTranscriptionStop: Bool {
+    switch transcriptionLifecycleState {
+    case .starting, .waitingForContext, .listening:
+      return true
+    case .idle, .finalizing, .failed:
+      return false
+    }
+  }
+
+  // Keep user actions single-flight without changing explicit internal restart semantics.
+  func requestTranscriptionStart() async {
+    guard canRequestTranscriptionStart else { return }
+    await startTranscription()
+  }
+
+  func requestTranscriptionStop() {
+    guard canRequestTranscriptionStop else { return }
+    stopTranscription()
+  }
+
   func startTranscription() async {
     transcriptionRequestedByUser = true
     await startTranscriptionOperation()

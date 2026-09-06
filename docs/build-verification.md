@@ -1838,3 +1838,80 @@ copy and was removed afterward. Logs, synthetic screenshots and probe sources ar
 the external verification directory. This is not a managed-session success, owner lecture,
 microphone-to-board, complete 26-stage gate, final archive or publication result. Next work must
 resolve content-area/auxiliary role evidence before any claim about automatic-boarding quality.
+
+### 2026-09-06 owner-operated trial handoff (not acceptance)
+
+At the owner's request, further debugging was stopped to hand over the current app for a
+manual trial. The clean source commit `2666761ee93fbda246ed5edbb9930ccc69481a8b` was built
+successfully as an arm64 Release app in `DerivedData/OwnerTrial-2666761`, with Hardened Runtime,
+ad hoc signing, no debug dylib, version 1.0.0 and UNBOUND release tag fields. This is an internal
+trial, not a final or published release. It does not contain the ignored diagnostic image-saving
+instrumentation. No new full test gate or live acceptance was performed in this handoff.
+
+The app was copied without replacing earlier artifacts to the external verification directory
+`Mock-Lecture-2666761/LectureBoard AI.app`. The copied executable is byte-identical to the build,
+SHA-256 `1b74b1f08788ac68e3020d87e7f01bad546bdb48cf33a5e4947a94c934ae8cd3`.
+Strict deep bundle-signature verification passed; signing flags are `adhoc,runtime`, with no
+Developer ID identity or notarization. The existing owner working-copy PPTX hash was confirmed
+as `fe89895cd99f32651de4a81e51bd4f67c839f165812974f23f11baf45a18768b`, matching the recorded
+original hash. The private presentation body was not read into model context.
+
+The working-copy file was opened through macOS, and the saved app executable was initially
+launched directly for the owner. Exact-path metadata subsequently confirmed one matching
+working copy among three open presentations and zero slide shows; unrelated presentations
+were left untouched. No managed show, capture or microphone session was automatically started.
+
+The owner reported that managed slide-show start failed, then pressing transcription caused
+a crash at 23:02:53 JST. The local crash report and the supplied screenshots describe the same
+incident. TCC terminated the app for a missing `NSSpeechRecognitionUsageDescription`, although
+that exact saved app's merged Info.plist contains a nonempty value. The report attributes the
+responsible process to ChatGPT. This supports investigation of launch-context attribution;
+it does not prove which bundle TCC evaluated or establish the full cause. The initial description
+of an immediate launch crash was incorrect: the owner's action triggered the observed failure.
+
+The same unchanged app was then opened once through LaunchServices using its exact app path.
+One process at that path reached `isFinishedLaunching == true`. No Speech request was repeated
+through this route, so this is launch evidence only, not a crash fix or authorization success.
+No TCC reset or permission re-registration was performed. Apple's Speech authorization reference
+requires the usage-description key for its request:
+https://developer.apple.com/documentation/speech/sfspeechrecognizer/requestauthorization(_:)
+
+The owner-operated trial therefore FAILED before the intended lecture-to-visible-board
+workflow. Managed start and Speech authorization both need resolution. Natural speech, visible
+automatic board output and live export remain unverified. Diagnostic window observation is not
+a production-board fallback. Following the owner's architectural question, no further live
+input was sent: an observer-oriented integration and a separately verified speech-to-board
+vertical slice are proposed for evaluation, not implemented or accepted as a replacement.
+
+### 2026-09-06 bounded Stage 1 investigation and single-flight controls
+
+The unchanged fixed owner app at `Mock-Lecture-2666761/LectureBoard AI.app`, launched normally,
+was exercised once through exact-app Accessibility controls: transcription start, eight seconds
+of bounded observation, then transcription stop. All eight observations remained `starting`;
+no transcript text was read, retained or uploaded. The app did not terminate during this attempt.
+The new source changes below were not present in that frozen trial app.
+
+The matching TCC log interval (23:34:05–23:34:30 JST) records a microphone request and
+`AUTHREQ_PROMPTING` at 23:34:13 for LectureBoard AI as its own responsible process. It does not
+establish permission grant or a subsequent Speech request. No visible permission window was
+found through the narrowly scoped legacy UserNotificationCenter inspection. No permission was
+clicked, reset or re-registered. This is a pending microphone-permission investigation, not
+proof that the prior Speech crash is fixed or that live transcription works.
+
+Source UI start/stop buttons previously remained enabled while starting or finalizing. Added
+state-derived enabled predicates and guarded user-action methods, retaining the existing
+explicit internal restart API. Start is available only when idle or failed; stop is available
+while starting, listening or waiting for context. Repeated user actions during a pending start
+or finalization no longer begin additional operations or restart finalization.
+
+Extended existing native integration tests with duplicate-action, suspended-start cancellation,
+finalization and restored-idle assertions. The targeted suite passed 35 tests with zero failures:
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_23-40-58-+0900.xcresult`.
+`xcrun swift-format lint --strict` and `git diff --check` passed. A preliminary `swiftlint`
+invocation was unavailable; it is not counted as a successful check. No complete App/Core gate,
+new owner distribution, partial-to-board integration or public release was produced.
+
+Shared weekly usage was 22 percent consumed when checked after this work, versus 21 percent at
+the previous check; this account-wide difference must not be attributed exclusively to this
+task. The raw credits balance remained 2500; no currency conversion or zero-cost guarantee is
+inferred. No purchase, reset, additional agent or paid API was used.

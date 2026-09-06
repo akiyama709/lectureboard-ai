@@ -434,9 +434,11 @@ struct MainView: View {
   private var controls: some View {
     HStack(spacing: 12) {
       Button("setup.transcription") {
-        Task { await model.startTranscription() }
+        Task { await model.requestTranscriptionStart() }
       }
-      Button("setup.transcriptionStop") { model.stopTranscription() }
+      .disabled(!model.canRequestTranscriptionStart)
+      Button("setup.transcriptionStop") { model.requestTranscriptionStop() }
+        .disabled(!model.canRequestTranscriptionStop)
       Button("board.hide") { model.hideOverlay() }
       Divider().frame(height: 24)
       Button("session.export") { exportSession() }

@@ -527,6 +527,13 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.liveTranscriptPhase == .partial)
     #expect(transcriptionProvider.stopCount == 1)
 
+    #expect(!model.canRequestTranscriptionStart)
+    #expect(!model.canRequestTranscriptionStop)
+    await model.requestTranscriptionStart()
+    model.requestTranscriptionStop()
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(transcriptionProvider.stopCount == 1)
+
     transcriptionProvider.emit(
       startIndex: 0,
       observation: TranscriptionObservation(
@@ -550,6 +557,8 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.transcriptionLifecycleState == .idle)
     #expect(model.liveTranscript == "finalized tail")
     #expect(model.liveTranscriptPhase == .final)
+    #expect(model.canRequestTranscriptionStart)
+    #expect(!model.canRequestTranscriptionStop)
     transcriptionProvider.emit(
       startIndex: 0,
       observation: TranscriptionObservation(
@@ -569,10 +578,19 @@ struct AppSlideIdentityIntegrationTests {
       transcriptionProvider: transcriptionProvider
     )
 
-    let startTask = Task { await model.startTranscription() }
+    #expect(model.canRequestTranscriptionStart)
+    #expect(!model.canRequestTranscriptionStop)
+    model.requestTranscriptionStop()
+    #expect(transcriptionProvider.stopCount == 0)
+
+    let startTask = Task { await model.requestTranscriptionStart() }
     try await waitUntil { transcriptionProvider.startCount == 1 }
     #expect(model.transcriptionLifecycleState == .starting)
-    model.stopTranscription()
+    #expect(!model.canRequestTranscriptionStart)
+    #expect(model.canRequestTranscriptionStop)
+    await model.requestTranscriptionStart()
+    #expect(transcriptionProvider.startCount == 1)
+    model.requestTranscriptionStop()
 
     #expect(model.status == .ready)
     #expect(model.transcriptionLifecycleState == .idle)
@@ -581,6 +599,8 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.status == .ready)
     #expect(transcriptionProvider.startCount == 1)
     #expect(transcriptionProvider.stopCount == 1)
+    #expect(model.canRequestTranscriptionStart)
+    #expect(!model.canRequestTranscriptionStop)
   }
 
   @Test func staleAndDuplicateSpeechTerminalEventsCannotStopANewerSession() async throws {

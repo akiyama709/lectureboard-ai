@@ -2,6 +2,13 @@
 
 The roadmap describes validation gates rather than promises of release dates.
 
+The proposed near-term execution order, updated after the owner's failed live trial and explicit
+within-utterance boarding requirement on 2026-09-06, is in
+[`docs/development-plan-ja.md`](docs/development-plan-ja.md). It defines stages 0–8 from
+ordinary app launch and streaming recognition through owner acceptance and final publication.
+Its architecture alternatives and provisional latency targets are not implemented or verified.
+The historical milestone evidence and final publication requirements below remain unchanged.
+
 Project completion means publishing a public, immutable, non-prerelease `v1.0.0` GitHub Release with exactly five attached assets: `LectureBoard-AI-v1.0.0-arm64.zip`, `LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json`. They must bind the verified arm64 application archive to the exact source commit and pass unauthenticated public re-download verification. Release notes belong in the Release body, not a sixth asset. The project will not purchase an Apple Developer Program membership or publish under an institution, so the archive will be ad hoc signed and explicitly not Developer ID signed or Apple notarized. Creating the public source repository did not complete the product. No alpha, beta, or release-candidate GitHub Release will be published.
 
 Current status: the repository contains a pre-release development scaffold. No application GitHub Release has been published.
