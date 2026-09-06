@@ -545,13 +545,13 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
       }
       return true
     case .pixelBlack, .pixelWhite:
-      let tone: PixelTone = observation.phase == .pixelBlack ? .black : .white
       for windowID in otherWindowIDs {
         guard let current = inventory[windowID], let baseline = baselineInventory[windowID],
           let fingerprint = current.fingerprint,
           current.isOnScreen,
-          Self.sameVisualEvidence(current, baseline)
-            || classifiesAtLeastHalf(fingerprint, as: tone)
+          fingerprint.isValid,
+          fingerprint.sampleColumns == baseline.fingerprint?.sampleColumns,
+          fingerprint.sampleRows == baseline.fingerprint?.sampleRows
         else { return fail(.otherWindowChanged) }
       }
       let phaseEvidence = observations + [observation]
@@ -576,7 +576,10 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
             let whiteFingerprint = white?.fingerprint,
             black?.isOnScreen == true,
             white?.isOnScreen == true,
-            hasPairedCausalSignature(black: blackFingerprint, white: whiteFingerprint)
+            hasGeometryBoundPairedCausalSignature(
+              black: blackFingerprint,
+              white: whiteFingerprint
+            )
           else { return fail(.otherWindowChanged) }
         }
       }
@@ -983,7 +986,6 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
     candidateIdentity: ManagedSlideShowWindowIdentity
   ) -> Bool {
     guard usesGeometryDisambiguation else { return classifies(fingerprint, as: tone) }
-    guard classifiesAtLeastHalf(fingerprint, as: tone) else { return false }
     let oppositePhase: ManagedSlideShowRoleChallengePhase
     switch tone {
     case .black: oppositePhase = .pixelWhite
@@ -995,9 +997,30 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
       )?.fingerprint
     else { return true }
     switch tone {
-    case .black: return hasPairedCausalSignature(black: fingerprint, white: opposite)
-    case .white: return hasPairedCausalSignature(black: opposite, white: fingerprint)
+    case .black:
+      return hasGeometryBoundPairedCausalSignature(black: fingerprint, white: opposite)
+    case .white:
+      return hasGeometryBoundPairedCausalSignature(black: opposite, white: fingerprint)
     }
+  }
+
+  /// Geometry already proves which retained ScreenCaptureKit window belongs to the exact
+  /// PowerPoint object. Letterboxing may nevertheless prevent one commanded endpoint from
+  /// occupying half of that window. Keep the symmetric endpoint test when both tones are strong;
+  /// otherwise require one strong endpoint, a substantial opposite endpoint, and a broad,
+  /// overwhelmingly forward response across the exact same sample positions.
+  private func hasGeometryBoundPairedCausalSignature(
+    black: FrameFingerprint,
+    white: FrameFingerprint
+  ) -> Bool {
+    let blackCoverage = matchingFraction(black, as: .black)
+    let whiteCoverage = matchingFraction(white, as: .white)
+    guard max(blackCoverage, whiteCoverage) >= 0.5 else { return false }
+    if min(blackCoverage, whiteCoverage) >= 0.5 {
+      return hasPairedCausalSignature(black: black, white: white)
+    }
+    guard min(blackCoverage, whiteCoverage) >= 0.25 else { return false }
+    return hasPairedDirectionalSignature(black: black, white: white)
   }
 
   private func hasPairedCausalSignature(
@@ -1022,6 +1045,28 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
     }
     guard Double(changedCount) / Double(black.luminance.count) >= 0.5 else { return false }
     return Double(matchingChangedCount) / Double(changedCount) >= configuration.minimumCoverage
+  }
+
+  private func hasPairedDirectionalSignature(
+    black: FrameFingerprint,
+    white: FrameFingerprint
+  ) -> Bool {
+    guard black.isValid, white.isValid,
+      black.sampleColumns == white.sampleColumns,
+      black.sampleRows == white.sampleRows,
+      black.luminance.count == white.luminance.count
+    else { return false }
+    var changedCount = 0
+    var forwardCount = 0
+    for (blackValue, whiteValue) in zip(black.luminance, white.luminance)
+    where blackValue != whiteValue {
+      changedCount += 1
+      if whiteValue > blackValue {
+        forwardCount += 1
+      }
+    }
+    guard Double(changedCount) / Double(black.luminance.count) >= 0.5 else { return false }
+    return Double(forwardCount) / Double(changedCount) >= configuration.minimumCoverage
   }
 
   private static func repeatEquivalent(

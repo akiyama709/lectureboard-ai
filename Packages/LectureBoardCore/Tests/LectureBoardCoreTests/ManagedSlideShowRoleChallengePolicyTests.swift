@@ -672,10 +672,113 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     #expect(run(method: .pixelNonce, observations: legacy) == .rejected(.otherWindowChanged))
   }
 
+  @Test func geometryPixelNonceAcceptsOneStrongEndpointWithBroadForwardResponse() {
+    let strongBlack =
+      Array(repeating: UInt8(0), count: 60)
+      + Array(repeating: UInt8(100), count: 40)
+    let letterboxedWhite =
+      Array(repeating: UInt8(255), count: 40)
+      + Array(repeating: UInt8(200), count: 20)
+      + Array(repeating: UInt8(100), count: 40)
+
+    for nonce in [UInt64(40), 41] {
+      var evidence = causalGeometryTranscript(challengeNonce: nonce)
+      replacePhaseFingerprint(&evidence, phase: .pixelBlack, luminance: strongBlack)
+      replacePhaseFingerprint(&evidence, phase: .pixelWhite, luminance: letterboxedWhite)
+      replacePhaseFingerprint(
+        &evidence,
+        phase: .pixelBlack,
+        luminance: strongBlack,
+        windowID: 10
+      )
+      replacePhaseFingerprint(
+        &evidence,
+        phase: .pixelWhite,
+        luminance: letterboxedWhite,
+        windowID: 10
+      )
+      #expect(
+        run(method: .pixelNonce, observations: evidence, challengeNonce: nonce)
+          == .succeeded(freshnessBoundaryMachAbsoluteTime: 420)
+      )
+    }
+  }
+
+  @Test func geometryPixelNonceRejectsWeakOrIncoherentAsymmetricEndpoint() {
+    let strongBlack =
+      Array(repeating: UInt8(0), count: 60)
+      + Array(repeating: UInt8(100), count: 40)
+    let tooLittleWhite =
+      Array(repeating: UInt8(255), count: 24)
+      + Array(repeating: UInt8(200), count: 36)
+      + Array(repeating: UInt8(100), count: 40)
+    let incoherentBlack =
+      Array(repeating: UInt8(0), count: 58)
+      + Array(repeating: UInt8(255), count: 2)
+      + Array(repeating: UInt8(100), count: 40)
+    let incoherentWhite =
+      Array(repeating: UInt8(255), count: 40)
+      + Array(repeating: UInt8(200), count: 18)
+      + Array(repeating: UInt8(0), count: 2)
+      + Array(repeating: UInt8(100), count: 40)
+
+    var weakCandidate = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(&weakCandidate, phase: .pixelBlack, luminance: strongBlack)
+    replacePhaseFingerprint(&weakCandidate, phase: .pixelWhite, luminance: tooLittleWhite)
+    #expect(
+      run(method: .pixelNonce, observations: weakCandidate)
+        == .rejected(.wrongVisualSignature)
+    )
+
+    var incoherentCandidate = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(&incoherentCandidate, phase: .pixelBlack, luminance: incoherentBlack)
+    replacePhaseFingerprint(&incoherentCandidate, phase: .pixelWhite, luminance: incoherentWhite)
+    #expect(
+      run(method: .pixelNonce, observations: incoherentCandidate)
+        == .rejected(.wrongVisualSignature)
+    )
+
+    var weakAuxiliary = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(
+      &weakAuxiliary,
+      phase: .pixelBlack,
+      luminance: strongBlack,
+      windowID: 10
+    )
+    replacePhaseFingerprint(
+      &weakAuxiliary,
+      phase: .pixelWhite,
+      luminance: tooLittleWhite,
+      windowID: 10
+    )
+    #expect(
+      run(method: .pixelNonce, observations: weakAuxiliary)
+        == .rejected(.otherWindowChanged)
+    )
+
+    var incoherentAuxiliary = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(
+      &incoherentAuxiliary,
+      phase: .pixelBlack,
+      luminance: incoherentBlack,
+      windowID: 10
+    )
+    replacePhaseFingerprint(
+      &incoherentAuxiliary,
+      phase: .pixelWhite,
+      luminance: incoherentWhite,
+      windowID: 10
+    )
+    #expect(
+      run(method: .pixelNonce, observations: incoherentAuxiliary)
+        == .rejected(.otherWindowChanged)
+    )
+  }
+
   @Test func geometryPixelNonceRejectsSmallInconsistentReversedAndUnrestoredChanges() {
     let smallBlack =
-      Array(repeating: UInt8(0), count: 49)
-      + Array(repeating: UInt8(100), count: 51)
+      Array(repeating: UInt8(0), count: 24)
+      + Array(repeating: UInt8(100), count: 76)
     let inconsistentWhite =
       Array(repeating: UInt8(255), count: 58)
       + Array(repeating: UInt8(200), count: 2)

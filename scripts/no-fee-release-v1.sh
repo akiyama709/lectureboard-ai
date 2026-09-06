@@ -578,7 +578,7 @@ if not isinstance(g["logSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",g["log
 blob=g["scriptBlobOid"]
 if not isinstance(blob,str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}",blob) or blob in {"0"*40,"0"*64} or len(blob)!=len(c): raise SystemExit(1)
 core=d["coreTests"]
-if not exact(core,{"result","tests","suites","failed","skipped"}) or core["result"]!="Passed" or any(not integer(core[key]) for key in ("tests","suites","failed","skipped")) or (core["tests"],core["suites"],core["failed"],core["skipped"])!=(246,19,0,0): raise SystemExit(1)
+if not exact(core,{"result","tests","suites","failed","skipped"}) or core["result"]!="Passed" or any(not integer(core[key]) for key in ("tests","suites","failed","skipped")) or (core["tests"],core["suites"],core["failed"],core["skipped"])!=(248,19,0,0): raise SystemExit(1)
 native=d["nativeAppTests"]
 native_keys={"result","authoritativeTests","deviceRuns","parameterizedTests","parameterizedRuns","failed","skipped","expectedFailures","resultBundleName","resultBundleTreeSha256"}
 if not exact(native,native_keys) or native["result"]!="Passed" or any(not integer(native[key]) for key in native_keys-{"result","resultBundleName","resultBundleTreeSha256"}) or native["authoritativeTests"]<1 or native["deviceRuns"]<native["authoritativeTests"] or native["parameterizedRuns"]<native["parameterizedTests"]: raise SystemExit(1)
@@ -673,7 +673,7 @@ if len(data)>16*1024*1024 or "Prepublication checks passed. Manual institutional
 stages=[int(value) for value in re.findall(r"(?m)^\[([0-9]+)/26\] ",data)]
 if stages!=list(range(1,27)):
  raise SystemExit(1)
-matches=re.findall(r"(?m)^[^\n]*Test run with 246 tests in 19 suites passed[^\n]*$",data)
+matches=re.findall(r"(?m)^[^\n]*Test run with 248 tests in 19 suites passed[^\n]*$",data)
 if len(matches)!=1:
  raise SystemExit(1)
 commit=evidence.get("sourceCommit")
@@ -747,7 +747,7 @@ evidence={
  "sourceCommit":commit,
  "generatedAt":generated,
  "prepublicationGate":{"command":"./scripts/prepublish-check.sh","result":"Passed","passedStages":26,"totalStages":26,"logSha256":log_digest,"scriptBlobOid":script_blob},
- "coreTests":{"result":"Passed","tests":246,"suites":19,"failed":0,"skipped":0},
+ "coreTests":{"result":"Passed","tests":248,"suites":19,"failed":0,"skipped":0},
  "nativeAppTests":{
   "result":summary.get("result"),"authoritativeTests":summary.get("totalTestCount"),
   "deviceRuns":device.get("passedTests"),"parameterizedTests":parameterized_tests,
