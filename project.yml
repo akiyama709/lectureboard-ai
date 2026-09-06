@@ -37,15 +37,11 @@ targets:
         PRODUCT_NAME: LectureBoard AI
         MARKETING_VERSION: 1.0.0
         CURRENT_PROJECT_VERSION: 1
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: LectureBoard AI
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
-        INFOPLIST_KEY_NSHighResolutionCapable: YES
-        INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 Tomohiro Akiyama
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "LectureBoard AI uses speech recognition to create grounded lecture-board annotations."
-        INFOPLIST_KEY_NSScreenCaptureUsageDescription: "LectureBoard AI observes the selected PowerPoint window to identify slide content and unused space."
-        INFOPLIST_KEY_NSAppleEventsUsageDescription: "LectureBoard AI uses Automation only after you explicitly start a managed PowerPoint slide show, to read its current slide identity and perform a brief reversible role check."
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: LectureBoardAI/Config/Info.plist
+        LECTUREBOARD_RELEASE_COMMIT: UNBOUND
+        LECTUREBOARD_RELEASE_TAG: UNBOUND
+        LECTUREBOARD_RELEASE_TAG_OBJECT: UNBOUND
         CODE_SIGN_ENTITLEMENTS: LectureBoardAI/Config/LectureBoardAI.entitlements
         CODE_SIGN_STYLE: Automatic
 

@@ -472,8 +472,9 @@ else
     CODE_SIGNING_REQUIRED=YES \
     "CODE_SIGN_IDENTITY=$identity_sha1" \
     "DEVELOPMENT_TEAM=$team_id" \
-    "INFOPLIST_KEY_LectureBoardReleaseCommit=$approved_commit" \
-    "INFOPLIST_KEY_LectureBoardReleaseTagObject=$approved_tag_object" \
+    "LECTUREBOARD_RELEASE_COMMIT=$approved_commit" \
+    "LECTUREBOARD_RELEASE_TAG=$expected_tag" \
+    "LECTUREBOARD_RELEASE_TAG_OBJECT=$approved_tag_object" \
     CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
     ENABLE_HARDENED_RUNTIME=YES \
     ENABLE_DEBUG_DYLIB=NO \

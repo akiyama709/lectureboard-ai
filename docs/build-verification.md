@@ -948,3 +948,73 @@ visible overlay alignment, mouse priority, microphone transcription, session exp
 owner-selected private-PPTX acceptance, the final isolated Hardened Runtime Release archive,
 Gatekeeper installation, GitHub Actions, publication, or public re-download. Those gates remain
 open and must not be inferred from this automated result.
+
+### First isolated no-fee Release attempt and explicit-Info provenance correction
+
+After explicit approval, local annotated tag object
+`e65352dcdc5e408041aeed2b28e9d0c3e605970b` was created for source commit
+`7cb34c0fb00137e5af449409d8478814908ccd6f`; neither object was pushed. The first production
+`no-fee-release-v1.sh prepare` attempt built the isolated arm64 Release application successfully
+and Xcode invoked ad hoc signing with the Hardened Runtime option. The script then rejected the
+application before handoff or packaging with the bounded result `bundle commit provenance is not
+exact`. No ZIP, checksum, SBOM, or provenance asset was accepted from this run, and the successful
+compiler line alone is not Release-artifact evidence.
+
+The failure was caused by relying on arbitrary `INFOPLIST_KEY_*` values introduced only on the
+Xcode command line. Although Xcode 26 displayed those build settings, its generated Info.plist did
+not contain the previously undeclared custom keys. A follow-up attempt to seed those arbitrary
+generated-Info keys in the project specification produced the same omission and was discarded. The
+application target now uses a checked-in explicit `LectureBoardAI/Config/Info.plist`. It contains
+`LectureBoardReleaseCommit`, `LectureBoardReleaseTag`, and `LectureBoardReleaseTagObject`
+substitution placeholders backed by non-release `UNBOUND` settings. A production build must
+override all three, and the application verifier rejects a missing or mismatched exact value. The
+no-fee provenance also carries the full annotated-tag object identifier; archive verification
+requires it to be a full object ID and to match the extracted application's signed Info.plist.
+
+The isolated local-project builder validates that the explicit Info.plist is a regular,
+non-symbolic-link property list and creates only an exact-target link inside its generated project,
+using the same fail-closed collision and target checks as the entitlement link. Permission-contract
+fixtures independently remove each signed provenance key and the Apple Events description, and
+source-tracking fixtures require the explicit Info.plist. The no-fee tooling boundary test requires
+the tag-object build, bundle, and provenance checks. Permission-contract fixtures and the live
+check, no-fee tooling fixtures, release-build fixtures, release-artifact fixtures, source-tracking
+fixtures and the live check, version consistency, release-definition consistency, Bash syntax, and
+`git diff --check` passed after the correction.
+
+`make build-runtime` then completed with the explicit Info.plist at approximately 08:59 JST. The
+signed Debug app contains exact `UNBOUND` values for all three release fields and the exact Apple
+Events, microphone, Screen Recording, and Speech Recognition usage descriptions. No second
+Info.plist was found under the application Resources directory. Its arm64 executable SHA-256 is
+`bdf7d8529d34b4ca8d376a8c185513dc2fd34504d12d0d1fbb9401b3a2a0d86b`, its ad hoc CDHash is
+`ca35954c25041aab8afd8a50cc329e956d02f6c6`, its team identifier is unset, and strict complete-bundle
+signature verification passed. This verifies the corrected local Debug integration only. It does
+not verify the final Hardened Runtime Release package; a stage-1 integrated-gate restart and an
+isolated Release rebuild remain required.
+
+The first stage-1 restart after that Debug integration passed all 204 Core tests in 18 suites, then
+stopped fail-closed at stage 3 before any native test executed. The native-test builder generated
+its Xcode project under `DerivedData/AppTests/GeneratedProject`, but unlike the already corrected
+runtime builder it had not made the explicit Info.plist available at that generated project's
+relative build-setting path. Xcode reported the exact missing build input and cancelled the test
+build. The native-test builder now applies the same regular-file, plist-lint, exact-link-target, and
+occupied-path boundaries, and its configuration regression requires that contract. This stopped
+run is build-configuration evidence only and is not counted as a native-test or complete-gate
+result.
+
+The subsequent stage-1 restart passed the complete 26-stage prepublication gate at approximately
+09:02 JST on 2026-09-06. It ran all 204 Core tests in 18 suites and all 416 authoritative native
+app tests with zero failures, zero skips, and zero expected failures. The native result bundle is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_09-01-28-+0900.xcresult`;
+`xcresulttool` reports `Passed`, authoritative total 416, and per-device passed value 478 because 14
+parameterized tests produced 76 runs. The gate also rebuilt both native targets, verified the
+strict ad hoc Debug bundle and no-request launch smoke, and passed every source, documentation,
+permission, version, release-definition, artifact, package, preflight, release-code, shell-security,
+no-fee-tooling, tracked-output, secret-pattern, and lecture-data boundary. Its Debug executable has
+the same SHA-256 `bdf7d8529d34b4ca8d376a8c185513dc2fd34504d12d0d1fbb9401b3a2a0d86b` and CDHash
+`ca35954c25041aab8afd8a50cc329e956d02f6c6` recorded above, and strict complete-bundle signature
+verification passed. This is exact corrected-source automated evidence. It does not verify the
+future isolated Release archive, live managed PowerPoint behavior, owner-selected private-PPTX
+acceptance, Gatekeeper installation, publication, or public re-download. Recording this result is a
+post-gate documentation-only change; the targeted documentation, release-definition, source-tracking,
+and secret and lecture-data boundary checks passed afterward before the corrected source was
+committed.

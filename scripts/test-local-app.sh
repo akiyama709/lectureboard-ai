@@ -7,9 +7,11 @@ test_derived_data="$repository_root/DerivedData/AppTests"
 generated_project_directory="$test_derived_data/GeneratedProject"
 generated_project="$generated_project_directory/LectureBoardAI.xcodeproj"
 local_package_link="$generated_project_directory/Packages"
+info_plist_file="$repository_root/LectureBoardAI/Config/Info.plist"
 entitlements_file="$repository_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
-generated_entitlements_directory="$generated_project_directory/LectureBoardAI/Config"
-generated_entitlements_link="$generated_entitlements_directory/LectureBoardAI.entitlements"
+generated_config_directory="$generated_project_directory/LectureBoardAI/Config"
+generated_info_plist_link="$generated_config_directory/Info.plist"
+generated_entitlements_link="$generated_config_directory/LectureBoardAI.entitlements"
 scheme="LectureBoardAI"
 
 usage() {
@@ -22,6 +24,8 @@ print_config() {
   printf 'GENERATED_PROJECT_PATH=%s\n' "$generated_project"
   printf 'LOCAL_PACKAGE_LINK=%s\n' "$local_package_link"
   printf 'LOCAL_PACKAGE_TARGET=%s\n' "$repository_root/Packages"
+  printf 'INFO_PLIST_PATH=%s\n' "$info_plist_file"
+  printf 'GENERATED_INFO_PLIST_LINK=%s\n' "$generated_info_plist_link"
   printf 'ENTITLEMENTS_PATH=%s\n' "$entitlements_file"
   printf 'GENERATED_ENTITLEMENTS_LINK=%s\n' "$generated_entitlements_link"
   printf 'SCHEME=%s\n' "$scheme"
@@ -58,12 +62,23 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-for required_command in xcodegen xcodebuild; do
+for required_command in xcodegen xcodebuild plutil; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     printf 'Required command not found: %s\n' "$required_command" >&2
     exit 1
   fi
 done
+
+if [[ ! -f "$info_plist_file" || -L "$info_plist_file" ]]; then
+  printf 'The native-app-test Info.plist is missing or symbolic: %s\n' \
+    "$info_plist_file" >&2
+  exit 1
+fi
+
+if ! plutil -lint "$info_plist_file" >/dev/null; then
+  printf 'The native-app-test Info.plist is invalid: %s\n' "$info_plist_file" >&2
+  exit 1
+fi
 
 if [[ ! -f "$entitlements_file" || -L "$entitlements_file" ]]; then
   printf 'The native-app-test entitlements file is missing or symbolic: %s\n' \
@@ -86,7 +101,22 @@ else
   ln -s "$repository_root/Packages" "$local_package_link"
 fi
 
-mkdir -p "$generated_entitlements_directory"
+mkdir -p "$generated_config_directory"
+if [[ -L "$generated_info_plist_link" ]]; then
+  actual_info_plist_target="$(readlink "$generated_info_plist_link")"
+  if [[ "$actual_info_plist_target" != "$info_plist_file" ]]; then
+    printf 'Unexpected generated Info.plist link target: %s\n' \
+      "$actual_info_plist_target" >&2
+    exit 1
+  fi
+elif [[ -e "$generated_info_plist_link" ]]; then
+  printf 'The generated Info.plist link path is occupied: %s\n' \
+    "$generated_info_plist_link" >&2
+  exit 1
+else
+  ln -s "$info_plist_file" "$generated_info_plist_link"
+fi
+
 if [[ -L "$generated_entitlements_link" ]]; then
   actual_entitlements_target="$(readlink "$generated_entitlements_link")"
   if [[ "$actual_entitlements_target" != "$entitlements_file" ]]; then

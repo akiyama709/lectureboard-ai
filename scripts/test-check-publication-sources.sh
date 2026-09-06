@@ -14,6 +14,7 @@ trap cleanup EXIT
 mkdir -p \
   "$fixture_root/LectureBoardAI/Sources" \
   "$fixture_root/LectureBoardAI/Tests" \
+  "$fixture_root/LectureBoardAI/Config" \
   "$fixture_root/Packages/LectureBoardCore/Sources" \
   "$fixture_root/Packages/LectureBoardCore/Tests" \
   "$fixture_root/scripts"
@@ -25,11 +26,18 @@ printf 'struct CoreFixtureTests {}\n' > "$fixture_root/Packages/LectureBoardCore
 printf '#!/usr/bin/env bash\n' > "$fixture_root/scripts/runtime-launch-preflight.sh"
 printf 'import CoreGraphics\n' > "$fixture_root/scripts/runtime-window-server-probe.swift"
 printf '#!/usr/bin/env bash\n' > "$fixture_root/scripts/test-runtime-launch-preflight.sh"
+printf 'name: Fixture\n' > "$fixture_root/project.yml"
+printf '<plist version="1.0"><dict/></plist>\n' \
+  > "$fixture_root/LectureBoardAI/Config/Info.plist"
+printf '<plist version="1.0"><dict/></plist>\n' \
+  > "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
 
 git -C "$fixture_root" init -q
 git -C "$fixture_root" add \
   LectureBoardAI/Sources/AppFixture.swift \
   Packages/LectureBoardCore/Sources/CoreFixture.swift \
+  project.yml \
+  LectureBoardAI/Config/LectureBoardAI.entitlements \
   scripts/check-publication-sources.sh
 
 failure_output="$fixture_root/failure-output.txt"
@@ -41,6 +49,7 @@ fi
 for required_source in \
   LectureBoardAI/Tests/AppFixtureTests.swift \
   Packages/LectureBoardCore/Tests/CoreFixtureTests.swift \
+  LectureBoardAI/Config/Info.plist \
   scripts/runtime-launch-preflight.sh \
   scripts/runtime-window-server-probe.swift \
   scripts/test-runtime-launch-preflight.sh; do
@@ -55,6 +64,7 @@ done
 git -C "$fixture_root" add \
   LectureBoardAI/Tests/AppFixtureTests.swift \
   Packages/LectureBoardCore/Tests/CoreFixtureTests.swift \
+  LectureBoardAI/Config/Info.plist \
   scripts/runtime-launch-preflight.sh \
   scripts/runtime-window-server-probe.swift \
   scripts/test-runtime-launch-preflight.sh

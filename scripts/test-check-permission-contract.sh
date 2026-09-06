@@ -12,6 +12,8 @@ make_fixture() {
   mkdir -p "$destination/scripts" "$destination/LectureBoardAI/Config"
   cp "$repository_root/scripts/check-permission-contract.sh" "$destination/scripts/"
   cp "$repository_root/project.yml" "$destination/project.yml"
+  cp "$repository_root/LectureBoardAI/Config/Info.plist" \
+    "$destination/LectureBoardAI/Config/Info.plist"
   cp "$repository_root/LectureBoardAI/Config/LectureBoardAI.entitlements" \
     "$destination/LectureBoardAI/Config/LectureBoardAI.entitlements"
 }
@@ -32,8 +34,27 @@ make_fixture "$valid_fixture"
 
 missing_description="$fixture_parent/missing-description"
 make_fixture "$missing_description"
-sed -i '' '/INFOPLIST_KEY_NSAppleEventsUsageDescription:/d' "$missing_description/project.yml"
+plutil -remove NSAppleEventsUsageDescription \
+  "$missing_description/LectureBoardAI/Config/Info.plist"
 expect_failure "$missing_description" "a missing Apple Events usage description"
+
+for provenance_key in \
+  LectureBoardReleaseCommit \
+  LectureBoardReleaseTag \
+  LectureBoardReleaseTagObject; do
+  missing_provenance="$fixture_parent/missing-$provenance_key"
+  make_fixture "$missing_provenance"
+  plutil -remove "$provenance_key" \
+    "$missing_provenance/LectureBoardAI/Config/Info.plist"
+  expect_failure "$missing_provenance" "a missing signed Info.plist provenance key: $provenance_key"
+done
+
+wrong_info_path="$fixture_parent/wrong-info-path"
+make_fixture "$wrong_info_path"
+sed -i '' \
+  's#INFOPLIST_FILE: LectureBoardAI/Config/Info.plist#INFOPLIST_FILE: wrong.plist#' \
+  "$wrong_info_path/project.yml"
+expect_failure "$wrong_info_path" "an unexpected application property-list path"
 
 wrong_entitlement_path="$fixture_parent/wrong-entitlement-path"
 make_fixture "$wrong_entitlement_path"

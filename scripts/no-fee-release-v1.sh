@@ -97,7 +97,7 @@ parse_args() {
 }
 
 verify_app() {
-  local app="$1" expected_commit="$2" info exe ent keys details components nested_details
+  local app="$1" expected_commit="$2" expected_tag_object="$3" info exe ent keys details components nested_details
   [[ "$app" == /* && -d "$app" && ! -L "$app" && "${app##*/}" == "$product.app" ]] || die 'application bundle path/name is invalid'
   info="$app/Contents/Info.plist"; exe="$app/Contents/MacOS/$product"
   regular "$info" 'application Info.plist'; [[ -x "$exe" && ! -L "$exe" ]] || die 'application executable is missing'
@@ -106,6 +106,7 @@ verify_app() {
   [[ "$(/usr/bin/plutil -extract CFBundleVersion raw -o - "$info" 2>/dev/null)" =~ ^[1-9][0-9]*$ ]] || die 'build number is invalid'
   [[ "$(/usr/bin/plutil -extract LectureBoardReleaseCommit raw -o - "$info" 2>/dev/null)" == "$expected_commit" ]] || die 'bundle commit provenance is not exact'
   [[ "$(/usr/bin/plutil -extract LectureBoardReleaseTag raw -o - "$info" 2>/dev/null)" == "$tag_expected" ]] || die 'bundle tag provenance is not exact'
+  [[ "$(/usr/bin/plutil -extract LectureBoardReleaseTagObject raw -o - "$info" 2>/dev/null)" == "$expected_tag_object" ]] || die 'bundle tag-object provenance is not exact'
   [[ -z "$(find "$app/Contents/MacOS" -maxdepth 1 -type f -name '*.debug.dylib' -o -name '__preview.dylib' 2>/dev/null)" ]] || die 'debug dylib is present'
   {
     details="$(/usr/bin/codesign -d --verbose=4 "$app" 2>&1)" || die 'codesign inspection failed'
@@ -146,6 +147,7 @@ build_production() {
   [[ "$(git_read -C "$source_dir" rev-parse --show-toplevel)" == "$source_dir" ]] || die 'source-dir is not the worktree root'
   [[ "$(git_read -C "$source_dir" status --porcelain=v1)" == '' ]] || die 'source tree is dirty'
   target="$(git_read -C "$source_dir" rev-parse --verify "$tag^{commit}")" || die 'release tag cannot be resolved'; [[ "$target" == "$commit" ]] || die 'tag does not target approved commit'
+  tag_object="$(git_read -C "$source_dir" rev-parse --verify "refs/tags/$tag")" || die 'release tag object cannot be resolved'; oid "$tag_object" tag-object
   [[ "$(git_read -C "$source_dir" cat-file -t "refs/tags/$tag")" == tag ]] || die 'release tag must be annotated'
   [[ -z "$(git_read -C "$source_dir" ls-tree -r --name-only "$commit" -- .gitattributes)" ]] || die 'tracked Git attributes are not allowed for release export'
   [[ ! -s "$source_dir/.git/info/attributes" ]] || die 'local Git attributes are not allowed for release export'
@@ -155,9 +157,9 @@ build_production() {
   [[ -z "$(/usr/bin/find "$temp/source" \( -type b -o -type c -o -type p \) -print -quit)" ]] || die 'isolated source contains a special file'
   /usr/bin/xcodebuild -project "$temp/source/LectureBoardAI.xcodeproj" -scheme LectureBoardAI -configuration Release -sdk macosx -arch arm64 -derivedDataPath "$temp/DerivedData" \
     MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION=1 CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM='' CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO ENABLE_HARDENED_RUNTIME=YES ENABLE_DEBUG_DYLIB=NO \
-    INFOPLIST_KEY_LectureBoardReleaseCommit="$commit" INFOPLIST_KEY_LectureBoardReleaseTag="$tag" build || die 'isolated Release build failed'
-  built="$temp/DerivedData/Build/Products/Release/$product.app"; [[ -d "$built" ]] || die 'Release application output missing'; verify_app "$built" "$commit"
-  /bin/mkdir "$output_dir"; /usr/bin/ditto --rsrc --extattr --acl "$built" "$output_dir/$product.app" || die 'verified application handoff failed'; verify_app "$output_dir/$product.app" "$commit"
+    LECTUREBOARD_RELEASE_COMMIT="$commit" LECTUREBOARD_RELEASE_TAG="$tag" LECTUREBOARD_RELEASE_TAG_OBJECT="$tag_object" build || die 'isolated Release build failed'
+  built="$temp/DerivedData/Build/Products/Release/$product.app"; [[ -d "$built" ]] || die 'Release application output missing'; verify_app "$built" "$commit" "$tag_object"
+  /bin/mkdir "$output_dir"; /usr/bin/ditto --rsrc --extattr --acl "$built" "$output_dir/$product.app" || die 'verified application handoff failed'; verify_app "$output_dir/$product.app" "$commit" "$tag_object"
   write_build_receipt "$output_dir/approved-build-receipt.json" "$output_dir/$product.app"
   verify_build_receipt "$output_dir/approved-build-receipt.json" "$output_dir/$product.app"
 }
@@ -185,19 +187,20 @@ package_release() {
   [[ "$(git_read -C "$source_dir" rev-parse --verify HEAD^{commit})" == "$commit" ]] || die 'source HEAD is not the approved commit'
   [[ "$(git_read -C "$source_dir" rev-parse --verify "$tag^{commit}")" == "$commit" ]] || die 'source tag is not bound to the approved commit'
   [[ "$(git_read -C "$source_dir" cat-file -t "refs/tags/$tag")" == tag ]] || die 'release tag must be annotated'
-  verify_app "$app" "$commit"; verify_build_receipt "$build_receipt" "$app"; /bin/mkdir "$output_dir"; archive="$output_dir/LectureBoard-AI-v1.0.0-arm64.zip"; /usr/bin/ditto -c -k --keepParent --rsrc --extattr --acl "$app" "$archive" || die 'ZIP producer failed';
+  tag_object="$(git_read -C "$source_dir" rev-parse --verify "refs/tags/$tag")" || die 'source tag object cannot be resolved'; oid "$tag_object" tag-object
+  verify_app "$app" "$commit" "$tag_object"; verify_build_receipt "$build_receipt" "$app"; /bin/mkdir "$output_dir"; archive="$output_dir/LectureBoard-AI-v1.0.0-arm64.zip"; /usr/bin/ditto -c -k --keepParent --rsrc --extattr --acl "$app" "$archive" || die 'ZIP producer failed';
   archive_sha_pre="$(sha256 "$archive")"; /usr/bin/printf '%s  %s\n' "$archive_sha_pre" "${archive##*/}" >"$output_dir/SHA256SUMS" || die 'checksum producer failed'
   app_sha="$(sha256 "$app/Contents/MacOS/$product")"; archive_sha="$(sha256 "$archive")"; test_sha="$(sha256 "$test_result")"; json_string "$commit"
   toolchain="$(/usr/bin/xcodebuild -version | /usr/bin/tr '\n' ' ')" || die 'toolchain identity could not be read'
   [[ -n "$toolchain" ]] || die 'toolchain identity is empty'; json_string "$toolchain"
   created_at="$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')" || die 'SBOM creation time unavailable'; json_string "$created_at"
   /usr/bin/printf '{\n  "spdxVersion":"SPDX-2.3",\n  "dataLicense":"CC0-1.0",\n  "SPDXID":"SPDXRef-DOCUMENT",\n  "name":"LectureBoard AI v1.0.0",\n  "documentNamespace":"https://github.com/akiyama709/lectureboard-ai/releases/download/v1.0.0/SBOM.spdx.json#%s",\n  "creationInfo":{"created":"%s","creators":["Tool: no-fee-release-v1.sh"]},\n  "packages":[{"SPDXID":"SPDXRef-Package-LectureBoardAI","name":"LectureBoard AI","versionInfo":"1.0.0","downloadLocation":"https://github.com/akiyama709/lectureboard-ai/releases/download/v1.0.0/%s","supplier":"Person: Tomohiro Akiyama","filesAnalyzed":false,"checksums":[{"algorithm":"SHA256","checksumValue":"%s"}],"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"Copyright (c) 2026 Tomohiro Akiyama"}],\n  "documentDescribes":["SPDXRef-Package-LectureBoardAI"]\n}\n' "$commit" "$created_at" "${archive##*/}" "$archive_sha" >"$output_dir/SBOM.spdx.json" || die 'SBOM producer failed'
-  /usr/bin/printf '{\n  "schema":"lectureboard.no-fee-provenance.v1",\n  "repository":"akiyama709/lectureboard-ai",\n  "tag":"%s",\n  "commit":"%s",\n  "bundleIdentifier":"%s",\n  "version":"%s",\n  "architecture":"arm64",\n  "configuration":"Release",\n  "signature":"ad hoc",\n  "hardenedRuntime":true,\n  "entitlements":{"keys":["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"],"canonicalJsonSha256":"2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0"},\n  "toolchain":"%s",\n  "archive":{"name":"%s","sha256":"%s"},\n  "executableSha256":"%s",\n  "testResultSha256":"%s"\n}\n' "$tag" "$commit" "$bundle_id" "$version" "$toolchain" "${archive##*/}" "$archive_sha" "$app_sha" "$test_sha" >"$output_dir/provenance.json" || die 'provenance producer failed'
+  /usr/bin/printf '{\n  "schema":"lectureboard.no-fee-provenance.v1",\n  "repository":"akiyama709/lectureboard-ai",\n  "tag":"%s",\n  "tagObject":"%s",\n  "commit":"%s",\n  "bundleIdentifier":"%s",\n  "version":"%s",\n  "architecture":"arm64",\n  "configuration":"Release",\n  "signature":"ad hoc",\n  "hardenedRuntime":true,\n  "entitlements":{"keys":["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"],"canonicalJsonSha256":"2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0"},\n  "toolchain":"%s",\n  "archive":{"name":"%s","sha256":"%s"},\n  "executableSha256":"%s",\n  "testResultSha256":"%s"\n}\n' "$tag" "$tag_object" "$commit" "$bundle_id" "$version" "$toolchain" "${archive##*/}" "$archive_sha" "$app_sha" "$test_sha" >"$output_dir/provenance.json" || die 'provenance producer failed'
   /usr/bin/python3 -m json.tool "$output_dir/SBOM.spdx.json" >/dev/null || die 'SBOM is not valid JSON'; /usr/bin/python3 -m json.tool "$output_dir/provenance.json" >/dev/null || die 'provenance is not valid JSON'; verify_archive "$archive" "$commit" "$output_dir/SHA256SUMS" "$output_dir/SBOM.spdx.json" "$output_dir/provenance.json" "$test_result"
 }
 
 verify_archive() {
-  local archive="$1" expected_commit="$2" checksum="$3" sbom="$4" provenance="$5" expected_test="${6:-}" root entries
+  local archive="$1" expected_commit="$2" checksum="$3" sbom="$4" provenance="$5" expected_test="${6:-}" root entries expected_tag_object
   reject_production_overrides
   regular "$archive" archive; regular "$checksum" checksum; regular "$sbom" SBOM; regular "$provenance" provenance; oid "$expected_commit" commit
   [[ -z "$expected_test" ]] || regular "$expected_test" test-result
@@ -207,6 +210,7 @@ verify_archive() {
   [[ "$(/usr/bin/plutil -extract schema raw -o - "$provenance" 2>/dev/null)" == 'lectureboard.no-fee-provenance.v1' ]] || die 'provenance schema is not exact';
   [[ "$(/usr/bin/plutil -extract repository raw -o - "$provenance" 2>/dev/null)" == 'akiyama709/lectureboard-ai' ]] || die 'provenance repository is not exact';
   [[ "$(/usr/bin/plutil -extract tag raw -o - "$provenance" 2>/dev/null)" == "$tag_expected" ]] || die 'provenance tag is not exact';
+  expected_tag_object="$(/usr/bin/plutil -extract tagObject raw -o - "$provenance" 2>/dev/null)" || die 'provenance tag object is absent'; oid "$expected_tag_object" tag-object
   [[ "$(/usr/bin/plutil -extract commit raw -o - "$provenance" 2>/dev/null)" == "$expected_commit" ]] || die 'provenance commit is not exact';
   [[ "$(/usr/bin/plutil -extract bundleIdentifier raw -o - "$provenance" 2>/dev/null)" == "$bundle_id" && "$(/usr/bin/plutil -extract version raw -o - "$provenance" 2>/dev/null)" == "$version" ]] || die 'provenance bundle metadata is not exact';
   [[ "$(/usr/bin/plutil -extract architecture raw -o - "$provenance" 2>/dev/null)" == arm64 && "$(/usr/bin/plutil -extract signature raw -o - "$provenance" 2>/dev/null)" == 'ad hoc' ]] || die 'provenance signing metadata is not exact';
@@ -236,7 +240,7 @@ for i in z.infolist():
 if root not in seen or root+'Contents/Info.plist' not in seen: raise SystemExit(1)
 PY
   [[ $? == 0 ]] || die 'ZIP central-directory preflight failed'
-  /usr/bin/ditto -x -k --rsrc --extattr --acl "$archive" "$root" || die 'ZIP extraction failed'; [[ -d "$root/$product.app" ]] || die 'extracted application missing'; [[ -z "$(/usr/bin/find "$root" -type l -print -quit)" ]] || die 'ZIP contains a symbolic link'; verify_app "$root/$product.app" "$expected_commit";
+  /usr/bin/ditto -x -k --rsrc --extattr --acl "$archive" "$root" || die 'ZIP extraction failed'; [[ -d "$root/$product.app" ]] || die 'extracted application missing'; [[ -z "$(/usr/bin/find "$root" -type l -print -quit)" ]] || die 'ZIP contains a symbolic link'; verify_app "$root/$product.app" "$expected_commit" "$expected_tag_object";
   exe_sha="$(sha256 "$root/$product.app/Contents/MacOS/$product")"; [[ "$(/usr/bin/plutil -extract executableSha256 raw -o - "$provenance" 2>/dev/null)" == "$exe_sha" ]] || die 'provenance executable binding is not exact';
   [[ "$(/usr/bin/plutil -extract spdxVersion raw -o - "$sbom" 2>/dev/null)" == 'SPDX-2.3' && "$(/usr/bin/plutil -extract documentNamespace raw -o - "$sbom" 2>/dev/null)" == "https://github.com/akiyama709/lectureboard-ai/releases/download/v1.0.0/SBOM.spdx.json#$expected_commit" && "$(/usr/bin/plutil -extract packages.0.name raw -o - "$sbom" 2>/dev/null)" == "$product" && "$(/usr/bin/plutil -extract packages.0.versionInfo raw -o - "$sbom" 2>/dev/null)" == "$version" && "$(/usr/bin/plutil -extract packages.0.licenseDeclared raw -o - "$sbom" 2>/dev/null)" == MIT && "$(/usr/bin/plutil -extract packages.0.checksums.0.algorithm raw -o - "$sbom" 2>/dev/null)" == SHA256 && "$(/usr/bin/plutil -extract packages.0.checksums.0.checksumValue raw -o - "$sbom" 2>/dev/null)" == "$expected_sha" ]] || die 'SBOM package metadata is not exact';
   [[ "$(/usr/bin/find "$root" -mindepth 1 -maxdepth 1 -type d | /usr/bin/wc -l | tr -d ' ')" == 1 ]] || die 'ZIP contains multiple root entries'; /usr/bin/printf '%s\n' 'no-fee v1 release verification passed'

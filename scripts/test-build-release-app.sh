@@ -474,8 +474,9 @@ for required_setting in \
   '-disableAutomaticPackageResolution' \
   '-skipPackageUpdates' \
   'OTHER_CODE_SIGN_FLAGS=--timestamp' \
-  'INFOPLIST_KEY_LectureBoardReleaseCommit=' \
-  'INFOPLIST_KEY_LectureBoardReleaseTagObject='; do
+  'LECTUREBOARD_RELEASE_COMMIT=' \
+  'LECTUREBOARD_RELEASE_TAG=' \
+  'LECTUREBOARD_RELEASE_TAG_OBJECT='; do
   grep -Fq -- "$required_setting" "$builder" \
     || { printf 'Release-build script lost required setting: %s\n' "$required_setting" >&2; exit 1; }
 done

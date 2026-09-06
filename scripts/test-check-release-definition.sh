@@ -29,6 +29,8 @@ cp "$script_directory/../CHANGELOG.md" "$fixture_root/CHANGELOG.md"
 cp "$script_directory/../ROADMAP.md" "$fixture_root/ROADMAP.md"
 cp "$script_directory/../README.md" "$fixture_root/README.md"
 cp "$script_directory/../project.yml" "$fixture_root/project.yml"
+cp "$script_directory/../LectureBoardAI/Config/Info.plist" \
+  "$fixture_root/LectureBoardAI/Config/Info.plist"
 cp "$script_directory/../LectureBoardAI/Config/LectureBoardAI.entitlements" \
   "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
 cp "$script_directory/../docs/architecture.md" "$fixture_root/docs/architecture.md"

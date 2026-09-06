@@ -29,6 +29,12 @@ if ! /usr/bin/find scripts -maxdepth 1 -type f -print0 >>"$source_list"; then
   echo "Publication source enumeration failed." >&2
   exit 1
 fi
+for required_configuration in \
+  project.yml \
+  LectureBoardAI/Config/Info.plist \
+  LectureBoardAI/Config/LectureBoardAI.entitlements; do
+  printf '%s\0' "$required_configuration" >>"$source_list"
+done
 
 missing=0
 while IFS= read -r -d '' source_file; do

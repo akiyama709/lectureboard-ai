@@ -206,8 +206,8 @@ write_tree_manifest() {
 verify_reviewed_xcode_source() {
   local source_root="$1"
   local project_spec project_file project_spec_digest project_file_digest
-  local expected_project_spec_digest='e5602c1a2aeafa09b5b3f6551e010439527b6e83b8f6c129d49b8311114313f1'
-  local expected_project_file_digest='8158be2cfb5151f12eb1661ca8848a88c16ddfce7fcf6a6ed730ad500f8beb4a'
+  local expected_project_spec_digest='00764473ec28961c2c687a1afdd670c47a665b97e9c6062bd02bc0dfbe3c15fa'
+  local expected_project_file_digest='3539386b339698d7ff308e32b7ee6d2033b09de0f442139d3138b0287c03da5d'
 
   [[ -d "$source_root" && ! -L "$source_root" ]] \
     || fail 'the reviewed Xcode source root must be a non-symbolic-link directory'

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>LectureBoard AI</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LectureBoardReleaseCommit</key>
+	<string>$(LECTUREBOARD_RELEASE_COMMIT)</string>
+	<key>LectureBoardReleaseTag</key>
+	<string>$(LECTUREBOARD_RELEASE_TAG)</string>
+	<key>LectureBoardReleaseTagObject</key>
+	<string>$(LECTUREBOARD_RELEASE_TAG_OBJECT)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.education</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>LectureBoard AI uses Automation only after you explicitly start a managed PowerPoint slide show, to read its current slide identity and perform a brief reversible role check.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Tomohiro Akiyama</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>LectureBoard AI observes the selected PowerPoint window to identify slide content and unused space.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>LectureBoard AI uses speech recognition to create grounded lecture-board annotations.</string>
+</dict>
+</plist>

@@ -15,6 +15,13 @@ reject_text() {
 }
 require_text 'SBOM.spdx.json#%s'
 reject_text 'SBOM-%s.spdx.json'
+require_text 'LECTUREBOARD_RELEASE_COMMIT="$commit"'
+require_text 'LECTUREBOARD_RELEASE_TAG="$tag"'
+require_text 'LECTUREBOARD_RELEASE_TAG_OBJECT="$tag_object"'
+reject_text 'INFOPLIST_KEY_LectureBoardReleaseCommit='
+require_text '"tagObject":"%s"'
+require_text "die 'bundle tag-object provenance is not exact'"
+require_text "die 'provenance tag object is absent'"
 require_text '"entitlements":{"keys":["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"],"canonicalJsonSha256":"2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0"}'
 require_text "die 'provenance entitlement binding is not exact'"
 require_text 'packages.0.checksums.0.algorithm'
