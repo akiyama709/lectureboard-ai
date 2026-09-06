@@ -1018,3 +1018,36 @@ acceptance, Gatekeeper installation, publication, or public re-download. Recordi
 post-gate documentation-only change; the targeted documentation, release-definition, source-tracking,
 and secret and lecture-data boundary checks passed afterward before the corrected source was
 committed.
+
+The next isolated `prepare` attempt used corrected source commit
+`33519dd66e3ca4b2d619675798da94d3bcba6eeb` and local annotated-tag object
+`72621c2e320404cc5ef8677f7881fdaa1a267a7f`. The Release application compiled, and Xcode's signing
+invocation explicitly included `-o runtime`, but the no-fee verifier rejected it as missing the
+Hardened Runtime flag. No release output directory or asset was accepted. The verifier had treated
+the display forms `flags=0x10000...` or `(runtime)` as exhaustive. An ad hoc Hardened Runtime
+signature instead combines the ad hoc and runtime bits and may be displayed as
+`flags=0x10002(adhoc,runtime)`, which matches neither old text condition. This was a verifier false
+negative; the signing requirement was not weakened.
+
+The no-fee verifier now extracts exactly one hexadecimal CodeDirectory flag field and requires the
+numeric `0x10000` Hardened Runtime bit. Its regression executes that exact helper, accepts the
+single runtime value and composite `0x10002` and `0x110002` values, and rejects ad-hoc-only, zero,
+malformed, and duplicate CodeDirectory evidence. Bash syntax, the no-fee tooling regression, and
+`git diff --check` passed after the correction. A new exact source commit, annotated tag, complete
+gate, and isolated Release build are still required before this fix is treated as successful
+package evidence.
+
+The complete 26-stage prepublication gate was restarted after the numeric CodeDirectory-bit
+correction and passed in full on 2026-09-06. It again ran all 204 Core tests in 18 suites and all
+416 authoritative native app tests with zero failures, zero skips, and zero expected failures. The
+native result bundle is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_09-11-21-+0900.xcresult`;
+`xcresulttool` reports `Passed` and the same 478 per-device runs, including 76 runs produced by 14
+parameterized tests. All later artifact, package, preflight, release-code, shell-security, no-fee,
+tracked-output, secret-pattern, and lecture-data stages passed, including the executable
+CodeDirectory-bit regression. The Debug executable remained SHA-256
+`bdf7d8529d34b4ca8d376a8c185513dc2fd34504d12d0d1fbb9401b3a2a0d86b` with ad hoc CDHash
+`ca35954c25041aab8afd8a50cc329e956d02f6c6`, and strict complete-bundle verification passed. This
+is automated corrected-source evidence only. The post-gate addition of this paragraph is a
+documentation-only change; targeted documentation and data-boundary checks passed afterward. A
+new commit/tag binding and successful isolated Release rerun remain required.

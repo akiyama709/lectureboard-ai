@@ -26,6 +26,17 @@ oid() { [[ "$1" =~ ^[0-9a-fA-F]{40}$ || "$1" =~ ^[0-9a-fA-F]{64}$ ]] || die "$2 
 json_string() { [[ "$1" != *'"'* && "$1" != *$'\n'* && "$1" != *'\\'* ]] || die 'unsafe metadata value'; }
 sha256() { /usr/bin/shasum -a 256 -- "$1" | /usr/bin/awk '{print $1}'; }
 lower() { /usr/bin/tr '[:upper:]' '[:lower:]' <<<"$1"; }
+hardened_runtime_flag_is_set() {
+  local signature_details="$1" flags_hex flags_value
+  flags_hex="$(
+    /usr/bin/sed -nE \
+      's/^CodeDirectory .* flags=0x([0-9A-Fa-f]+)(\([^)]*\))?.*$/\1/p' \
+      <<<"$signature_details"
+  )" || return 1
+  [[ "$flags_hex" =~ ^[0-9A-Fa-f]+$ ]] || return 1
+  flags_value=$((16#$flags_hex))
+  (( (flags_value & 0x10000) == 0x10000 ))
+}
 
 # The receipt is a read-only, adjacent manifest emitted only after the isolated
 # approved-commit build has itself passed the full app verification boundary.
@@ -112,7 +123,7 @@ verify_app() {
     details="$(/usr/bin/codesign -d --verbose=4 "$app" 2>&1)" || die 'codesign inspection failed'
     [[ "$details" == *'Signature=adhoc'* && "$details" == *'TeamIdentifier=not set'* ]] || die 'application is not ad hoc-only signed'
     [[ "$details" != *'Authority=Developer ID'* && "$details" != *'Authority=Apple Development'* && "$details" != *'Timestamp='* ]] || die 'Developer ID, development, or timestamp signature rejected'
-    [[ "$details" == *'flags=0x10000'* || "$details" == *'(runtime)'* ]] || die 'hardened runtime flag is missing'
+    hardened_runtime_flag_is_set "$details" || die 'hardened runtime flag is missing'
     [[ "$(/usr/bin/lipo -archs "$exe" 2>/dev/null)" == 'arm64' ]] || die 'application is not thin exact arm64'
     ent="$(/usr/bin/mktemp /private/tmp/lectureboard-entitlements.XXXXXX)" || die 'entitlement staging failed'
     if ! /usr/bin/codesign -d --entitlements :- "$app" >"$ent" 2>/dev/null; then /bin/unlink "$ent"; die 'entitlement inspection failed'; fi
@@ -136,7 +147,7 @@ if d != expected: raise SystemExit(1)' >/dev/null; then
       nested_details="$(/usr/bin/codesign -d --verbose=4 "$component" 2>&1)" || die 'nested executable signature inspection failed'
       [[ "$nested_details" == *'Signature=adhoc'* && "$nested_details" == *'TeamIdentifier=not set'* ]] || die 'nested executable is not ad hoc-only signed'
       [[ "$nested_details" != *'Authority=Developer ID'* && "$nested_details" != *'Authority=Apple Development'* && "$nested_details" != *'Timestamp='* ]] || die 'nested Developer ID, development, or timestamp signature rejected'
-      [[ "$nested_details" == *'flags=0x10000'* || "$nested_details" == *'(runtime)'* ]] || die 'nested executable hardened runtime flag is missing'
+      hardened_runtime_flag_is_set "$nested_details" || die 'nested executable hardened runtime flag is missing'
       [[ "$nested_details" != *'get-task-allow'* && "$nested_details" != *'com.apple.security.cs.debugger'* ]] || die 'nested development entitlement present'
     done <<< "$components"
   }
