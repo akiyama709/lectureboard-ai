@@ -1799,3 +1799,42 @@ check confirmed one exact synthetic presentation and zero slide shows. No new pe
 TCC reset or security-setting change was made. Temporary idle-sleep inhibition was active but
 does not unlock a session. The next live step requires the owner to unlock macOS; the synthetic
 managed challenge must then pass before returning to the owner's mock lecture.
+
+### 2026-09-06 22:26–22:56 bounded live investigation (not acceptance)
+
+The owner authorized a maximum 30-minute investigation. The session was unlocked. Using only
+the exact synthetic deck, the integrated diagnostic passed Stage A but rejected Stage B at
+`otherWindowChanged`. The cropped auxiliary and full-buffer primary each had only 544 of 576
+samples below luminance 16 in black mode. Separate retained-object black/white screenshots
+confirmed a persistent title bar and letterboxing. On their identical 32-by-18 sample grids,
+510 samples changed and all 510 coherently changed from black to white. Thus the whole-window
+98-percent monochrome assumption does not represent even this normal windowed layout.
+
+A bounded intermediate Core correction applies only with strict geometry disambiguation:
+preliminary tone coverage must be at least 50 percent; at least 50 percent of all samples must
+change between the black/white pair; at least the configured 98 percent of changed samples
+must satisfy both tone endpoints. Unchanged pixels are not positive evidence. Any responsive
+auxiliary must pass the same paired test; otherwise it must retain its exact baseline. The
+legacy no-geometry path retains whole-frame classification. Complete inventory, exact geometry,
+phase order, freshness, repeated observations and exact restoration remain required.
+Two added tests exercise both nonce orders, fixed chrome, small responsive patches that pass
+both preliminary tone checks, incoherent/reversed pairs, auxiliary-only incoherence, incomplete
+proof and failed restoration. Core passed 242 tests in 18 suites; native App passed 476 tests in
+41 suites at `Test-LectureBoardAI-2026.09.06_22-41-51-+0900.xcresult`. Release-tool count contracts
+and an explicit Core 243 negative fixture were synchronized; the boundary suite passed.
+
+This correction did NOT complete the live workflow. The paired trial still rejected the
+auxiliary. Later trials rejected before pair comparison because fewer than half of auxiliary
+samples met the white endpoint. The final actual delivered primary image was 1280-by-1410,
+with a large vertically letterboxed slide; its surface tuple was full-buffer, scale factor 1,
+content scale 1. This establishes the changed window layout, not what caused that layout change.
+Alpha blending of the miniature remains a hypothesis requiring measured paired values; a
+proposed directional-coherence alternative was not implemented. No thresholds were subsequently
+tuned to force success. Every completed failed start was followed by an independent zero-show
+check. Live trials ended at approximately 22:51 for cleanup and recording within the timebox.
+
+The one-frame image-saving instrumentation existed only in the ignored synthetic diagnostic
+copy and was removed afterward. Logs, synthetic screenshots and probe sources are retained in
+the external verification directory. This is not a managed-session success, owner lecture,
+microphone-to-board, complete 26-stage gate, final archive or publication result. Next work must
+resolve content-area/auxiliary role evidence before any claim about automatic-boarding quality.

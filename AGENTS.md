@@ -93,6 +93,13 @@ Implemented:
   final 26-stage, exact-commit or public-release evidence. See the latest handoff and verification
   entries before resuming; do not repeat screen-recording permission changes.
 
+- After unlock, a 30-minute synthetic live investigation still failed Stage B role evidence.
+  A geometry-only paired-tone correction passed 242 Core tests/18 suites and 476 App tests/41
+  suites at `Test-LectureBoardAI-2026.09.06_22-41-51-+0900.xcresult`, but live auxiliary proof
+  remains unsuccessful. Title bars, letterboxing and a later 1280-by-1410 window layout affect
+  the current tone checks. Do not treat the intermediate paired policy as a verified live fix
+  or resume repeated permission changes. See the latest bounded-investigation record.
+
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.

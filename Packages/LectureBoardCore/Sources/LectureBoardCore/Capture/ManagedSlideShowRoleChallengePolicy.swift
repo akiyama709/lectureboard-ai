@@ -550,7 +550,8 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
         guard let current = inventory[windowID], let baseline = baselineInventory[windowID],
           let fingerprint = current.fingerprint,
           current.isOnScreen,
-          Self.sameVisualEvidence(current, baseline) || classifies(fingerprint, as: tone)
+          Self.sameVisualEvidence(current, baseline)
+            || classifiesAtLeastHalf(fingerprint, as: tone)
         else { return fail(.otherWindowChanged) }
       }
       let phaseEvidence = observations + [observation]
@@ -575,8 +576,7 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
             let whiteFingerprint = white?.fingerprint,
             black?.isOnScreen == true,
             white?.isOnScreen == true,
-            classifies(blackFingerprint, as: .black),
-            classifies(whiteFingerprint, as: .white)
+            hasPairedCausalSignature(black: blackFingerprint, white: whiteFingerprint)
           else { return fail(.otherWindowChanged) }
         }
       }
@@ -651,7 +651,7 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
       return true
     case (.pixelNonce, .pixelBlack):
       guard let candidate, let fingerprint = candidate.fingerprint, candidate.isOnScreen,
-        classifies(fingerprint, as: .black),
+        validatePixelTone(fingerprint, as: .black, candidateIdentity: candidate.identity),
         observation.semanticState.currentViewState == .blackScreen
       else {
         return fail(.wrongVisualSignature)
@@ -660,12 +660,8 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
       guard let candidate, let fingerprint = candidate.fingerprint else {
         return fail(.inventoryMalformed)
       }
-      let black = observations.first { $0.phase == .pixelBlack }
-      let blackFingerprint = black.flatMap {
-        $0.windows.first { $0.identity == candidate.identity }?.fingerprint
-      }
-      guard candidate.isOnScreen, classifies(fingerprint, as: .white),
-        fingerprint != blackFingerprint,
+      guard candidate.isOnScreen,
+        validatePixelTone(fingerprint, as: .white, candidateIdentity: candidate.identity),
         observation.semanticState.currentViewState == .whiteScreen
       else {
         return fail(.wrongVisualSignature)
@@ -957,6 +953,75 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
     }
     return Double(matchingCount) / Double(fingerprint.luminance.count)
       >= configuration.minimumCoverage
+  }
+
+  private func classifiesAtLeastHalf(
+    _ fingerprint: FrameFingerprint,
+    as tone: PixelTone
+  ) -> Bool {
+    matchingFraction(fingerprint, as: tone) >= 0.5
+  }
+
+  private func matchingFraction(_ fingerprint: FrameFingerprint, as tone: PixelTone) -> Double {
+    guard fingerprint.isValid else { return 0 }
+    let matchingCount = fingerprint.luminance.reduce(into: 0) { count, luminance in
+      switch tone {
+      case .black where luminance <= configuration.blackLuminanceCeiling:
+        count += 1
+      case .white where luminance >= configuration.whiteLuminanceFloor:
+        count += 1
+      default:
+        break
+      }
+    }
+    return Double(matchingCount) / Double(fingerprint.luminance.count)
+  }
+
+  private func validatePixelTone(
+    _ fingerprint: FrameFingerprint,
+    as tone: PixelTone,
+    candidateIdentity: ManagedSlideShowWindowIdentity
+  ) -> Bool {
+    guard usesGeometryDisambiguation else { return classifies(fingerprint, as: tone) }
+    guard classifiesAtLeastHalf(fingerprint, as: tone) else { return false }
+    let oppositePhase: ManagedSlideShowRoleChallengePhase
+    switch tone {
+    case .black: oppositePhase = .pixelWhite
+    case .white: oppositePhase = .pixelBlack
+    }
+    guard
+      let opposite = observations.last(where: { $0.phase == oppositePhase })?.windows.first(
+        where: { $0.identity == candidateIdentity }
+      )?.fingerprint
+    else { return true }
+    switch tone {
+    case .black: return hasPairedCausalSignature(black: fingerprint, white: opposite)
+    case .white: return hasPairedCausalSignature(black: opposite, white: fingerprint)
+    }
+  }
+
+  private func hasPairedCausalSignature(
+    black: FrameFingerprint,
+    white: FrameFingerprint
+  ) -> Bool {
+    guard black.isValid, white.isValid,
+      black.sampleColumns == white.sampleColumns,
+      black.sampleRows == white.sampleRows,
+      black.luminance.count == white.luminance.count
+    else { return false }
+    var changedCount = 0
+    var matchingChangedCount = 0
+    for (blackValue, whiteValue) in zip(black.luminance, white.luminance)
+    where blackValue != whiteValue {
+      changedCount += 1
+      if blackValue <= configuration.blackLuminanceCeiling,
+        whiteValue >= configuration.whiteLuminanceFloor
+      {
+        matchingChangedCount += 1
+      }
+    }
+    guard Double(changedCount) / Double(black.luminance.count) >= 0.5 else { return false }
+    return Double(matchingChangedCount) / Double(changedCount) >= configuration.minimumCoverage
   }
 
   private static func repeatEquivalent(

@@ -656,12 +656,95 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     #expect(run(method: .pixelNonce, observations: notRestored) == .rejected(.restorationFailed))
   }
 
+  @Test func geometryPixelNonceUsesPairedCausalSignatureInBothNonceOrders() {
+    for nonce in [UInt64(40), 41] {
+      #expect(
+        run(
+          method: .pixelNonce,
+          observations: causalGeometryTranscript(challengeNonce: nonce),
+          challengeNonce: nonce
+        )
+          == .succeeded(freshnessBoundaryMachAbsoluteTime: 420)
+      )
+    }
+
+    let legacy = causalGeometryTranscript(challengeNonce: 40, includesGeometry: false)
+    #expect(run(method: .pixelNonce, observations: legacy) == .rejected(.otherWindowChanged))
+  }
+
+  @Test func geometryPixelNonceRejectsSmallInconsistentReversedAndUnrestoredChanges() {
+    let smallBlack =
+      Array(repeating: UInt8(0), count: 49)
+      + Array(repeating: UInt8(100), count: 51)
+    let inconsistentWhite =
+      Array(repeating: UInt8(255), count: 58)
+      + Array(repeating: UInt8(200), count: 2)
+      + Array(repeating: UInt8(100), count: 40)
+    let reversedBlack =
+      Array(repeating: UInt8(255), count: 60)
+      + Array(repeating: UInt8(100), count: 40)
+    let narrowChangeBlack =
+      Array(repeating: UInt8(0), count: 75)
+      + Array(repeating: UInt8(255), count: 25)
+    let narrowChangeWhite =
+      Array(repeating: UInt8(255), count: 49)
+      + Array(repeating: UInt8(0), count: 26)
+      + Array(repeating: UInt8(255), count: 25)
+
+    var small = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(&small, phase: .pixelBlack, luminance: smallBlack)
+    #expect(run(method: .pixelNonce, observations: small) == .rejected(.wrongVisualSignature))
+
+    var inconsistent = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(&inconsistent, phase: .pixelWhite, luminance: inconsistentWhite)
+    #expect(
+      run(method: .pixelNonce, observations: inconsistent) == .rejected(.wrongVisualSignature)
+    )
+
+    var reversed = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(&reversed, phase: .pixelBlack, luminance: reversedBlack)
+    #expect(run(method: .pixelNonce, observations: reversed) == .rejected(.wrongVisualSignature))
+
+    var narrowChange = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(&narrowChange, phase: .pixelBlack, luminance: narrowChangeBlack)
+    replacePhaseFingerprint(&narrowChange, phase: .pixelWhite, luminance: narrowChangeWhite)
+    #expect(
+      run(method: .pixelNonce, observations: narrowChange) == .rejected(.wrongVisualSignature)
+    )
+
+    var inconsistentAuxiliary = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(
+      &inconsistentAuxiliary,
+      phase: .pixelWhite,
+      luminance: inconsistentWhite,
+      windowID: 10
+    )
+    #expect(
+      run(method: .pixelNonce, observations: inconsistentAuxiliary)
+        == .rejected(.otherWindowChanged)
+    )
+
+    var unrestored = causalGeometryTranscript(challengeNonce: 40)
+    replacePhaseFingerprint(
+      &unrestored,
+      phase: .pixelRunningRestored,
+      luminance: Array(repeating: 99, count: 100)
+    )
+    #expect(run(method: .pixelNonce, observations: unrestored) == .rejected(.restorationFailed))
+
+    let partial = Array(causalGeometryTranscript(challengeNonce: 40).dropLast())
+    #expect(run(method: .pixelNonce, observations: partial) == .rejected(.incompleteChallenge))
+  }
+
   private func run(
     method: ManagedSlideShowRoleChallengeMethod,
-    observations: [ManagedSlideShowRoleChallengeObservation]
+    observations: [ManagedSlideShowRoleChallengeObservation],
+    challengeNonce: UInt64 = 40
   ) -> ManagedSlideShowRoleChallengeEvent {
     var policy = ManagedSlideShowRoleChallengePolicy()
-    #expect(policy.begin(target: target(), method: method) == .started)
+    #expect(
+      policy.begin(target: target(challengeNonce: challengeNonce), method: method) == .started
+    )
     for evidence in observations {
       let event = policy.ingest(evidence)
       if case .rejected = event { return event }
@@ -702,6 +785,70 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     }
   }
 
+  private func causalGeometryTranscript(
+    challengeNonce: UInt64,
+    includesGeometry: Bool = true
+  ) -> [ManagedSlideShowRoleChallengeObservation] {
+    let geometry = ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 1_600, height: 900)
+    let auxiliaryGeometry = ManagedSlideShowWindowGeometry(left: 10, top: 20, width: 66, height: 20)
+    let baseline = Array(repeating: UInt8(100), count: 100)
+    let black =
+      Array(repeating: UInt8(0), count: 60)
+      + Array(repeating: UInt8(100), count: 40)
+    let white =
+      Array(repeating: UInt8(255), count: 60)
+      + Array(repeating: UInt8(100), count: 40)
+    let phases: [ManagedSlideShowRoleChallengePhase] =
+      challengeNonce.isMultiple(of: 2)
+      ? [.baseline, .pixelBlack, .pixelWhite, .pixelRunningRestored]
+      : [.baseline, .pixelWhite, .pixelBlack, .pixelRunningRestored]
+    return phases.enumerated().flatMap { phaseIndex, phase in
+      let luminance = phase == .pixelBlack ? black : phase == .pixelWhite ? white : baseline
+      return [0, 1].map {
+        observation(
+          method: .pixelNonce,
+          phase: phase,
+          nonce: challengeNonce + UInt64(phaseIndex),
+          repeatIndex: $0,
+          commandReplyTime: UInt64((phaseIndex + 1) * 100),
+          candidateFingerprint: luminance,
+          otherFingerprint: luminance,
+          semanticGeometry: includesGeometry ? geometry : nil,
+          candidateGeometry: includesGeometry ? geometry : nil,
+          otherGeometry: includesGeometry ? auxiliaryGeometry : nil
+        )
+      }
+    }
+  }
+
+  private func replacePhaseFingerprint(
+    _ evidence: inout [ManagedSlideShowRoleChallengeObservation],
+    phase: ManagedSlideShowRoleChallengePhase,
+    luminance: [UInt8],
+    windowID: Int = 20
+  ) {
+    for index in evidence.indices where evidence[index].phase == phase {
+      let prior = evidence[index]
+      evidence[index] = observation(
+        method: .pixelNonce,
+        phase: prior.phase,
+        nonce: prior.nonce,
+        repeatIndex: index.isMultiple(of: 2) ? 0 : 1,
+        commandReplyTime: prior.commandReplyMachAbsoluteTime,
+        candidateFingerprint: windowID == 20
+          ? luminance
+          : prior.windows.first(where: { $0.identity.windowID == 20 })?.fingerprint?.luminance,
+        otherFingerprint: windowID == 10
+          ? luminance
+          : prior.windows.first(where: { $0.identity.windowID == 10 })?.fingerprint?.luminance,
+        semanticGeometry: prior.semanticState.windowGeometry,
+        candidateGeometry: prior.windows.first(where: { $0.identity.windowID == 20 })?
+          .windowGeometry,
+        otherGeometry: prior.windows.first(where: { $0.identity.windowID == 10 })?.windowGeometry
+      )
+    }
+  }
+
   private func target(challengeNonce: UInt64 = 40) -> ManagedSlideShowRoleChallengeTarget {
     ManagedSlideShowRoleChallengeTarget(
       bindingSessionToken: "session",
@@ -735,8 +882,10 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     candidateDisplayTime: UInt64? = nil,
     candidateOnScreen: Bool? = nil,
     candidateLuminance: UInt8? = nil,
+    candidateFingerprint: [UInt8]? = nil,
     candidateAbsent: Bool = false,
     otherLuminance: UInt8 = 80,
+    otherFingerprint: [UInt8]? = nil,
     otherDisplayTime: UInt64? = nil,
     presentationSaved: Bool = true,
     inventoryIsComplete: Bool = true,
@@ -761,7 +910,9 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     let candidate = ManagedSlideShowRoleWindowEvidence(
       identity: identity(candidateWindowID),
       fingerprint: candidateIsOnScreen
-        ? fingerprint(candidateLuminance ?? defaults.luminance) : nil,
+        ? candidateFingerprint.map(fingerprint)
+          ?? fingerprint(candidateLuminance ?? defaults.luminance)
+        : nil,
       isOnScreen: candidateIsOnScreen,
       displayTime: candidateIsOnScreen ? resolvedCandidateDisplayTime : nil,
       deliveryProvenance: !candidateIsOnScreen || omitCandidateDeliveryProvenance
@@ -799,7 +950,7 @@ struct ManagedSlideShowRoleChallengePolicyTests {
       windows: [
         ManagedSlideShowRoleWindowEvidence(
           identity: identity(10),
-          fingerprint: fingerprint(otherLuminance),
+          fingerprint: otherFingerprint.map(fingerprint) ?? fingerprint(otherLuminance),
           isOnScreen: true,
           displayTime: otherDisplayTime ?? observed,
           deliveryProvenance: provenance(
@@ -836,6 +987,10 @@ struct ManagedSlideShowRoleChallengePolicyTests {
   private func fingerprint(_ luminance: UInt8) -> FrameFingerprint {
     FrameFingerprint(
       sampleColumns: 2, sampleRows: 2, luminance: Array(repeating: luminance, count: 4))
+  }
+
+  private func fingerprint(_ luminance: [UInt8]) -> FrameFingerprint {
+    FrameFingerprint(sampleColumns: 10, sampleRows: 10, luminance: luminance)
   }
 
   private func provenance(

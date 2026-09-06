@@ -4,6 +4,8 @@
 
 ## 最新の再開点（2026年9月6日22時台）
 
+　22時26分からの30分限定試験では，ロック解除後も管理開始がStage Bの補助窓判定で失敗した．タイトルバーと余白の影響を再現し，geometry照合済み経路に限定した黒白pair判定の中間修正を追加した．Core 242件・18 suite，App 476件・41 suite及び公開ツール境界testは合格したが，実機の役割確認は依然失敗する．最後の取得画像は1280×1410の縦長窓で大きな上下余白を含んだ．22時51分頃に実機試行を終了し，復元・終了と記録へ移った．実発話→可視板書は未到達であり，追加の閾値調整で成功扱いにしない．次は取得領域・補助窓の扱いを解決する必要がある．詳細はbuild-verification末尾を参照する．
+
 　最新のworking treeはCore 240件・18 suite，App 476件・41 suiteの全テストに合格した．`make doctor`は失敗・警告0件，`make local-setup`と公開ツール境界テストも成功した．native resultは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_22-17-02-+0900.xcresult`である．正確な返却slide-show参照と現在の全ウィンドウ矩形の照合，及び補助窓のSDK contentRect内だけを使う指紋処理を追加した．矩形だけで対象を推定するfallbackではなく，既存pixel challenge，完全なinventory，freshness及び復元検査を併用する．
 
 　統合診断Appはbuildできたが，GUI操作前にmacOSのロック状態を確認したため，修正後のmanaged challengeは未実行である．診断Appは通常終了し，PowerPointは合成資料1件・slide show 0件を確認した．次はMac本体でロック解除後，合成資料で管理スライドショーを検証する．画面収録の設定変更を繰り返さない．実発話から可視板書までの所有者模擬講義，通常起動の権限持続，最終26段階gate及び公開・公開後検証は未完了である．詳細は`docs/build-verification.md`末尾と指定Obsidian開発ノートにある．
