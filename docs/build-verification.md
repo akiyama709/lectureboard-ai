@@ -1609,3 +1609,44 @@ The complete native working-tree run at
 passed 459 tests in 40 suites. The added compatibility and localized failure-message assertions
 extend existing tests, so the test count did not increase. None of these results substitutes for
 the final clean exact-commit release evidence transaction.
+
+### Windowed-show editing-window transition diagnosis on 2026-09-06
+
+The separately fixed `b7c8a608f827fed269579c4289bb46a2f2916df5` arm64 Release app has
+executable SHA-256 `86506f5dd84fbb631d352993c2497b0124615195d7af7b466478874c52298e81`,
+CDHash `01297b1cccada6f72c89bdef84dc63967ccdfe92`, valid strict bundle signing and
+`0x10002(adhoc,runtime)` flags. Its embedded commit matches; both tag fields are `UNBOUND`.
+The managed App transaction still failed, but this time PowerPoint returned to zero slide shows
+without manual exit. This confirms narrow failed-start cleanup, not successful managed capture.
+
+An explicitly instrumented, non-release copy of that checkpoint recorded only bounded failure
+enums. It identified `frozenWindowUnavailable` during the post-start composite observation,
+surfaced as Stage A `postStartReadFailed` and transaction `stageAFailed`. The initial editing
+window was no longer present in the on-screen ScreenCaptureKit inventory after windowed-show
+start. The fixed source required it to remain in every later inventory, so it rejected this
+PowerPoint transition. The diagnostic copy has `UNBOUND` provenance and is not a release artifact.
+
+A separate synthetic retained-object scalar probe read one-byte Boolean visibility and saved
+state, a four-byte running-state enumeration, and four-byte positive slide ID/index values, then
+exited the exact retained show. A separate count check found one presentation and zero shows.
+Its log SHA-256 is `c6fab69a8e79b3f9fecbe2545c1353f2e0c6fc9b22a70770836d135635409d44`.
+It does not establish stable semantic polling, writable visibility, role challenge, visible ink,
+or successful App capture.
+
+The transition correction adds an explicit baseline/post-start observation phase and permits the
+frozen editing window to be absent only post-start after the actual returned show object has
+been retained. The Core target may name that exact baseline identity; other baseline identities,
+one newly added candidate, exact repeated inventory, and later role proof remain mandatory.
+Generic callers without the optional frozen identity retain the original stricter policy.
+Core regressions passed 237 tests in 18 suites. The first native run caught two issues: baseline
+validation order changed the existing failure classification, and the earlier authorization
+helper still independently required the frozen window during post-start observation. Both were
+corrected without changing pre-start requirements. That failed run is not a successful
+checkpoint. Native revalidation and a new fixed-app trial remain required.
+
+The corrected complete native run at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_20-45-54-+0900.xcresult`
+passed 460 tests in 40 suites. A disposable-copy query independently confirmed 460 authoritative
+tests, 522 device runs, 14 parameterized tests/76 runs, and zero failures, skips or expected
+failures. Along with the 237-test/18-suite Core run, this verifies the new transition policy's
+deterministic tests only. The fixed application has not yet exercised the corrected transition.

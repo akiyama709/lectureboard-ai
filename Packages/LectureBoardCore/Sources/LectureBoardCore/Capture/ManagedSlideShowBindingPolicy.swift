@@ -66,19 +66,25 @@ public struct ManagedSlideShowInventoryObservation: Equatable, Sendable {
 }
 
 /// The exact process and bundle frozen for one managed slide-show start attempt.
+///
+/// Production may additionally provide the exact editing window frozen before start. Generic
+/// callers that omit it retain the original strict rule that every baseline window must remain.
 public struct ManagedSlideShowBindingTarget: Equatable, Sendable {
   public let bindingSessionToken: String
   public let processIdentifier: Int
   public let bundleIdentifier: String
+  public let frozenWindowIdentity: ManagedSlideShowWindowIdentity?
 
   public init(
     bindingSessionToken: String,
     processIdentifier: Int,
-    bundleIdentifier: String
+    bundleIdentifier: String,
+    frozenWindowIdentity: ManagedSlideShowWindowIdentity? = nil
   ) {
     self.bindingSessionToken = bindingSessionToken
     self.processIdentifier = processIdentifier
     self.bundleIdentifier = bundleIdentifier
+    self.frozenWindowIdentity = frozenWindowIdentity
   }
 }
 
@@ -134,7 +140,9 @@ public enum ManagedSlideShowBindingEvent: Equatable, Sendable {
 /// baseline must also show zero scripting slide-show windows. A post-start observation becomes a
 /// candidate only when scripting changes to exactly one slide-show window and the exact-window
 /// inventory retains every baseline identity while adding exactly one previously absent ID for
-/// the frozen process and bundle. The complete post-start inventory must then repeat unchanged
+/// the frozen process and bundle. When the target explicitly carries the exact frozen editing
+/// window, only that one identity may disappear as the windowed show opens; all other baseline
+/// identities remain mandatory. The complete post-start inventory must then repeat unchanged
 /// before the correlation is established. Any contradictory evidence latches its first bounded
 /// rejection until ``reset()``.
 ///
@@ -195,6 +203,11 @@ public struct ManagedSlideShowBindingPolicy: Equatable, Sendable {
     case .failure(let rejection):
       return reject(rejection)
     case .success(let inventory):
+      if let frozenWindowIdentity = target.frozenWindowIdentity,
+        inventory[frozenWindowIdentity.windowID] != frozenWindowIdentity
+      {
+        return reject(.baselineWindowMissing)
+      }
       self.target = target
       baselineInventory = inventory
       acceptFreshness(of: baseline)
@@ -273,7 +286,7 @@ public struct ManagedSlideShowBindingPolicy: Equatable, Sendable {
       }
       return .awaitingSlideShowStart
     case 1:
-      guard baselineIsRetained(in: inventory) else {
+      guard requiredBaselineIsRetained(in: inventory) else {
         return reject(.baselineWindowMissing)
       }
 
@@ -299,7 +312,7 @@ public struct ManagedSlideShowBindingPolicy: Equatable, Sendable {
     inventory: [Int: ManagedSlideShowWindowIdentity]
   ) -> ManagedSlideShowBindingEvent {
     guard scriptingEvidence.slideShowWindowCount == 1,
-      baselineIsRetained(in: inventory),
+      requiredBaselineIsRetained(in: inventory),
       inventory == candidateInventory,
       let candidateWindowIdentity
     else {
@@ -326,11 +339,14 @@ public struct ManagedSlideShowBindingPolicy: Equatable, Sendable {
     return .stable(confirmedCandidateWindowIdentity)
   }
 
-  private func baselineIsRetained(
+  private func requiredBaselineIsRetained(
     in inventory: [Int: ManagedSlideShowWindowIdentity]
   ) -> Bool {
     baselineInventory.allSatisfy { windowID, identity in
-      inventory[windowID] == identity
+      if identity == target?.frozenWindowIdentity, inventory[windowID] == nil {
+        return true
+      }
+      return inventory[windowID] == identity
     }
   }
 
@@ -379,9 +395,15 @@ public struct ManagedSlideShowBindingPolicy: Equatable, Sendable {
   }
 
   private static func isValid(_ target: ManagedSlideShowBindingTarget) -> Bool {
-    !target.bindingSessionToken.isEmpty
-      && target.processIdentifier > 0
-      && !target.bundleIdentifier.isEmpty
+    guard
+      !target.bindingSessionToken.isEmpty
+        && target.processIdentifier > 0
+        && !target.bundleIdentifier.isEmpty
+    else { return false }
+    guard let frozen = target.frozenWindowIdentity else { return true }
+    return frozen.windowID > 0
+      && frozen.processIdentifier == target.processIdentifier
+      && frozen.bundleIdentifier == target.bundleIdentifier
   }
 
   private static func isValid(_ evidence: ManagedSlideShowScriptingEvidence) -> Bool {

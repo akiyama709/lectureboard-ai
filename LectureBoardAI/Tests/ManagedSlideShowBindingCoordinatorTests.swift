@@ -17,8 +17,8 @@ struct ManagedSlideShowBindingCoordinatorTests {
     let reader = ScriptedManagedObservationReader(
       steps: [
         .observation(count: 0, windows: [baselineWindow]),
-        .observation(count: 1, windows: [baselineWindow, slideShowWindow]),
-        .observation(count: 1, windows: [slideShowWindow, baselineWindow]),
+        .observation(count: 1, windows: [slideShowWindow]),
+        .observation(count: 1, windows: [slideShowWindow]),
       ]
     )
     let starter = RecordingManagedSlideShowStarter()
@@ -51,6 +51,9 @@ struct ManagedSlideShowBindingCoordinatorTests {
       await Set(reader.bindingSessionTokens) == Set([candidate.bindingSessionToken])
     )
     #expect(await waiter.waitCount == 1)
+    #expect(
+      await reader.requests.map(\.phase) == [.baseline, .postStart, .postStart]
+    )
   }
 
   @Test func malformedOrMismatchedExternalContextFailsBeforeAnyClientCall() async throws {

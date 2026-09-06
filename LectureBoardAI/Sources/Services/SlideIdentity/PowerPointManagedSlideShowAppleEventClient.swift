@@ -410,7 +410,16 @@ actor PowerPointManagedSlideShowAppleEventClient:
     try validateConfiguration()
     try validateObservationRequest(request)
     try checkOperation(operationToken)
-    try await requireAuthorizedTarget(operationToken: operationToken)
+
+    let permitsFrozenWindowAbsence =
+      request.phase == .postStart && retainedSlideShowObject != nil
+    if request.phase == .postStart, !permitsFrozenWindowAbsence {
+      throw PowerPointManagedSlideShowAppleEventClientFailure.exactObjectUnavailable
+    }
+    try await requireAuthorizedTarget(
+      operationToken: operationToken,
+      requireFrozenWindow: !permitsFrozenWindowAbsence
+    )
 
     let firstActivePresentationCount = try readCount(
       .presentation,
@@ -423,7 +432,7 @@ actor PowerPointManagedSlideShowAppleEventClient:
 
     let windows = try await readValidatedWindowInventory(
       operationToken: operationToken,
-      requireFrozenWindow: true
+      requireFrozenWindow: !permitsFrozenWindowAbsence
     )
 
     let secondActivePresentationCount = try readCount(
@@ -1059,11 +1068,14 @@ actor PowerPointManagedSlideShowAppleEventClient:
     }
   }
 
-  private func requireAuthorizedTarget(operationToken: UUID) async throws {
+  private func requireAuthorizedTarget(
+    operationToken: UUID,
+    requireFrozenWindow: Bool = true
+  ) async throws {
     try await requireExactTargetIdentity(operationToken: operationToken)
     _ = try await readValidatedWindowInventory(
       operationToken: operationToken,
-      requireFrozenWindow: true
+      requireFrozenWindow: requireFrozenWindow
     )
     let state = await permissionChecker.passivePreflight(
       target: PowerPointAutomationPermissionTarget(

@@ -28,12 +28,18 @@ struct ManagedSlideShowSessionContext: Equatable, Sendable {
 }
 
 /// One coordinator-owned request for a fresh composite observation.
+enum ManagedSlideShowCompositeObservationPhase: Equatable, Sendable {
+  case baseline
+  case postStart
+}
+
 struct ManagedSlideShowCompositeObservationRequest: Equatable, Sendable {
   let bindingSessionToken: String
   let processIdentifier: pid_t
   let bundleIdentifier: String
   let freshObservationToken: String
   let requestStartedMachAbsoluteTime: UInt64
+  let phase: ManagedSlideShowCompositeObservationPhase
 }
 
 /// Reads one independently bracketed PowerPoint/ScreenCaptureKit observation.
@@ -339,10 +345,19 @@ actor ManagedSlideShowBindingCoordinator {
       lastClockMachAbsoluteTime = bracketed.completionMachAbsoluteTime
     }
 
+    let frozenManagedIdentity = ManagedSlideShowWindowIdentity(
+      windowID: Int(frozenIdentity.windowID),
+      processIdentifier: Int(frozenIdentity.ownerProcessID),
+      bundleIdentifier: frozenIdentity.bundleIdentifier
+    )
+    guard baseline.windows.contains(frozenManagedIdentity) else {
+      return failed(.frozenWindowUnavailable)
+    }
     let target = ManagedSlideShowBindingTarget(
       bindingSessionToken: bindingSessionToken,
       processIdentifier: Int(frozenIdentity.ownerProcessID),
-      bundleIdentifier: frozenIdentity.bundleIdentifier
+      bundleIdentifier: frozenIdentity.bundleIdentifier,
+      frozenWindowIdentity: frozenManagedIdentity
     )
     var policy = ManagedSlideShowBindingPolicy()
     switch policy.begin(target: target, baseline: baseline) {
@@ -352,14 +367,6 @@ actor ManagedSlideShowBindingCoordinator {
       return failed(.policyRejected(rejection))
     default:
       return failed(.policyRejected(.notStarted))
-    }
-    let frozenManagedIdentity = ManagedSlideShowWindowIdentity(
-      windowID: Int(frozenIdentity.windowID),
-      processIdentifier: Int(frozenIdentity.ownerProcessID),
-      bundleIdentifier: frozenIdentity.bundleIdentifier
-    )
-    guard baseline.windows.contains(frozenManagedIdentity) else {
-      return failed(.frozenWindowUnavailable)
     }
     guard !Task.isCancelled else { return failed(.cancelled) }
 
@@ -547,7 +554,8 @@ actor ManagedSlideShowBindingCoordinator {
       processIdentifier: frozenIdentity.ownerProcessID,
       bundleIdentifier: frozenIdentity.bundleIdentifier,
       freshObservationToken: UUID().uuidString,
-      requestStartedMachAbsoluteTime: requestStartedMachAbsoluteTime
+      requestStartedMachAbsoluteTime: requestStartedMachAbsoluteTime,
+      phase: baseline ? .baseline : .postStart
     )
     let observation: ManagedSlideShowInventoryObservation
     do {

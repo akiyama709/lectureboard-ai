@@ -438,6 +438,94 @@ struct ManagedSlideShowBindingPolicyTests {
     )
   }
 
+  @Test func permitsOnlyTheExactFrozenWindowToDisappearAfterStart() {
+    let frozen = window(10)
+    let otherBaseline = window(11)
+    let candidate = window(20)
+
+    var accepted = ManagedSlideShowBindingPolicy()
+    #expect(
+      accepted.begin(
+        target: target(frozenWindowIdentity: frozen),
+        baseline: observation(count: 0, windows: [frozen, otherBaseline])
+      ) == .baselineAccepted
+    )
+    #expect(
+      accepted.ingest(observation(count: 1, windows: [otherBaseline, candidate]))
+        == .candidateAccepted(candidate)
+    )
+    #expect(
+      accepted.ingest(
+        observation(
+          count: 1,
+          freshnessSequence: 3,
+          windows: [candidate, otherBaseline]
+        )
+      ) == .candidateConfirmed(candidate)
+    )
+
+    var otherLoss = ManagedSlideShowBindingPolicy()
+    _ = otherLoss.begin(
+      target: target(frozenWindowIdentity: frozen),
+      baseline: observation(count: 0, windows: [frozen, otherBaseline])
+    )
+    #expect(
+      otherLoss.ingest(observation(count: 1, windows: [frozen, candidate]))
+        == .rejected(.baselineWindowMissing)
+    )
+
+    var multipleLoss = ManagedSlideShowBindingPolicy()
+    _ = multipleLoss.begin(
+      target: target(frozenWindowIdentity: frozen),
+      baseline: observation(count: 0, windows: [frozen, otherBaseline])
+    )
+    #expect(
+      multipleLoss.ingest(observation(count: 1, windows: [candidate]))
+        == .rejected(.baselineWindowMissing)
+    )
+
+    var reappearance = ManagedSlideShowBindingPolicy()
+    _ = reappearance.begin(
+      target: target(frozenWindowIdentity: frozen),
+      baseline: observation(count: 0, windows: [frozen, otherBaseline])
+    )
+    _ = reappearance.ingest(observation(count: 1, windows: [otherBaseline, candidate]))
+    #expect(
+      reappearance.ingest(
+        observation(
+          count: 1,
+          freshnessSequence: 3,
+          windows: [frozen, otherBaseline, candidate]
+        )
+      ) == .rejected(.candidateEvidenceChanged)
+    )
+  }
+
+  @Test func optionalFrozenIdentityMustMatchTheTargetAndBaselineExactly() {
+    let frozen = window(10)
+
+    for malformedFrozen in [
+      window(10, processIdentifier: 777),
+      window(10, bundleIdentifier: "wrong"),
+    ] {
+      var policy = ManagedSlideShowBindingPolicy()
+      #expect(
+        policy.begin(
+          target: target(frozenWindowIdentity: malformedFrozen),
+          baseline: observation(count: 0, windows: [frozen])
+        ) == .rejected(.malformedTarget)
+      )
+    }
+
+    var absent = ManagedSlideShowBindingPolicy()
+    #expect(
+      absent.begin(
+        target: target(frozenWindowIdentity: frozen),
+        baseline: observation(count: 0, windows: [window(11)])
+      ) == .rejected(.baselineWindowMissing)
+    )
+  }
+
   @Test func rejectsWindowIDReuseWithoutAPreviouslyAbsentID() {
     var policy = startedPolicy()
 
@@ -599,12 +687,14 @@ struct ManagedSlideShowBindingPolicyTests {
   private func target(
     session: String = "session-a",
     processIdentifier: Int = 501,
-    bundleIdentifier: String = "com.microsoft.Powerpoint"
+    bundleIdentifier: String = "com.microsoft.Powerpoint",
+    frozenWindowIdentity: ManagedSlideShowWindowIdentity? = nil
   ) -> ManagedSlideShowBindingTarget {
     ManagedSlideShowBindingTarget(
       bindingSessionToken: session,
       processIdentifier: processIdentifier,
-      bundleIdentifier: bundleIdentifier
+      bundleIdentifier: bundleIdentifier,
+      frozenWindowIdentity: frozenWindowIdentity
     )
   }
 

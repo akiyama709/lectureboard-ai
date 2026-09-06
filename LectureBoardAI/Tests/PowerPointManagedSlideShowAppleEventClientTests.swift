@@ -71,15 +71,31 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
       )
     )
 
-    await inventory.setWindows([managedWindow(100), managedWindow(200)])
+    await inventory.setWindows([managedWindow(200)])
     let postStart = try await client.readCompositeObservation(
-      observationRequest(startedAt: 30, freshToken: "post-start-fresh")
+      observationRequest(
+        startedAt: 30,
+        freshToken: "post-start-fresh",
+        phase: .postStart
+      )
     )
     #expect(postStart.observedMachAbsoluteTime == 40)
     #expect(postStart.scriptingEvidence.activePresentationCount == 1)
     #expect(postStart.scriptingEvidence.slideShowWindowCount == 1)
-    #expect(postStart.windows == [managedWindow(100), managedWindow(200)])
+    #expect(postStart.windows == [managedWindow(200)])
     #expect(Set(sender.targetProcessIdentifiers) == [processIdentifier])
+  }
+
+  @Test func postStartInventoryRelaxationRequiresARetainedRunObject() async {
+    let client = makeClient()
+
+    #expect(
+      await capturedFailure {
+        try await client.readCompositeObservation(
+          self.observationRequest(startedAt: 10, phase: .postStart)
+        )
+      } == .exactObjectUnavailable
+    )
   }
 
   @Test func managedStartRequiresReadOnlyWindowedShowTypeBeforeSendingRun() async throws {
@@ -1016,14 +1032,16 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
     session: String? = nil,
     processIdentifier: pid_t? = nil,
     startedAt: UInt64,
-    freshToken: String = "fresh-token"
+    freshToken: String = "fresh-token",
+    phase: ManagedSlideShowCompositeObservationPhase = .baseline
   ) -> ManagedSlideShowCompositeObservationRequest {
     ManagedSlideShowCompositeObservationRequest(
       bindingSessionToken: session ?? self.session,
       processIdentifier: processIdentifier ?? self.processIdentifier,
       bundleIdentifier: bundleIdentifier,
       freshObservationToken: freshToken,
-      requestStartedMachAbsoluteTime: startedAt
+      requestStartedMachAbsoluteTime: startedAt,
+      phase: phase
     )
   }
 
