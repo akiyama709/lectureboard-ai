@@ -128,6 +128,6 @@
 "error.recognitionFinalizationTimedOut" = "端末内音声認識が現在の区間を時間内に確定できなかったため，文字起こしを停止しました．";
 "error.rapidRestartLimitReached" = "端末内音声認識が安定する前に繰り返し終了しました．再開ループを防ぐため，文字起こしを停止しました．";
 "error.captureWindowUnavailable" = "選択したPowerPointウィンドウを利用できなくなりました．";
-"error.managedStartFailed" = "管理されたPowerPointスライドショーを検証できなかったため，取得と管理対象のスライドショーを停止しました．";
+"error.managedStartFailed" = "PowerPointスライドショーの管理開始に失敗しました．自動的な後始末の完了は確認できません．スライドショーが開いたままの場合は，手動で閉じてから再試行してください．";
 "error.captureWindowInactive" = "選択したPowerPointウィンドウが非アクティブになったか，閉じられました．";
 "error.rasterizationFailed" = "取得したPowerPoint画面を視覚的な占有領域の解析用に準備できませんでした．";

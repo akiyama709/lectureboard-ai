@@ -540,7 +540,7 @@ actor PowerPointManagedSlideShowAppleEventClient:
         .startCommandDeliveryUnknown
     }
     let returnedObject: PowerPointAppleEventRuntimeObjectSpecifier
-    switch codec.parseObjectSpecifierReply(reply, expectedClass: .slideShowWindow) {
+    switch codec.parseReturnedSlideShowObjectSpecifierReply(reply) {
     case .failure(let failure):
       throw classifyPossiblyDeliveredStartReplyFailure(failure)
     case .value(let object):

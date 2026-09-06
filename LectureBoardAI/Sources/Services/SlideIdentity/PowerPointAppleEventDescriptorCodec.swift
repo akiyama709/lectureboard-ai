@@ -383,6 +383,31 @@ final class PowerPointAppleEventDescriptorCodec {
     }
   }
 
+  /// Parses only the exact object returned by the single managed `run slide show` command.
+  ///
+  /// PowerPoint has been observed returning the first newly created slide-show window with a
+  /// `typeSInt32` selector whose payload is the exact eight bytes below. The generic runtime-object
+  /// validator remains strict at four bytes. This dedicated boundary admits only that top-level
+  /// index-1, null-container representation and retains its original bytes without reconstruction.
+  func parseReturnedSlideShowObjectSpecifierReply(
+    _ reply: NSAppleEventDescriptor?
+  ) -> PowerPointAppleEventParsed<PowerPointAppleEventRuntimeObjectSpecifier> {
+    switch directParameter(reply, expectedType: DescType(typeObjectSpecifier)) {
+    case .failure(let failure):
+      return .failure(failure)
+    case .value(let descriptor):
+      guard
+        Self.isValidRuntimeObjectSpecifier(
+          descriptor,
+          expectedClass: .slideShowWindow,
+          depth: 1
+        ) || Self.isExactReturnedSlideShowWindowIndexOneSpecifier(descriptor),
+        let runtimeObject = PowerPointAppleEventRuntimeObjectSpecifier(copying: descriptor)
+      else { return .failure(.malformedObjectSpecifier) }
+      return .value(runtimeObject)
+    }
+  }
+
   private func propertySpecifier(
     _ property: PowerPointAppleEventProperty,
     of container: NSAppleEventDescriptor
@@ -581,6 +606,32 @@ final class PowerPointAppleEventDescriptorCodec {
       keyData.descriptorType == DescType(typeType),
       keyData.data.count == MemoryLayout<OSType>.size,
       keyData.typeCodeValue == PowerPointAppleEventProperty.activePresentation.rawValue,
+      let container = descriptor.forKeyword(AEKeyword(keyAEContainer)),
+      container.descriptorType == DescType(typeNull),
+      container.data.isEmpty
+    else { return false }
+    return true
+  }
+
+  private static func isExactReturnedSlideShowWindowIndexOneSpecifier(
+    _ descriptor: NSAppleEventDescriptor
+  ) -> Bool {
+    guard
+      descriptor.descriptorType == DescType(typeObjectSpecifier),
+      descriptor.isRecordDescriptor,
+      descriptor.numberOfItems == requiredObjectSpecifierFieldCount,
+      descriptor.data.count <= maximumRuntimeObjectSpecifierBytes,
+      let desiredClass = descriptor.forKeyword(AEKeyword(keyAEDesiredClass)),
+      desiredClass.descriptorType == DescType(typeType),
+      desiredClass.data.count == MemoryLayout<OSType>.size,
+      desiredClass.typeCodeValue == PowerPointAppleEventObjectClass.slideShowWindow.rawValue,
+      let keyForm = descriptor.forKeyword(AEKeyword(keyAEKeyForm)),
+      keyForm.descriptorType == DescType(typeEnumerated),
+      keyForm.data.count == MemoryLayout<OSType>.size,
+      keyForm.enumCodeValue == OSType(formAbsolutePosition),
+      let keyData = descriptor.forKeyword(AEKeyword(keyAEKeyData)),
+      keyData.descriptorType == DescType(typeSInt32),
+      keyData.data == Data([1, 0, 0, 0, 0, 0, 0, 0]),
       let container = descriptor.forKeyword(AEKeyword(keyAEContainer)),
       container.descriptorType == DescType(typeNull),
       container.data.isEmpty

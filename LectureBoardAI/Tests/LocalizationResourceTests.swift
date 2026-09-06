@@ -74,6 +74,8 @@ struct LocalizationResourceTests {
           "On-device speech recognition did not finish the current segment in time. Transcription was stopped.",
         "error.rapidRestartLimitReached":
           "On-device speech recognition ended repeatedly before it could become stable. Transcription was stopped to prevent a restart loop.",
+        "error.managedStartFailed":
+          "Managed PowerPoint startup failed. Automatic cleanup could not be confirmed. If a slide show is still open, close it manually before trying again.",
       ],
       "ja": [
         "app.title": "LectureBoard AI",
@@ -142,6 +144,8 @@ struct LocalizationResourceTests {
           "端末内音声認識が現在の区間を時間内に確定できなかったため，文字起こしを停止しました．",
         "error.rapidRestartLimitReached":
           "端末内音声認識が安定する前に繰り返し終了しました．再開ループを防ぐため，文字起こしを停止しました．",
+        "error.managedStartFailed":
+          "PowerPointスライドショーの管理開始に失敗しました．自動的な後始末の完了は確認できません．スライドショーが開いたままの場合は，手動で閉じてから再試行してください．",
       ],
     ]
 

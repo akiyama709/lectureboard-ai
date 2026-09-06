@@ -1552,3 +1552,60 @@ and passed tests, 521 device runs, 14 parameterized tests/76 runs, and zero fail
 expected failures. The first summary query lacked filesystem permission and produced no result;
 the separately authorized copy query supplied these counts. This is working-tree automated
 evidence, not the final exact-commit publication gate or a released artifact.
+
+### Fixed compatibility trial and returned-object rejection on 2026-09-06
+
+The local checkpoint `718cfd3e4fdfb375350f3a4e8ccac0117b0a552d` built successfully as a
+separate private arm64 Release app. Its embedded commit matches that checkpoint; release tag
+and tag-object fields remain `UNBOUND`. Its executable SHA-256 is
+`d0c46cdd2a01799d0d118f7c886ac052a14f9d6facfae17c1a46e26455c3a3e1`, CDHash
+`5eae75a967380c3b7bedfdb3124f54fda0dfbd22`, and signature flags are
+`0x10002(adhoc,runtime)`. Byte comparison with the build product and strict complete-bundle
+signature verification passed. An initial metadata query used a nonexistent plist key; the
+subsequent actual `LectureBoardReleaseCommit` field supplied the commit confirmation.
+This is not a notarized, Developer ID signed, publicly released, or final-gate artifact.
+
+Direct launch again displayed authorized Screen Recording and microphone preflights without a
+permission request. Starting the one exact synthetic, windowed presentation created one slide
+show but ended with managed-start failure. The app's stop control did not close that remaining
+show. Scoped PowerPoint standard exit subsequently restored zero shows. The failure message
+incorrectly claimed that the show had stopped; the English/Japanese text and existing localization
+regression now explicitly say that automatic cleanup could not be confirmed.
+
+A controlled protocol probe isolated another concrete incompatibility. `run slide show` returned
+an object with class `pSSw`, absolute-position form, null container and a `typeSInt32` selector whose
+payload was **eight** bytes, `0100000000000000`. The generic decoder correctly rejected this
+nonstandard width under its existing contract. An ordinary element-one query returned a
+four-byte selector. Reading the actual unmodified returned reference produced another object
+reply rather than an Apple Event error, but the generic decoder still rejected its width. No
+different object was substituted for the retained reply. Compatibility handling, if added, must
+be limited to this exact run-return root and preserve the original descriptor; generic integer,
+slide-ID and nested-container validation must remain unchanged.
+
+The release-script boundary test initially rejected its matching summary fixture because that
+fixture still held historical counts. Updating it to 459/521 made the complete boundary test
+pass. This fixture-only correction does not alter the already frozen application's executable.
+Managed identity, confirmed production canvas, visible board output, live microphone rollover,
+owner mock lecture and live export remain unverified.
+
+### Exact run-return compatibility and retained-object exit at 20:28 JST
+
+A dedicated run-reply parser now admits either an ordinarily valid slideshow reference or only
+the observed top-level `pSSw`/absolute-position/`long`/eight-byte index-one/null-empty tuple. It
+copies the original descriptor without rebuilding it. The generic parser still rejects this
+eight-byte form, including for presentation, slide identity and nested containers. The dedicated
+parser is used only at the single `run slide show` reply boundary, after the existing zero-show
+preconditions. Regression cases verify the narrow acceptance, negative forms, and unchanged raw
+root through subsequent property, command and exit construction.
+
+A controlled synthetic production-codec probe then accepted the actual run reply, sent exit
+through that exact retained reference, and parsed a successful command reply. An independent
+PowerPoint metadata check found one presentation and zero slide shows afterward. This verifies
+that narrow live start/retained-reference exit path, not the App transaction's capture, role
+challenge, semantic identity, canvas, microphone or visible rendering.
+
+The complete native working-tree run at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_20-28-39-+0900.xcresult`
+passed 459 tests in 40 suites. The added compatibility and localized failure-message assertions
+extend existing tests, so the test count did not increase. None of these results substitutes for
+the final clean exact-commit release evidence transaction.

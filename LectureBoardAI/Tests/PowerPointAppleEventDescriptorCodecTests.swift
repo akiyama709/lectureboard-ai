@@ -269,6 +269,122 @@ struct PowerPointAppleEventDescriptorCodecTests {
     }
     #expect(codec.nestedPropertySpecifier([], of: runtime) == nil)
 
+    let observedWideIndexBytes = Data([1, 0, 0, 0, 0, 0, 0, 0])
+    let wideReturned = try #require(
+      objectSpecifier(
+        desiredClass: .slideShowWindow,
+        keyForm: OSType(formAbsolutePosition),
+        keyData: rawDescriptor(
+          type: DescType(typeSInt32),
+          data: observedWideIndexBytes
+        ),
+        container: nullDescriptor()
+      )
+    )
+    expectFailure(
+      codec.parseObjectSpecifierReply(
+        reply(direct: wideReturned),
+        expectedClass: .slideShowWindow
+      ),
+      .malformedObjectSpecifier
+    )
+    let wideRuntime: PowerPointAppleEventRuntimeObjectSpecifier
+    switch codec.parseReturnedSlideShowObjectSpecifierReply(
+      reply(direct: wideReturned)
+    ) {
+    case .value(let object):
+      wideRuntime = object
+    case .failure(let failure):
+      Issue.record("Unexpected wide returned-object parse failure: \(failure)")
+      return
+    }
+    wideReturned.setDescriptor(
+      NSAppleEventDescriptor(int32: 9),
+      forKeyword: AEKeyword(keyAEKeyData)
+    )
+    let widePath = try #require(
+      codec.nestedPropertySpecifier([.slideShowView], of: wideRuntime)
+    )
+    #expect(
+      rootObjectSpecifier(widePath)?
+        .forKeyword(AEKeyword(keyAEKeyData))?.data == observedWideIndexBytes
+    )
+    let wideExit = try #require(
+      codec.exitSlideShowEvent(
+        processIdentifier: 700,
+        slideShowWindow: wideRuntime
+      )
+    )
+    let wideExitObject = try #require(
+      wideExit.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))
+    )
+    #expect(
+      rootObjectSpecifier(wideExitObject)?
+        .forKeyword(AEKeyword(keyAEKeyData))?.data == observedWideIndexBytes
+    )
+
+    switch codec.parseReturnedSlideShowObjectSpecifierReply(reply(direct: returned)) {
+    case .value:
+      break
+    case .failure(let failure):
+      Issue.record("Unexpected ordinary returned-object parse failure: \(failure)")
+    }
+
+    let nestedContainer = try #require(
+      codec.elementSpecifier(.presentation, at: 1, in: nullDescriptor())
+    )
+    for rejected in try [
+      #require(
+        objectSpecifier(
+          desiredClass: .slideShowWindow,
+          keyForm: OSType(formAbsolutePosition),
+          keyData: rawDescriptor(
+            type: DescType(typeSInt32),
+            data: Data([2, 0, 0, 0, 0, 0, 0, 0])
+          ),
+          container: nullDescriptor()
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .slideShowWindow,
+          keyForm: OSType(formAbsolutePosition),
+          keyData: rawDescriptor(
+            type: DescType(typeSInt32),
+            data: observedWideIndexBytes
+          ),
+          container: nestedContainer
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .presentation,
+          keyForm: OSType(formAbsolutePosition),
+          keyData: rawDescriptor(
+            type: DescType(typeSInt32),
+            data: observedWideIndexBytes
+          ),
+          container: nullDescriptor()
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .slideShowWindow,
+          keyForm: OSType(formAbsolutePosition),
+          keyData: rawDescriptor(
+            type: DescType(typeSInt16),
+            data: observedWideIndexBytes
+          ),
+          container: nullDescriptor()
+        )
+      ),
+    ] {
+      expectFailure(
+        codec.parseReturnedSlideShowObjectSpecifierReply(reply(direct: rejected)),
+        .malformedObjectSpecifier
+      )
+    }
+
     let exit = try #require(
       codec.exitSlideShowEvent(processIdentifier: 700, slideShowWindow: runtime)
     )
@@ -893,6 +1009,13 @@ private func rawIntegerDescriptor(
     descriptorType: type,
     data: Data(repeating: 0, count: byteCount)
   )!
+}
+
+private func rawDescriptor(
+  type: DescType,
+  data: Data
+) -> NSAppleEventDescriptor {
+  NSAppleEventDescriptor(descriptorType: type, data: data)!
 }
 
 private func expectObjectSpecifier(

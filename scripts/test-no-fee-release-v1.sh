@@ -1111,7 +1111,7 @@ fi
 
 summary_fixture="$root/result-summary.json"
 /usr/bin/printf '%s\n' \
-  '{"title":"Test - LectureBoardAI","startTime":1788652700.0,"finishTime":1788652790.0,"devicesAndConfigurations":[{"device":{"architecture":"arm64","osBuildNumber":"25G83","osVersion":"26.6.2","platform":"macOS"},"expectedFailures":0,"failedTests":0,"passedTests":517,"skippedTests":0}],"expectedFailures":0,"failedTests":0,"passedTests":455,"result":"Passed","skippedTests":0,"statistics":[{"subtitle":"76 test runs","title":"14 tests ran with dynamic parameters"}],"totalTestCount":455}' \
+  '{"title":"Test - LectureBoardAI","startTime":1788652700.0,"finishTime":1788652790.0,"devicesAndConfigurations":[{"device":{"architecture":"arm64","osBuildNumber":"25G83","osVersion":"26.6.2","platform":"macOS"},"expectedFailures":0,"failedTests":0,"passedTests":521,"skippedTests":0}],"expectedFailures":0,"failedTests":0,"passedTests":459,"result":"Passed","skippedTests":0,"statistics":[{"subtitle":"76 test runs","title":"14 tests ran with dynamic parameters"}],"totalTestCount":459}' \
   >"$summary_fixture"
 build_fixture="$root/result-build.json"
 /usr/bin/printf '%s\n' \
