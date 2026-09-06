@@ -800,7 +800,7 @@ struct AppContentChangeIntegrationTests {
 
     try await analyzer.succeed(
       sequenceNumber: 5,
-      title: "revalidated baseline",
+      title: "Freshness",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
@@ -865,7 +865,7 @@ struct AppContentChangeIntegrationTests {
 
     try await analyzer.succeed(
       sequenceNumber: 6,
-      title: "new dense revision",
+      title: "Current occupancy",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
@@ -940,7 +940,7 @@ struct AppContentChangeIntegrationTests {
     #expect(model.slideAnalysisStatus == .analyzing)
     try await analyzer.succeed(
       sequenceNumber: 6,
-      title: "valid dense baseline",
+      title: "Validated evidence",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }

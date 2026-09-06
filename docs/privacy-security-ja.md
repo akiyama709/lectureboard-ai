@@ -37,7 +37,7 @@ LectureBoard AIが扱い得る情報には，次が含まれる．
 
 ### マイク
 
-　音声認識を開始する時点で要求する．停止中は入力を処理しない．Apple Speech requestは端末内認識を必須とし，選択言語で端末内認識を利用できない場合は，network fallbackを許さず文字起こしを開始しない．Appleは，`requiresOnDeviceRecognition`が音声のnetwork送信を防ぐには`supportsOnDeviceRecognition`もtrueでなければならないと説明しており，実装は両条件を強制する：<https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition>．
+　音声認識を開始する時点で要求する．停止中は入力を処理しない．Apple Speech requestは端末内認識を必須とし，選択言語で端末内認識を利用できない場合は，network fallbackを許さず文字起こしを開始しない．Appleは，`requiresOnDeviceRecognition`が音声のnetwork送信を防ぐには`supportsOnDeviceRecognition`もtrueでなければならないと説明しており，実装は両条件を強制する：<https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition>．認識taskは最大8秒で更新し，finalを最大4秒待つが，audio及び全文文字起こしは保存しない．このcycle，停止時tail及び失敗境界は決定論的testの結果であり，実講義音声の動作確認ではない．
 
 ### アクセシビリティ
 

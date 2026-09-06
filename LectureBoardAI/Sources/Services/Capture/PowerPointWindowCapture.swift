@@ -368,27 +368,37 @@ enum CapturedPowerPointFrameFactory {
     }
     let repeatedSurfaceGeometry: CaptureSurfaceGeometry?
     let repeatedScreenGeometry: CaptureScreenGeometry?
+    let currentScreenGeometry: CaptureScreenGeometry?
+    if currentAttachments?.keys.contains(.screenRect) == true {
+      // A present but malformed current screenRect must poison overlay mapping.
+      // Reuse is allowed only when ScreenCaptureKit omitted the key entirely.
+      currentScreenGeometry = CaptureScreenGeometryParser.parse(currentAttachments)
+    } else {
+      // The production eligibility check independently re-reads the exact
+      // frontmost CGWindow and requires its current bounds to match this value
+      // before rendering or renewing the short overlay lease.
+      currentScreenGeometry = lastFrame.captureScreenGeometry
+    }
     switch (lastFrame.captureSurfaceGeometry, currentSurfaceGeometryState) {
     case (.some(let lastSurfaceGeometry), .absent)
     where lastSurfaceGeometry.outputPixelWidth == lastFrame.image.width
       && lastSurfaceGeometry.outputPixelHeight == lastFrame.image.height:
       repeatedSurfaceGeometry = lastSurfaceGeometry
-      // Apply the latched geometry only to crop the reused visual payload. It is
-      // not current coordinate evidence: keep production overlay mapping closed
-      // even if this idle sample carries a screenRect.
-      repeatedScreenGeometry = nil
+      repeatedScreenGeometry = currentScreenGeometry
     case (.some(let lastSurfaceGeometry), .valid(let currentSurfaceGeometry))
     where currentSurfaceGeometry == lastSurfaceGeometry:
       repeatedSurfaceGeometry = currentSurfaceGeometry
-      repeatedScreenGeometry = CaptureScreenGeometryParser.parse(currentAttachments)
+      repeatedScreenGeometry = currentScreenGeometry
     default:
       repeatedSurfaceGeometry = nil
       repeatedScreenGeometry = nil
     }
 
     // Idle means no new visual content: reuse only the prior visual payload and
-    // display time. Screen position is never inherited: absent or invalid
-    // current screen-position evidence keeps production overlay mapping closed.
+    // display time. A current valid screenRect replaces the prior value; a
+    // malformed present value fails closed. When ScreenCaptureKit omits the key,
+    // the prior value is only a candidate for the independent live window
+    // eligibility check and its short lease.
     return CapturedPowerPointFrame(
       windowID: lastFrame.windowID,
       sequenceNumber: sequenceNumber,

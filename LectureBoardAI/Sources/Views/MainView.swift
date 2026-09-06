@@ -28,6 +28,7 @@ struct MainView: View {
           captureMonitor
           languageAndStyle
           controls
+          runtimeDiagnostics
           transcript
           BoardPreviewView(scene: model.boardScene, style: model.digitalInkStyle)
         }
@@ -436,6 +437,121 @@ struct MainView: View {
         .disabled(!model.canExportLectureSession)
     }
     .buttonStyle(.bordered)
+  }
+
+  private var runtimeDiagnostics: some View {
+    GroupBox("diagnostics.title") {
+      VStack(alignment: .leading, spacing: 6) {
+        LabeledContent("diagnostics.applicationLifecycle") {
+          applicationLifecycleDiagnosticValue
+        }
+        LabeledContent("diagnostics.transcriptionLifecycle") {
+          transcriptionLifecycleDiagnosticValue
+        }
+        LabeledContent("diagnostics.transcriptPhase") {
+          transcriptPhaseDiagnosticValue
+        }
+        LabeledContent("diagnostics.overlayMapping") {
+          overlayMappingDiagnosticValue
+        }
+        LabeledContent("diagnostics.overlayEligibility") {
+          overlayEligibilityDiagnosticValue
+        }
+        LabeledContent("diagnostics.overlayPresentation") {
+          overlayPresentationDiagnosticValue
+        }
+        LabeledContent(
+          "diagnostics.publicBoardElements",
+          value: "\(model.productionConfirmedBoardElementCount)"
+        )
+        Text("diagnostics.renderRequestedDisclaimer")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      .font(.callout)
+      .padding(.vertical, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  @ViewBuilder
+  private var applicationLifecycleDiagnosticValue: some View {
+    switch model.status {
+    case .ready, .listening, .finalizingTranscription:
+      Text("diagnostics.lifecycle.ready")
+    case .scanning:
+      Text("diagnostics.lifecycle.scanning")
+    case .overlayVisible:
+      Text("diagnostics.lifecycle.demoOverlay")
+    case .error(let message):
+      Text(message)
+        .foregroundStyle(.red)
+    }
+  }
+
+  @ViewBuilder
+  private var transcriptionLifecycleDiagnosticValue: some View {
+    switch model.transcriptionLifecycleState {
+    case .idle:
+      Text("diagnostics.transcription.idle")
+    case .starting:
+      Text("diagnostics.transcription.starting")
+    case .waitingForContext:
+      Text("diagnostics.transcription.waitingForContext")
+    case .listening:
+      Text("diagnostics.transcription.listening")
+    case .finalizing:
+      Text("diagnostics.transcription.finalizing")
+    case .failed(let message):
+      Text(message)
+        .foregroundStyle(.red)
+    }
+  }
+
+  @ViewBuilder
+  private var transcriptPhaseDiagnosticValue: some View {
+    switch model.liveTranscriptPhase {
+    case .empty:
+      Text("diagnostics.transcript.empty")
+    case .partial:
+      Text("diagnostics.transcript.partial")
+    case .final:
+      Text("diagnostics.transcript.final")
+    }
+  }
+
+  @ViewBuilder
+  private var overlayMappingDiagnosticValue: some View {
+    switch model.slideCanvasOverlayMappingState {
+    case .unavailable:
+      Text("diagnostics.mapping.unavailable")
+    case .mapped:
+      Text("diagnostics.mapping.mapped")
+    case .rejected:
+      Text("diagnostics.mapping.rejected")
+    }
+  }
+
+  @ViewBuilder
+  private var overlayEligibilityDiagnosticValue: some View {
+    switch model.productionOverlayEligibilityState {
+    case .notEvaluated:
+      Text("diagnostics.eligibility.notEvaluated")
+    case .allowed:
+      Text("diagnostics.eligibility.allowed")
+    case .blocked:
+      Text("diagnostics.eligibility.blocked")
+    }
+  }
+
+  @ViewBuilder
+  private var overlayPresentationDiagnosticValue: some View {
+    switch model.productionOverlayPresentationState {
+    case .hidden:
+      Text("diagnostics.presentation.hidden")
+    case .renderRequested:
+      Text("diagnostics.presentation.renderRequested")
+    }
   }
 
   private var exportErrorIsPresented: Binding<Bool> {

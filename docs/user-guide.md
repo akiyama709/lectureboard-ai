@@ -53,7 +53,10 @@ different App.
   read one exact PowerPoint slide-show object. It does not adopt an existing slide show.
 - **Microphone** and **Speech Recognition:** requested only when transcription starts. Apple Speech
   is configured to require on-device recognition. If the selected locale cannot recognize on the
-  device, transcription fails closed instead of using a network fallback.
+  device, transcription fails closed instead of using a network fallback. Recognition uses bounded
+  eight-second cycles and may take up to four additional seconds to finalize a segment. These timing
+  paths are tested deterministically, but live microphone behavior remains unverified until the
+  exact release candidate passes the acceptance procedure.
 - **Accessibility** and **Full Disk Access:** not required by the supported workflow. Stop and
   report the issue if the release unexpectedly requests either one.
 
@@ -89,6 +92,12 @@ safe test procedure.
    surrounding UI, then confirm the slide area.
 7. Start transcription only after the current slide identity, fresh frame, and visual analysis are
    ready.
+
+The runtime diagnostics show application state and transcription state separately. `Waiting for
+current slide context` means that output is intentionally closed until the current identity, canvas,
+fresh frame, and analysis are ready. `Render requested` proves only that the renderer was invoked;
+the presenter must still confirm that the board is visibly over PowerPoint. The production element
+count excludes demo content.
 
 During a lecture, use PowerPoint normally. Human mouse or pen input has priority. **Hide board**
 immediately hides LectureBoard AI output. If slide identity, canvas, current analysis, focus, or

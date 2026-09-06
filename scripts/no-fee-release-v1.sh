@@ -858,9 +858,13 @@ result_bundle_stability_pause() {
 }
 
 result_bundle_set_monotonic_now() {
-  monotonic_now="$(/usr/bin/python3 -I -c 'import time; print(time.monotonic_ns())')" \
-    || return 1
-  [[ "$monotonic_now" =~ ^[0-9]+$ ]]
+  local seconds_value="${SECONDS-}"
+  [[ "$seconds_value" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  (( ${#seconds_value} <= 10 )) || return 1
+  (( seconds_value <= 9223372036 )) || return 1
+  monotonic_now=$((seconds_value * 1000000000))
+  [[ "$monotonic_now" =~ ^[0-9]+$ ]] \
+    && (( monotonic_now / 1000000000 == seconds_value ))
 }
 
 result_bundle_stability_token() {
@@ -1036,8 +1040,8 @@ freeze_result_bundle_when_stable() {
   local destination_token='' post_pair_source_token='' post_pair_destination_token=''
   local current_digest=''
   local stable_observations=0 observation=0 copy_attempts=0 monotonic_now=0
-  local pair_matches=0
-  local stable_since=0 deadline=0
+  local pair_digest_matches=0 final_seal_failure=''
+  local stable_since=0 started_at=0 deadline=0
   local required_stable_observations=6 quiet_nanoseconds=5000000000
   local maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000
   [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
@@ -1056,8 +1060,12 @@ freeze_result_bundle_when_stable() {
   source_identity="$(directory_identity "$result_bundle")" || return 1
   parent_identity="$(directory_identity "$destination_parent_physical")" || return 1
   result_bundle_set_monotonic_now || return 1
+  started_at="$monotonic_now"
   (( monotonic_now <= 9223371436854775807 )) || return 1
   deadline=$((monotonic_now + deadline_nanoseconds))
+  /usr/bin/printf \
+    'release evidence result freeze: phase=stabilityWaiting observation=0 copyAttempt=0 elapsedSeconds=0\n' \
+    >&2
 
   # xcodebuild can return before its xcresult service has completed the last
   # bundle writes.  Require a five-second quiet window using an inexpensive
@@ -1068,7 +1076,13 @@ freeze_result_bundle_when_stable() {
   while (( observation < maximum_observations )); do
     observation=$((observation + 1))
     result_bundle_set_monotonic_now || return 1
-    (( monotonic_now <= deadline )) || return 1
+    if (( monotonic_now > deadline )); then
+      /usr/bin/printf \
+        'release evidence result freeze: failure=deadlineExceeded observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+        "$observation" "$copy_attempts" \
+        "$(((monotonic_now - started_at) / 1000000000))" >&2
+      return 1
+    fi
     current_identity="$(directory_identity "$result_bundle")" || return 1
     current_parent_identity="$(directory_identity "$destination_parent_physical")" \
       || return 1
@@ -1078,7 +1092,13 @@ freeze_result_bundle_when_stable() {
       && [[ "$(directory_identity "$result_bundle")" == "$source_identity" \
         && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" ]]; then
       result_bundle_set_monotonic_now || return 1
-      (( monotonic_now <= deadline )) || return 1
+      if (( monotonic_now > deadline )); then
+        /usr/bin/printf \
+          'release evidence result freeze: failure=deadlineExceeded observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        return 1
+      fi
       if [[ -n "$previous_token" && "$current_token" == "$previous_token" ]]; then
         stable_observations=$((stable_observations + 1))
       else
@@ -1100,16 +1120,50 @@ freeze_result_bundle_when_stable() {
         || return 1
       [[ "$current_identity" == "$source_identity" \
         && "$current_parent_identity" == "$parent_identity" ]] || return 1
-      current_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
-        || { previous_token=''; stable_observations=0; stable_since=0; continue; }
-      post_digest_token="$(result_bundle_stability_token "$result_bundle")" \
-        || { previous_token=''; stable_observations=0; stable_since=0; continue; }
+      /usr/bin/printf \
+        'release evidence result freeze: phase=sourceDigestStarted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+        "$observation" "$copy_attempts" \
+        "$(((monotonic_now - started_at) / 1000000000))" >&2
+      if ! current_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")"; then
+        /usr/bin/printf \
+          'release evidence result freeze: retry=sourceDigestFailed observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        previous_token=''
+        stable_observations=0
+        stable_since=0
+        continue
+      fi
+      result_bundle_set_monotonic_now || return 1
+      /usr/bin/printf \
+        'release evidence result freeze: phase=sourceDigestCompleted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+        "$observation" "$copy_attempts" \
+        "$(((monotonic_now - started_at) / 1000000000))" >&2
+      if (( monotonic_now > deadline )); then
+        /usr/bin/printf \
+          'release evidence result freeze: failure=deadlineExceeded observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        return 1
+      fi
+      if ! post_digest_token="$(result_bundle_stability_token "$result_bundle")"; then
+        /usr/bin/printf \
+          'release evidence result freeze: retry=postDigestTokenUnavailable observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        previous_token=''
+        stable_observations=0
+        stable_since=0
+        continue
+      fi
       [[ "$(directory_identity "$result_bundle")" == "$source_identity" \
         && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" ]] \
         || return 1
-      result_bundle_set_monotonic_now || return 1
-      (( monotonic_now <= deadline )) || return 1
       if [[ "$post_digest_token" != "$current_token" ]]; then
+        /usr/bin/printf \
+          'release evidence result freeze: retry=postDigestTokenChanged observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
         previous_token="$post_digest_token"
         stable_observations=1
         result_bundle_set_monotonic_now || return 1
@@ -1117,11 +1171,25 @@ freeze_result_bundle_when_stable() {
         continue
       fi
       copy_attempts=$((copy_attempts + 1))
-      (( copy_attempts <= maximum_copy_attempts )) || return 1
+      if (( copy_attempts > maximum_copy_attempts )); then
+        /usr/bin/printf \
+          'release evidence result freeze: failure=copyAttemptsExhausted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        return 1
+      fi
+      /usr/bin/printf \
+        'release evidence result freeze: phase=copyStarted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+        "$observation" "$copy_attempts" \
+        "$(((monotonic_now - started_at) / 1000000000))" >&2
       if ! copy_result_bundle_for_freeze "$result_bundle" "$destination"; then
         # A failed copier does not establish which inode, if any, now occupies
         # the destination name.  Leave it inside the known staging directory;
         # its parent transaction can remove that directory by captured inode.
+        /usr/bin/printf \
+          'release evidence result freeze: failure=copyFailed observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
         return 1
       fi
       destination_identity="$(directory_identity "$destination")" || return 1
@@ -1129,7 +1197,12 @@ freeze_result_bundle_when_stable() {
       current_identity="$(directory_identity "$result_bundle")" || return 1
       current_parent_identity="$(directory_identity "$destination_parent_physical")" \
         || return 1
-      pair_matches=0
+      pair_digest_matches=0
+      final_seal_failure=''
+      /usr/bin/printf \
+        'release evidence result freeze: phase=pairDigestStarted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+        "$observation" "$copy_attempts" \
+        "$(((monotonic_now - started_at) / 1000000000))" >&2
       if [[ "$current_identity" == "$source_identity" \
           && "$current_parent_identity" == "$parent_identity" \
           && "$(directory_identity "$result_bundle")" == "$source_identity" \
@@ -1139,19 +1212,53 @@ freeze_result_bundle_when_stable() {
         && result_bundle_pair_matches_digest \
           "$result_bundle" "$destination" "$source_root" "$current_digest" \
           "$post_digest_token"; then
-        pair_matches=1
+        pair_digest_matches=1
       fi
-      post_pair_source_token="$(result_bundle_stability_token "$result_bundle")" \
-        || return 1
-      post_pair_destination_token="$(result_bundle_stability_token "$destination")" \
-        || pair_matches=0
-      [[ "$post_pair_source_token" == "$post_digest_token" \
-        && "$post_pair_destination_token" == "$destination_token" ]] \
-        || pair_matches=0
       result_bundle_set_monotonic_now || return 1
-      if [[ "$pair_matches" == 1 ]] && (( monotonic_now <= deadline )); then
-        frozen_result_bundle_digest="$current_digest"
-        return 0
+      /usr/bin/printf \
+        'release evidence result freeze: phase=pairDigestCompleted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+        "$observation" "$copy_attempts" \
+        "$(((monotonic_now - started_at) / 1000000000))" >&2
+      if [[ "$pair_digest_matches" == 1 ]] && (( monotonic_now <= deadline )); then
+        current_identity="$(directory_identity "$result_bundle")" || return 1
+        current_parent_identity="$(directory_identity "$destination_parent_physical")" \
+          || return 1
+        [[ "$current_identity" == "$source_identity" \
+          && "$current_parent_identity" == "$parent_identity" ]] || return 1
+        [[ -d "$destination" && ! -L "$destination" \
+          && "$(directory_identity "$destination")" == "$destination_identity" \
+          && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" ]] \
+          || return 1
+        /usr/bin/printf \
+          'release evidence result freeze: phase=finalSealStarted observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        if ! post_pair_destination_token="$(result_bundle_stability_token "$destination")"; then
+          final_seal_failure='destinationTokenUnavailable'
+        elif [[ "$post_pair_destination_token" != "$destination_token" ]]; then
+          final_seal_failure='finalTokenMismatch'
+        elif ! post_pair_source_token="$(result_bundle_stability_token "$result_bundle")"; then
+          final_seal_failure='sourceTokenUnavailable'
+        elif [[ "$post_pair_source_token" == "$post_digest_token" ]]; then
+          frozen_result_bundle_digest="$current_digest"
+          return 0
+        else
+          final_seal_failure='finalTokenMismatch'
+        fi
+        /usr/bin/printf \
+          'release evidence result freeze: retry=%s observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$final_seal_failure" "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+      elif [[ "$pair_digest_matches" == 1 ]]; then
+        /usr/bin/printf \
+          'release evidence result freeze: failure=pairConsistentButDeadlineExceeded observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+      else
+        /usr/bin/printf \
+          'release evidence result freeze: retry=pairDigestMismatch observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
       fi
       [[ "$current_identity" == "$source_identity" \
         && "$current_parent_identity" == "$parent_identity" ]] || return 1
@@ -1162,6 +1269,16 @@ freeze_result_bundle_when_stable() {
       delete_directory_with_identity "$destination_parent_physical" "$parent_identity" \
         "$destination" "$destination_identity" || return 1
       [[ ! -e "$destination" && ! -L "$destination" ]] || return 1
+      if [[ "$pair_digest_matches" == 1 ]] && (( monotonic_now > deadline )); then
+        return 1
+      fi
+      if (( monotonic_now > deadline )); then
+        /usr/bin/printf \
+          'release evidence result freeze: failure=deadlineExceeded observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+          "$observation" "$copy_attempts" \
+          "$(((monotonic_now - started_at) / 1000000000))" >&2
+        return 1
+      fi
       previous_token=''
       stable_observations=0
       stable_since=0
@@ -1171,6 +1288,10 @@ freeze_result_bundle_when_stable() {
     fi
   done
   [[ ! -e "$destination" && ! -L "$destination" ]] || return 1
+  /usr/bin/printf \
+    'release evidence result freeze: failure=observationLimitExceeded observation=%s copyAttempt=%s elapsedSeconds=%s\n' \
+    "$observation" "$copy_attempts" \
+    "$(((monotonic_now - started_at) / 1000000000))" >&2
   return 1
 }
 

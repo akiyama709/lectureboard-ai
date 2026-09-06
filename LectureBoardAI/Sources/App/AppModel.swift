@@ -109,6 +109,7 @@ final class AppModel: ObservableObject {
     case ready
     case scanning
     case listening
+    case finalizingTranscription
     case overlayVisible
     case error(String)
   }
@@ -127,11 +128,40 @@ final class AppModel: ObservableObject {
     case error(String)
   }
 
+  enum LiveTranscriptPhase: Equatable {
+    case empty
+    case partial
+    case final
+  }
+
+  enum TranscriptionLifecycleState: Equatable {
+    case idle
+    case starting
+    case waitingForContext
+    case listening
+    case finalizing
+    case failed(String)
+  }
+
+  enum ProductionOverlayEligibilityState: Equatable {
+    case notEvaluated
+    case allowed
+    case blocked
+  }
+
+  enum ProductionOverlayPresentationState: Equatable {
+    case hidden
+    case renderRequested
+  }
+
   @Published var status: Status = .ready
   @Published var powerPointWindows: [PowerPointWindowDescriptor] = []
   @Published var selectedPowerPointWindowID: CGWindowID?
   @Published var selectedLanguage: LanguageTag = .japanese
-  @Published var liveTranscript = ""
+  @Published private(set) var liveTranscript = ""
+  @Published private(set) var liveTranscriptPhase = LiveTranscriptPhase.empty
+  @Published private(set) var transcriptionLifecycleState =
+    TranscriptionLifecycleState.idle
   @Published var boardScene = BoardScene(slideNumber: 1) {
     didSet { recordPublicBoardScene(boardScene) }
   }
@@ -158,6 +188,10 @@ final class AppModel: ObservableObject {
   @Published private(set) var slideCanvasStatus = SlideCanvasStatus.unavailable
   @Published private(set) var slideCanvasOverlayMappingState =
     SlideCanvasOverlayMappingState.unavailable
+  @Published private(set) var productionOverlayEligibilityState =
+    ProductionOverlayEligibilityState.notEvaluated
+  @Published private(set) var productionOverlayPresentationState =
+    ProductionOverlayPresentationState.hidden
   @Published private(set) var slideCanvasInvalidationReason: SlideCanvasInvalidationReason?
   @Published private(set) var latestCapturedWindowFrame: CGImage?
   @Published private(set) var slideCanvasCalibrationFrame: CGImage?
@@ -319,6 +353,22 @@ final class AppModel: ObservableObject {
     case .starting, .capturing:
       return false
     }
+  }
+
+  var publicBoardElementCount: Int {
+    boardScene.elements.count
+  }
+
+  var productionConfirmedBoardElementCount: Int {
+    guard
+      captureStatus == .capturing,
+      sessionSceneRecordingEnabled,
+      !overlayDemoSceneIsLoaded,
+      boardSceneAnalysisGeneration != nil
+    else {
+      return 0
+    }
+    return boardScene.elements.count
   }
 
   /// Writes the retained public scenes to JSON and its sibling SVG.  The view owns the
@@ -771,31 +821,54 @@ final class AppModel: ObservableObject {
     guard transcriptionRequestedByUser else { return }
     invalidateTranscriptionContext(preserveUserRequest: true)
     let operationID = transcriptionOperationGate.begin()
-    liveTranscript = ""
+    transcriptionLifecycleState = .starting
+    clearLiveTranscript()
     do {
-      try await speechProvider.start(language: selectedLanguage) { [weak self] observation in
-        guard let self else { return }
-        self.receive(observation, transcriptionOperationID: operationID)
-      }
+      try await speechProvider.start(
+        operationID: operationID,
+        language: selectedLanguage,
+        onObservation: { [weak self] observation in
+          guard let self else { return }
+          self.receive(observation, transcriptionOperationID: operationID)
+        },
+        onTerminalEvent: { [weak self] event in
+          guard let self else { return }
+          self.receive(
+            event,
+            transcriptionOperationID: operationID
+          )
+        }
+      )
       guard transcriptionOperationGate.accepts(operationID) else {
         if !transcriptionOperationGate.hasActiveOperation {
-          speechProvider.stop()
+          speechProvider.stop(operationID: operationID)
         }
         return
       }
       status = .listening
+      transcriptionLifecycleState = .listening
     } catch {
       guard transcriptionOperationGate.invalidate(ifCurrent: operationID) else { return }
       transcriptionRequestedByUser = false
-      speechProvider.stop()
-      liveTranscript = ""
+      speechProvider.stop(operationID: operationID)
+      clearLiveTranscript()
       status = .error(error.localizedDescription)
+      transcriptionLifecycleState = .failed(error.localizedDescription)
     }
   }
 
   func stopTranscription() {
     transcriptionRequestedByUser = false
-    invalidateTranscriptionContext(forceReadyStatus: true)
+    automaticTranscriptionResumeTask?.cancel()
+    automaticTranscriptionResumeTask = nil
+    guard let operationID = transcriptionOperationGate.activeOperationID else {
+      status = .ready
+      transcriptionLifecycleState = .idle
+      return
+    }
+    status = .finalizingTranscription
+    transcriptionLifecycleState = .finalizing
+    speechProvider.finishCurrentSegment(operationID: operationID)
   }
 
   func receive(_ segment: TranscriptSegment) {
@@ -819,11 +892,39 @@ final class AppModel: ObservableObject {
     receiveAcceptedTranscriptionObservation(observation)
   }
 
+  private func receive(
+    _ event: TranscriptionTerminalEvent,
+    transcriptionOperationID: TranscriptionOperationID
+  ) {
+    guard event.operationID == transcriptionOperationID else { return }
+    guard transcriptionOperationGate.invalidate(ifCurrent: transcriptionOperationID) else {
+      return
+    }
+    transcriptionRequestedByUser = false
+    switch event.outcome {
+    case .gracefulStopCompleted:
+      if liveTranscriptPhase != .final {
+        clearLiveTranscript()
+      }
+      status = .ready
+      transcriptionLifecycleState = .idle
+    case .failure(let error):
+      clearLiveTranscript()
+      status = .error(error.localizedDescription)
+      transcriptionLifecycleState = .failed(error.localizedDescription)
+    }
+  }
+
   private func receiveAcceptedTranscriptionObservation(
     _ observation: TranscriptionObservation
   ) {
     let segment = observation.segment
     liveTranscript = segment.text
+    if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      liveTranscriptPhase = .empty
+    } else {
+      liveTranscriptPhase = segment.isFinal ? .final : .partial
+    }
     guard segment.isFinal else { return }
     guard
       slideCanvasStatus == .confirmed,
@@ -2052,13 +2153,15 @@ final class AppModel: ObservableObject {
       return
     }
 
-    guard
+    let productionOverlayIsEligible =
       productionOverlayEligibilityProvider.allowsProductionOverlay(
         for: activeCaptureIdentity,
         screenGeometry: captureScreenGeometry
       )
-    else {
-      invalidateProductionOverlayLease()
+    productionOverlayEligibilityState =
+      productionOverlayIsEligible ? .allowed : .blocked
+    guard productionOverlayIsEligible else {
+      invalidateProductionOverlayLease(resetEligibility: false)
       return
     }
 
@@ -2089,6 +2192,7 @@ final class AppModel: ObservableObject {
       style: digitalInkStyle,
       in: latestOverlayPlacement.appKitTargetFrame
     )
+    productionOverlayPresentationState = .renderRequested
     renderedProductionOverlayState = renderState
   }
 
@@ -2102,6 +2206,7 @@ final class AppModel: ObservableObject {
 
   private func hideProductionOverlayPanel() {
     renderedProductionOverlayState = nil
+    productionOverlayPresentationState = .hidden
     overlayController.hide()
   }
 
@@ -2125,18 +2230,35 @@ final class AppModel: ObservableObject {
     invalidateProductionOverlayLease()
   }
 
-  private func invalidateProductionOverlayLease(hidePanel: Bool = true) {
+  private func invalidateProductionOverlayLease(
+    hidePanel: Bool = true,
+    resetEligibility: Bool = true
+  ) {
     productionOverlayLeaseGeneration &+= 1
     productionOverlayLeaseIsValid = false
     productionOverlayLeaseScheduler.cancel()
+    if resetEligibility {
+      productionOverlayEligibilityState = .notEvaluated
+    }
+    productionOverlayPresentationState = .hidden
     if hidePanel {
       hideProductionOverlayPanel()
     }
   }
 
   private func handleProductionOverlayUnsafeEvent() {
-    guard !overlayDemoSceneIsLoaded else { return }
-    invalidateProductionOverlayLease()
+    guard
+      !overlayDemoSceneIsLoaded,
+      captureStatus == .capturing,
+      productionOverlayEligibilityState != .notEvaluated
+        || productionOverlayLeaseIsValid
+        || productionOverlayPresentationState == .renderRequested
+        || renderedProductionOverlayState != nil
+    else {
+      return
+    }
+    productionOverlayEligibilityState = .blocked
+    invalidateProductionOverlayLease(resetEligibility: false)
   }
 
   private func clearOverlayDemoForCaptureStart() {
@@ -2373,14 +2495,21 @@ final class AppModel: ObservableObject {
     if !preserveUserRequest {
       transcriptionRequestedByUser = false
     }
-    let hadActiveOperation = transcriptionOperationGate.hasActiveOperation
+    let activeOperationID = transcriptionOperationGate.activeOperationID
     transcriptionOperationGate.invalidate()
-    if hadActiveOperation {
-      speechProvider.stop()
+    if let activeOperationID {
+      speechProvider.stop(operationID: activeOperationID)
     }
-    liveTranscript = ""
-    if forceReadyStatus || status == .listening {
+    clearLiveTranscript()
+    transcriptionLifecycleState =
+      preserveUserRequest && transcriptionRequestedByUser ? .waitingForContext : .idle
+    if forceReadyStatus || status == .listening || status == .finalizingTranscription {
       status = .ready
     }
+  }
+
+  private func clearLiveTranscript() {
+    liveTranscript = ""
+    liveTranscriptPhase = .empty
   }
 }

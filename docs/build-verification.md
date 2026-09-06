@@ -1265,3 +1265,64 @@ slide-show cleanup, and only then exports JSON and SVG. The release-definition f
 capture-stop and export steps and requires that invalid order to be rejected. This is a
 documentation and policy correction with regression coverage; it is not evidence that a live
 export or owner-selected PPTX acceptance has run.
+
+### Current speech, grounding, overlay-diagnostic, and build checks on 2026-09-06
+
+At approximately 16:35 JST, `make doctor` again completed with zero failures and the single warning
+that GitHub CLI authentication was absent. `make local-setup` then completed, including all 235
+LectureBoardCore tests in 18 suites and XcodeGen project generation. This establishes the exercised
+local build prerequisites only; it does not authenticate GitHub or verify a release artifact.
+
+The on-device Apple Speech provider was changed to bounded eight-second recognition cycles with a
+four-second finalization deadline, bounded audio-tail handoff, exact operation/cycle rejection,
+bounded rapid-restart backoff, graceful manual-stop finalization, and a bounded FIFO callback
+mailbox that coalesces only consecutive partial results. The contextual-board parser was also made
+conservative about finality, confidence, question forms, grounding, duplicate evidence, and explicit
+single-clause definition, causal, comparison, and list patterns. These are implementation claims
+supported by deterministic tests only. No microphone audio was captured in these checks, and live
+cycle rollover, natural Japanese or English recognition, grounded automatic board output, and a
+visible overlay remain unverified.
+
+The first complete native-test attempt produced the incomplete result bundle
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_16-36-13-+0900.xcresult`. Three
+content-change integration fixtures initially used slide titles that no longer grounded their
+expected definitions, and an adversarial callback-mailbox test deadlocked because its background
+producer waited while the test's main actor did not service the queued drain. The run was stopped
+and is not a passing result. The three fixtures were corrected to provide the intended current-slide
+grounding. The mailbox scheduling and test were corrected so that retained terminal events remain
+bounded and FIFO without relying on a blocked main-actor test arrangement.
+
+After those corrections, all 30 `PermissionServiceTests` passed in
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_16-43-51-+0900.xcresult`, and all 66
+targeted canvas, slide-identity, and localization tests passed in
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_16-47-22-+0900.xcresult`. The added
+diagnostic regressions verify independent transcription lifecycle state, a production board count
+that excludes demo content, and rejection of an idle safety notification when production overlay
+eligibility has not been evaluated. Swift format lint then passed over all Core and App sources and
+tests.
+
+The complete native App test command subsequently passed all 455 tests in 40 suites with zero
+reported failures in
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_16-48-03-+0900.xcresult`. This is a
+local Debug, ad hoc-signed deterministic test result for the still-uncommitted working candidate.
+It is not the clean exact-commit `evidence` transaction, Hardened Runtime Release archive, managed
+PowerPoint live workflow, microphone test, user-confirmed canvas accuracy, visible automatic board,
+mouse-priority observation, session export, owner-selected PPTX acceptance, Gatekeeper result,
+public GitHub Release, or unauthenticated public re-download verification.
+
+The documentation-inclusive working tree then passed all 26 stages of `make verify` from
+approximately 16:56 through 17:00 JST on 2026-09-06. The gate covered recursive Swift-format lint,
+all 235 Core tests in 18 suites, all 455 native App tests in 40 suites, the unsigned native build,
+the arm64 ad hoc Debug runtime build and strict bundle-signature check, the no-permission-request
+launch smoke, source tracking, README language boundaries, permission and version contracts,
+release-definition fixtures, release artifact and package fixtures, evidence-freeze lifecycle and
+shell-security fixtures, and tracked-output, common-secret-pattern, and lecture-data-extension
+checks. The native result bundle is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_16-56-29-+0900.xcresult`. The Debug
+runtime executable has SHA-256
+`cece63d35913eadcb16bd279507548bb70902956b42fcf8663d82ae67974498d`, ad hoc CDHash
+`8514d59f5f7b32920e29341b2af9d9be4b5b1f6a`, no team identifier, and no Hardened Runtime flag.
+This is a complete automated gate for the still-uncommitted working tree, not the clean
+exact-commit `evidence` transaction or distribution App. It adds no live microphone, managed
+PowerPoint, user-canvas, visible-overlay, natural-lecture, export, PPTX-integrity, Gatekeeper,
+owner-acceptance, GitHub Release, or public re-download evidence.

@@ -47,7 +47,13 @@ require_text 'materialize_result_bundle_for_queries "$after_result" "$isolated_s
 require_text 'extract_result_bundle_query_outputs "$result_bundle" "$source_root" "$result_digest"'
 require_text 'required_stable_observations=6 quiet_nanoseconds=5000000000'
 require_text 'maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000'
+require_text 'local seconds_value="${SECONDS-}"'
+require_text '(( seconds_value <= 9223372036 ))'
+reject_text 'time.monotonic_ns()'
 require_text 'result_bundle_pair_matches_digest'
+require_text 'failure=pairConsistentButDeadlineExceeded'
+require_text 'failure=observationLimitExceeded'
+require_text 'retry=pairDigestMismatch'
 require_text '"$first_token_after" == "$first_token_before"'
 require_text '"$second_token_after" == "$second_token_before"'
 require_text '"$post_pair_source_token" == "$post_digest_token"'
@@ -113,6 +119,30 @@ positions[1]=body.rindex(markers[1])
 if positions!=sorted(positions): raise SystemExit(1)
 PY
 
+/usr/bin/python3 -I - "$tool" <<'PY'
+import sys
+data=open(sys.argv[1],encoding="utf-8").read()
+start=data.index("freeze_result_bundle_when_stable() {")
+end=data.index("\ncreate_isolated_commit_source() {",start)
+body=data[start:end]
+pair_done=body.index("phase=pairDigestCompleted")
+clock=body.rindex("result_bundle_set_monotonic_now || return 1",0,pair_done)
+identity=body.index('current_identity="$(directory_identity "$result_bundle")"',pair_done)
+diagnostic=body.index("phase=finalSealStarted",identity)
+destination=body.index('post_pair_destination_token="$(result_bundle_stability_token "$destination")"',diagnostic)
+source=body.index('post_pair_source_token="$(result_bundle_stability_token "$result_bundle")"',destination)
+success=body.index('frozen_result_bundle_digest="$current_digest"\n          return 0',source)
+if [clock,identity,diagnostic,destination,source,success] != sorted(
+    [clock,identity,diagnostic,destination,source,success]
+): raise SystemExit(1)
+source_success='''        elif ! post_pair_source_token="$(result_bundle_stability_token "$result_bundle")"; then
+          final_seal_failure='sourceTokenUnavailable'
+        elif [[ "$post_pair_source_token" == "$post_digest_token" ]]; then
+          frozen_result_bundle_digest="$current_digest"
+          return 0'''
+if source_success not in body: raise SystemExit(1)
+PY
+
 root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-no-fee-v1-test.XXXXXX)"
 trap '[[ -d "$root" ]] && /usr/bin/find "$root" -depth -delete' EXIT
 runtime_flag_function="$root/hardened-runtime-flag-function.sh"
@@ -156,6 +186,8 @@ portable_archive_functions="$root/portable-archive-functions.sh"
     | /usr/bin/sed '1s/^result_bundle_pair_matches_digest/result_bundle_pair_matches_digest_original/'
   sed -n '/^result_bundle_stability_pause() {$/,/^}$/p' "$tool"
   sed -n '/^result_bundle_set_monotonic_now() {$/,/^}$/p' "$tool"
+  sed -n '/^result_bundle_set_monotonic_now() {$/,/^}$/p' "$tool" \
+    | /usr/bin/sed '1s/^result_bundle_set_monotonic_now/result_bundle_set_monotonic_now_original/'
   sed -n '/^result_bundle_stability_token() {$/,/^}$/p' "$tool"
   sed -n '/^copy_result_bundle_for_freeze() {$/,/^}$/p' "$tool"
   sed -n '/^run_result_bundle_queries() {$/,/^}$/p' "$tool"
@@ -405,6 +437,30 @@ result_bundle_tree_digest() {
   result_bundle_tree_digest_original "$@"
 }
 
+(
+  SECONDS=9000000000
+  clock_seconds_before="$SECONDS"
+  result_bundle_set_monotonic_now \
+    || { /usr/bin/printf '%s\n' 'The production monotonic clock rejected a valid SECONDS value.' >&2; exit 1; }
+  production_clock_first="$monotonic_now"
+  clock_seconds_after="$SECONDS"
+  (( production_clock_first >= clock_seconds_before * 1000000000 \
+    && production_clock_first <= clock_seconds_after * 1000000000 )) \
+    || { /usr/bin/printf '%s\n' 'The production monotonic clock is not bound to this Bash process SECONDS value.' >&2; exit 1; }
+  /bin/sleep 2
+  result_bundle_set_monotonic_now \
+    || { /usr/bin/printf '%s\n' 'The production monotonic clock failed after a bounded wait.' >&2; exit 1; }
+  (( monotonic_now - production_clock_first >= 1000000000 )) \
+    || { /usr/bin/printf '%s\n' 'The production monotonic clock did not advance by at least one second.' >&2; exit 1; }
+)
+(
+  SECONDS=9223372037
+  if result_bundle_set_monotonic_now; then
+    /usr/bin/printf '%s\n' 'The production monotonic clock accepted an overflowing SECONDS value.' >&2
+    exit 1
+  fi
+)
+
 fake_monotonic_now=0
 result_bundle_set_monotonic_now() {
   fake_monotonic_now=$((fake_monotonic_now + 1000000000))
@@ -430,6 +486,115 @@ freeze_result_bundle_when_stable \
   || { /usr/bin/printf '%s\n' 'The delayed xcresult freeze did not retain its settled bytes.' >&2; exit 1; }
 /usr/bin/grep -Fq 'delayed xcresult service update' "$delayed_frozen_bundle/Data/payload" \
   || { /usr/bin/printf '%s\n' 'The delayed xcresult update was omitted from the frozen copy.' >&2; exit 1; }
+
+slow_success_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-12-51-+0900.xcresult"
+slow_success_frozen_bundle="$root/slow-success-frozen.xcresult"
+slow_success_log="$root/slow-success.log"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$slow_success_result_bundle"
+slow_success_clock_calls=0
+result_bundle_set_monotonic_now() {
+  slow_success_clock_calls=$((slow_success_clock_calls + 1))
+  if [[ "$slow_success_clock_calls" == 14 ]]; then
+    monotonic_now=300000000000
+  elif (( slow_success_clock_calls >= 15 )); then
+    monotonic_now=$((500000000000 + (slow_success_clock_calls - 15) * 1000000000))
+  else
+    monotonic_now=$((slow_success_clock_calls * 1000000000))
+  fi
+}
+result_bundle_stability_pause() { :; }
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
+}
+freeze_result_bundle_when_stable \
+  "$slow_success_result_bundle" "$slow_success_frozen_bundle" "$source_root" \
+  2>"$slow_success_log" \
+  || { /usr/bin/printf '%s\n' 'A consistent slow digest was rejected inside the bounded deadline.' >&2; exit 1; }
+/usr/bin/grep -Fq 'phase=finalSealStarted' "$slow_success_log" \
+  || { /usr/bin/printf '%s\n' 'The slow-success final seal was not diagnosed.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$slow_success_result_bundle" "$source_root")" \
+  == "$(result_bundle_tree_digest "$slow_success_frozen_bundle" "$source_root")" ]] \
+  || { /usr/bin/printf '%s\n' 'The slow-success freeze accepted inconsistent bytes.' >&2; exit 1; }
+
+expired_pair_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-12-56-+0900.xcresult"
+expired_pair_frozen_bundle="$root/expired-pair-frozen.xcresult"
+expired_pair_log="$root/expired-pair.log"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$expired_pair_result_bundle"
+expired_pair_clock_calls=0
+result_bundle_set_monotonic_now() {
+  expired_pair_clock_calls=$((expired_pair_clock_calls + 1))
+  if [[ "$expired_pair_clock_calls" == 14 ]]; then
+    monotonic_now=300000000000
+  elif (( expired_pair_clock_calls >= 15 )); then
+    monotonic_now=$((602000000000 + (expired_pair_clock_calls - 15) * 1000000000))
+  else
+    monotonic_now=$((expired_pair_clock_calls * 1000000000))
+  fi
+}
+if freeze_result_bundle_when_stable \
+  "$expired_pair_result_bundle" "$expired_pair_frozen_bundle" "$source_root" \
+  2>"$expired_pair_log"; then
+  /usr/bin/printf '%s\n' 'A consistent result pair beyond the bounded deadline was accepted.' >&2
+  exit 1
+fi
+/usr/bin/grep -Fq 'failure=pairConsistentButDeadlineExceeded' "$expired_pair_log" \
+  || { /usr/bin/printf '%s\n' 'The post-pair deadline rejection was not diagnosed exactly.' >&2; exit 1; }
+[[ ! -e "$expired_pair_frozen_bundle" && ! -L "$expired_pair_frozen_bundle" ]] \
+  || { /usr/bin/printf '%s\n' 'A post-deadline pair left a frozen candidate behind.' >&2; exit 1; }
+
+seal_window_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-01-+0900.xcresult"
+seal_window_frozen_bundle="$root/seal-window-frozen.xcresult"
+seal_window_log="$root/seal-window.log"
+seal_window_unrelated="$root/seal-window-unrelated"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$seal_window_result_bundle"
+/usr/bin/printf '%s\n' 'unrelated fixture' >"$seal_window_unrelated"
+seal_window_source_digest="$(result_bundle_tree_digest "$seal_window_result_bundle" "$source_root")"
+seal_window_clock_calls=0
+seal_window_mutations=0
+result_bundle_set_monotonic_now() {
+  seal_window_clock_calls=$((seal_window_clock_calls + 1))
+  monotonic_now=$((seal_window_clock_calls * 1000000000))
+  if [[ -d "$seal_window_frozen_bundle" && ! -L "$seal_window_frozen_bundle" ]]; then
+    seal_window_mutations=$((seal_window_mutations + 1))
+    /usr/bin/printf '%s\n' 'destination mutation in the final clock window' \
+      >>"$seal_window_frozen_bundle/Data/payload"
+  fi
+}
+if freeze_result_bundle_when_stable \
+  "$seal_window_result_bundle" "$seal_window_frozen_bundle" "$source_root" \
+  2>"$seal_window_log"; then
+  /usr/bin/printf '%s\n' 'A destination mutation in the final clock window was accepted.' >&2
+  exit 1
+fi
+[[ "$seal_window_mutations" == 2 ]] \
+  || { /usr/bin/printf '%s\n' 'The final clock-window mutation did not exercise both bounded retries.' >&2; exit 1; }
+/usr/bin/grep -Fq 'retry=finalTokenMismatch' "$seal_window_log" \
+  || { /usr/bin/printf '%s\n' 'The final clock-window mutation was not rejected by the final seal.' >&2; exit 1; }
+[[ ! -e "$seal_window_frozen_bundle" && ! -L "$seal_window_frozen_bundle" ]] \
+  || { /usr/bin/printf '%s\n' 'A final clock-window mutation left a frozen candidate behind.' >&2; exit 1; }
+[[ -f "$seal_window_unrelated" ]] \
+  || { /usr/bin/printf '%s\n' 'Final clock-window cleanup removed an unrelated sibling.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$seal_window_result_bundle" "$source_root")" \
+  == "$seal_window_source_digest" ]] \
+  || { /usr/bin/printf '%s\n' 'Final clock-window cleanup changed the source result bundle.' >&2; exit 1; }
+
+for result_freeze_log in "$slow_success_log" "$expired_pair_log" "$seal_window_log"; do
+  if /usr/bin/grep -Fq "$root" "$result_freeze_log" \
+    || /usr/bin/grep -Fq "$source_root" "$result_freeze_log"; then
+    /usr/bin/printf '%s\n' 'Result-freeze diagnostics disclosed a fixture or source-root path.' >&2
+    exit 1
+  fi
+  if /usr/bin/grep -Eq '[0-9A-Fa-f]{64}' "$result_freeze_log"; then
+    /usr/bin/printf '%s\n' 'Result-freeze diagnostics disclosed a digest or token.' >&2
+    exit 1
+  fi
+done
+
+fake_monotonic_now=0
+result_bundle_set_monotonic_now() {
+  fake_monotonic_now=$((fake_monotonic_now + 1000000000))
+  monotonic_now="$fake_monotonic_now"
+}
 
 copy_race_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-21-+0900.xcresult"
 copy_race_frozen_bundle="$root/copy-race-frozen.xcresult"
@@ -612,7 +777,7 @@ for query_output in "$root/disposable-summary.json" "$root/disposable-build.json
 done
 result_bundle_stability_pause() { /bin/sleep 1; }
 result_bundle_set_monotonic_now() {
-  monotonic_now="$(/usr/bin/python3 -I -c 'import time; print(time.monotonic_ns())')"
+  result_bundle_set_monotonic_now_original
 }
 result_bundle_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")"
 gate_log="$root/prepublication-gate.log"

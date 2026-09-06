@@ -38,7 +38,7 @@
 3. 新しく生成されたwindow表示のslide showが選択資料へ結び付いていることを確認する．
 4. frozen preview上で実際のslide canvasだけを選択・確定し，PowerPointのcontrol又は余白を含めない．
 5. 少なくとも3枚を通常の講義速度で進め，slide ID／indexの変化，visual analysis及びoverlayの追従を観察する．
-6. 日本語又は英語のうち資料の主言語で約30秒話し，final transcriptと文脈に根拠のある板書を確認する．
+6. 日本語又は英語のうち資料の主言語で約30秒，通常の模擬講義として自然に話し，final transcriptと文脈に根拠のある板書を確認する．命令用の定型句は用いない．少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する．
 7. mouse又はtrackpadで短い手書き線を1本描き，AI overlayが入力を妨げず，人間入力が優先されることを確認する．
 8. text，box，arrow又は簡単なdiagramが表示された場合，既存内容を覆わず，根拠のない内容を追加せず，読める間は安定していることを確認する．
 9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．
@@ -46,12 +46,15 @@
 11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．
 12. 受入用複製物を保存せずに閉じ，元PPTX及び複製物のbyte sizeとSHA-256を実施前の値と比較する．
 
+　実行時診断の`final`，座標変換済み，許可，描画要求済み又は正数の本番板書件数は，原因調査の補助であり，可視板書の代替証拠ではない．PowerPoint上で自動板書を1件も目視できなければ，診断値にかかわらず不合格とする．
+
 ## 合格条件
 
 - [ ] 間違ったPowerPoint window又は既存slide showを取得していない．
 - [ ] crash，停止不能，反復する権限要求又は残存する補助windowがない．
 - [ ] slide移動後のidentity，analysis及びoverlayが現在のslideへ追従する．
 - [ ] board内容はslide又はそのsessionの発話に根拠があり，利用者が読める間は不意に変化しない．
+- [ ] 命令用定型句なしの自然な模擬講義から，少なくとも1件の根拠ある自動板書をPowerPoint上で目視した．
 - [ ] overlayはslide canvasへ整列し，既存内容とmouse入力を妨げない．
 - [ ] JSON／SVG exportは表示可能なpublic board sceneだけを含む．
 - [ ] 元PPTX及び受入用複製物のbyte sizeとSHA-256が実施前後で一致する．

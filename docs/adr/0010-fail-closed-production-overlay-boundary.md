@@ -19,7 +19,7 @@ The production mapper accepts a placement only when all of the following facts a
 
 - The user-confirmed canvas belongs to the active capture operation and exact ScreenCaptureKit window.
 - The confirmation and current frame have identical validated capture-surface geometry and output-pixel dimensions. Test-only whole-frame provenance is rejected by the production mapper.
-- The current delivery supplies its own valid `screenRect`; a position from an earlier delivery is never inherited.
+- A new delivery supplies its own valid `screenRect`. A verified idle repeat uses its own valid current value, rejects a present malformed value, or only when the key is absent carries forward the prior validated rectangle as a candidate. A retained candidate cannot authorize display or lease renewal without a fresh exact-window eligibility check whose current Core Graphics bounds agree within two points.
 - The current frame sequence is retained in the resulting placement, and the app renders only when that sequence still equals the latest eligible visual frame.
 - The confirmed output-pixel rectangle lies inside the surface `contentRect` after applying `scaleFactor` and `contentScale`. At most one output pixel of SDK rounding drift is accepted.
 - The resulting Quartz global target rectangle is finite, nonempty, and fully contained by exactly one validated display snapshot.
@@ -35,7 +35,7 @@ An exact coordinate placement is necessary but not sufficient. Production render
 - The frozen PowerPoint process identifier and exact PowerPoint bundle identifier identify the frontmost application.
 - The on-screen Core Graphics window list contains exactly one entry for the frozen ScreenCaptureKit window identifier.
 - That entry has the frozen owner process, is on screen, and is at layer zero.
-- Each edge of its Core Graphics bounds agrees with the current ScreenCaptureKit `screenRect` within two points. This tolerance covers coordinate rounding only and is not an approximate window-matching fallback.
+- Each edge of its freshly read Core Graphics bounds agrees with the frame-carried validated ScreenCaptureKit screen-position candidate within two points. This tolerance covers coordinate rounding only and is not an approximate window-matching fallback; it is mandatory when the candidate was carried through verified idle-key omission.
 - No earlier entry in the front-to-back on-screen window list, at any layer, has a positive-area intersection with the selected PowerPoint window. A dialog, another application window, or another overlapping window therefore closes the production path.
 
 Missing or malformed application, window-list, identity, geometry, analysis, or ordering evidence denies display. The app's own overlay process is excluded from the eligibility snapshot so that the panel does not disqualify itself; no other occluding process or layer is ignored.
@@ -56,9 +56,9 @@ Full-display rendering remains available only through the explicit demo path. De
 
 Rejected. A broad panel would knowingly exceed the confirmed slide boundary and could place AI content over controls, dialogs, or another application.
 
-### Reuse the last valid position or choose the nearest display
+### Reuse the last valid position without revalidation or choose the nearest display
 
-Rejected. Window movement, resize, display reconfiguration, or a missing current `screenRect` would turn old coordinates into an ungrounded target.
+Rejected. Window movement, resize, display reconfiguration, or disappearance would turn unqualified old coordinates into an ungrounded target. The accepted idle-omission policy carries a prior validated rectangle only as a candidate and still requires the current exact Core Graphics window, ownership, foreground state, bounds agreement, and occlusion checks before display or lease renewal.
 
 ### Match PowerPoint by title, approximate bounds, frontmost state alone, or window-list order
 

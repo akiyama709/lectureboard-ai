@@ -7,13 +7,35 @@ struct TranscriptionObservation: Sendable {
   let sourceMachTime: UInt64
 }
 
+enum TranscriptionTerminalOutcome: Equatable, Sendable {
+  case gracefulStopCompleted
+  case failure(TranscriptionError)
+}
+
+struct TranscriptionTerminalEvent: Equatable, Sendable {
+  let operationID: TranscriptionOperationID
+  let outcome: TranscriptionTerminalOutcome
+
+  init(
+    operationID: TranscriptionOperationID,
+    outcome: TranscriptionTerminalOutcome
+  ) {
+    self.operationID = operationID
+    self.outcome = outcome
+  }
+
+  init(operationID: TranscriptionOperationID, error: TranscriptionError) {
+    self.init(operationID: operationID, outcome: .failure(error))
+  }
+}
+
 /// An opaque identifier for one transcription start operation.
 ///
 /// Callers deliberately cannot construct or inspect identifiers. A retained callback must
 /// present the identifier that was current when the callback was installed, preventing a
 /// delayed result from a stopped recognizer from entering a later transcription context.
-struct TranscriptionOperationID: Equatable, Sendable {
-  fileprivate let rawValue: UInt64
+struct TranscriptionOperationID: Equatable, Hashable, Sendable {
+  let rawValue: UInt64
 }
 
 struct TranscriptionOperationGate: Sendable {
@@ -54,17 +76,23 @@ struct TranscriptionOperationGate: Sendable {
 @MainActor
 protocol TranscriptionProvider: AnyObject {
   func start(
+    operationID: TranscriptionOperationID,
     language: LanguageTag,
-    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void,
+    onTerminalEvent: @escaping @MainActor (TranscriptionTerminalEvent) -> Void
   ) async throws
-  func stop()
+  func finishCurrentSegment(operationID: TranscriptionOperationID)
+  func stop(operationID: TranscriptionOperationID)
 }
 
-enum TranscriptionError: LocalizedError {
+enum TranscriptionError: LocalizedError, Equatable, Sendable {
   case authorizationDenied
   case recognizerUnavailable
   case onDeviceRecognitionUnavailable
   case noAudioInput
+  case recognitionInterrupted
+  case recognitionFinalizationTimedOut
+  case rapidRestartLimitReached
 
   var errorDescription: String? {
     switch self {
@@ -76,6 +104,12 @@ enum TranscriptionError: LocalizedError {
       return String(localized: "error.onDeviceRecognitionUnavailable")
     case .noAudioInput:
       return String(localized: "error.noAudioInput")
+    case .recognitionInterrupted:
+      return String(localized: "error.recognitionInterrupted")
+    case .recognitionFinalizationTimedOut:
+      return String(localized: "error.recognitionFinalizationTimedOut")
+    case .rapidRestartLimitReached:
+      return String(localized: "error.rapidRestartLimitReached")
     }
   }
 }

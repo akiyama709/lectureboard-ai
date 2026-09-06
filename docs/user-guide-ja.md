@@ -28,7 +28,7 @@ cd -- "/absolute/path/to/downloaded-release-assets"
 
 - **画面収録とシステムオーディオ録音**：選択したPowerPoint windowを取得するため画面accessが必要である．system audioは要求しない．Apple公式の[画面収録access設定](https://support.apple.com/ja-jp/guide/mac-help/mchld6aa7d23/mac)で正確なAppを確認する．
 - **Automation → Microsoft PowerPoint**：managed開始が新しいPowerPoint slide-show objectを作成・読取するため，初回に明示許可する．既存slide showは採用しない．
-- **マイク及び音声認識**：文字起こし開始時だけ要求する．Apple Speechは端末内認識を必須とし，選択言語で利用できなければnetwork fallbackを使わず停止する．
+- **マイク及び音声認識**：文字起こし開始時だけ要求する．Apple Speechは端末内認識を必須とし，選択言語で利用できなければnetwork fallbackを使わず停止する．認識は最大8秒のcycleで更新し，区間確定にさらに最大4秒かかり得る．この時間境界には決定論的testがあるが，正確なrelease候補による実microphone動作は受入確認まで未検証である．
 - **アクセシビリティ及びフルディスクアクセス**：対応手順では不要である．正式版が要求した場合は，許可せず不具合として報告する．
 
 　App内で画面収録が許可済みなら，再要求しない．未許可の場合だけ1回要求し，システム設定で正確な導入済みAppを有効にしてから，そのAppを終了し同じpathから開き直す．再起動後も未許可なら，要求を繰り返さず停止する．
@@ -51,6 +51,8 @@ cd -- "/absolute/path/to/downloaded-release-assets"
 5. 新しいwindow表示slide showと取得状態を待つ．PowerPointが返したobjectを1件の正確な取得windowへ結び付けられない場合，Appは続行せず停止しなければならない．
 6. frozen preview上でPowerPoint操作部と周囲UIを除外し，表示中slideだけを囲んでスライド面を確定する．
 7. 現在のslide identity，新しいframe及びvisual analysisが準備済みとなってから，文字起こしを開始する．
+
+　実行時診断は，アプリ状態と文字起こし状態を別々に表示する．「現在のスライド文脈を待機中」は，正確なidentity，canvas，新しいframe及びcurrent解析が揃うまで出力を意図的に閉じている状態である．「描画要求済み」はrendererを呼び出したことだけを示すため，板書がPowerPoint上に実際に見えることを講師が確認する．本番板書件数にデモ内容は含まれない．
 
 　講義中はPowerPointを通常どおり操作する．mouse又はpenによる人間入力が常に優先される．「板書を隠す」はAI出力を直ちに隠す．slide identity，canvas，current analysis，focus又はwindow geometryが不確実になれば，overlayは推測せず非表示になることを想定する．
 

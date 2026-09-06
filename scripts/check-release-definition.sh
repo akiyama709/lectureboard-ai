@@ -602,6 +602,8 @@ require_text docs/user-acceptance-ja.md '元のPPTXを上書きしない'
 require_text docs/user-acceptance-ja.md '画面収録が許可済みなら，「画面収録を許可」を再度押さない'
 require_text docs/user-acceptance-ja.md '元PPTX及び受入用複製物のbyte sizeとSHA-256が実施前後で一致する'
 require_text docs/user-acceptance-ja.md 'この受入は，公開の承認とは別である'
+require_text docs/user-acceptance-ja.md '少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する'
+require_text docs/user-acceptance-ja.md '診断値にかかわらず不合格とする'
 require_ordered_text docs/user-acceptance-ja.md \
   '9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．' \
   '10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．' \

@@ -206,16 +206,30 @@ struct AppSlideCanvasIntegrationTests {
       geometry: geometry
     )
     #expect(overlay.renderCallCount == 1)
+    #expect(model.productionOverlayEligibilityState == .allowed)
+    #expect(model.productionOverlayPresentationState == .renderRequested)
+    #expect(model.publicBoardElementCount > 0)
+    #expect(model.productionConfirmedBoardElementCount > 0)
+    let lastNewFrame = frame(
+      sequenceNumber: 5,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
+    )
 
     model.hideOverlay()
     #expect(!overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
     model.showOverlayDemo()
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
     await capture.emit(
-      frame(
+      CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: lastNewFrame,
         sequenceNumber: 6,
-        image: geometry.image,
-        captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.initialScreen
+        capturedAt: Date(),
+        currentAttachments: [.status: SCFrameStatus.idle.rawValue]
       )
     )
     try await waitUntil { model.capturedFrameCount == 6 }
@@ -258,24 +272,26 @@ struct AppSlideCanvasIntegrationTests {
     #expect(overlay.renderCallCount == 1)
     let eligibilityCallsBeforeRepeat = eligibility.callCount
 
-    await capture.emit(
-      frame(
-        sequenceNumber: 6,
-        image: geometry.image,
-        captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.initialScreen
-      )
+    let sameGeometryFrame = frame(
+      sequenceNumber: 6,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
     )
+    await capture.emit(sameGeometryFrame)
     try await waitUntil { model.capturedFrameCount == 6 }
     #expect(eligibility.callCount > eligibilityCallsBeforeRepeat)
     #expect(overlay.renderCallCount == 1)
 
     await capture.emit(
-      frame(
+      CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: sameGeometryFrame,
         sequenceNumber: 7,
-        image: geometry.image,
-        captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.movedScreen
+        capturedAt: Date(),
+        currentAttachments: [
+          .status: SCFrameStatus.idle.rawValue,
+          .screenRect: geometry.movedScreen.screenRect,
+        ]
       )
     )
     try await waitUntil { model.capturedFrameCount == 7 }
@@ -298,7 +314,7 @@ struct AppSlideCanvasIntegrationTests {
     await model.stopWindowCapture()
   }
 
-  @Test func proposedIntentRemainsInternalUntilRepeatedEvidenceConfirmsIt() async throws {
+  @Test func ungroundedIntentRemainsInternalUntilAGroundedDefinitionArrives() async throws {
     let capture = ManualCanvasCapture()
     let analyzer = RecordingCanvasAnalyzer(
       occupiedRegions: boardProposalOccupiedRegions()
@@ -322,16 +338,25 @@ struct AppSlideCanvasIntegrationTests {
     let eligibilityCallsBeforeProposal = eligibility.callCount
     let renderCallsBeforeProposal = overlay.renderCallCount
     let hideCallsBeforeProposal = overlay.hideCallCount
-    let repeatedDefinition = "Sustainability means preserving options."
+    let ungroundedDefinition = "Biodiversity means preserving options."
 
-    model.receive(boardProposalDefinition(text: repeatedDefinition))
+    model.receive(boardProposalDefinition(text: ungroundedDefinition))
 
     #expect(model.boardScene.elements.isEmpty)
     #expect(eligibility.callCount == eligibilityCallsBeforeProposal)
     #expect(overlay.renderCallCount == renderCallsBeforeProposal)
     #expect(overlay.hideCallCount == hideCallsBeforeProposal)
 
-    model.receive(boardProposalDefinition(text: repeatedDefinition))
+    model.receive(boardProposalDefinition(text: ungroundedDefinition))
+
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(eligibility.callCount == eligibilityCallsBeforeProposal)
+    #expect(overlay.renderCallCount == renderCallsBeforeProposal)
+    #expect(overlay.hideCallCount == hideCallsBeforeProposal)
+
+    model.receive(
+      boardProposalDefinition(text: "Sustainability means preserving options.")
+    )
 
     #expect(!model.boardScene.elements.isEmpty)
     #expect(eligibility.callCount == eligibilityCallsBeforeProposal + 1)
@@ -366,11 +391,16 @@ struct AppSlideCanvasIntegrationTests {
     )
     #expect(overlay.isVisible)
     #expect(scheduler.hasActiveAction)
+    // This is evidence of a controller invocation only; GUI visibility remains a human check.
+    #expect(model.productionOverlayEligibilityState == .allowed)
+    #expect(model.productionOverlayPresentationState == .renderRequested)
     let expiredActionIndex = scheduler.scheduledActionCount - 1
     let rendersBeforeExpiry = overlay.renderCallCount
 
     scheduler.fireActive()
     #expect(!overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
     receiveConfirmedBoardProposal("Resilience means retaining function.", on: model)
     #expect(!overlay.isVisible)
     #expect(overlay.renderCallCount == rendersBeforeExpiry)
@@ -385,12 +415,16 @@ struct AppSlideCanvasIntegrationTests {
     )
     try await waitUntil { overlay.isVisible }
     #expect(overlay.renderCallCount == rendersBeforeExpiry + 1)
+    #expect(model.productionOverlayEligibilityState == .allowed)
+    #expect(model.productionOverlayPresentationState == .renderRequested)
 
     scheduler.fireRetained(at: expiredActionIndex)
     #expect(overlay.isVisible)
 
     safetyEvents.emitUnsafeEvent()
     #expect(!overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .blocked)
+    #expect(model.productionOverlayPresentationState == .hidden)
     receiveConfirmedBoardProposal(
       "Adaptation means changing strategy under uncertainty.",
       on: model
@@ -406,13 +440,26 @@ struct AppSlideCanvasIntegrationTests {
       )
     )
     try await waitUntil { overlay.isVisible }
+    #expect(model.productionOverlayEligibilityState == .allowed)
+    #expect(model.productionOverlayPresentationState == .renderRequested)
 
     await model.stopWindowCapture()
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
+    #expect(model.productionConfirmedBoardElementCount == 0)
+    safetyEvents.emitUnsafeEvent()
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
     model.showOverlayDemo()
     #expect(overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
     safetyEvents.emitUnsafeEvent()
     #expect(overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
     model.hideOverlay()
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
   }
 
   @Test func visualContentChangeImmediatelyInvalidatesGroundingAndNeedsFreshFrameLease()
@@ -460,10 +507,12 @@ struct AppSlideCanvasIntegrationTests {
         sequenceNumber: 6,
         image: changedImage,
         captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.initialScreen
+        captureScreenGeometry: geometry.initialScreen,
+        deliveryKind: .idleRepeat
       )
     )
     try await waitUntil { model.capturedFrameCount == 6 }
+    #expect(model.repeatedCapturedFrameCount == 1)
     #expect(!overlay.isVisible)
     #expect(model.boardScene.elements.isEmpty)
     #expect(model.latestSlideAnalysis == nil)
@@ -494,13 +543,6 @@ struct AppSlideCanvasIntegrationTests {
     transcription.emitRetained(staleObservation, startIndex: 0)
     #expect(model.boardScene.elements.isEmpty)
     #expect(transcription.stopCallCount == stopCallsBeforeVisualChange)
-    transcription.emitRetained(
-      TranscriptionObservation(
-        segment: boardProposalDefinition(text: "Sustainability means preserving options."),
-        sourceMachTime: UInt64.max
-      ),
-      startIndex: 0
-    )
     transcription.emitRetained(
       TranscriptionObservation(
         segment: boardProposalDefinition(text: "Sustainability means preserving options."),
@@ -599,45 +641,53 @@ struct AppSlideCanvasIntegrationTests {
     #expect(!model.boardScene.elements.isEmpty)
     #expect(overlay.renderCallCount == 0)
     #expect(!overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .blocked)
+    #expect(model.productionOverlayPresentationState == .hidden)
 
     eligibility.state = .eligible
-    await capture.emit(
-      frame(
-        sequenceNumber: 6,
-        image: geometry.image,
-        captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.initialScreen
-      )
+    let eligibleNewFrame = frame(
+      sequenceNumber: 6,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
     )
+    await capture.emit(eligibleNewFrame)
     try await waitUntil { model.capturedFrameCount == 6 }
     #expect(overlay.renderCallCount == 1)
     #expect(overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .allowed)
+    #expect(model.productionOverlayPresentationState == .renderRequested)
 
-    eligibility.state = .windowMissing
-    await capture.emit(
-      frame(
-        sequenceNumber: 7,
-        image: geometry.image,
-        captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.initialScreen
-      )
+    eligibility.state = .notFrontmost
+    let ineligibleIdleFrame = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: eligibleNewFrame,
+      sequenceNumber: 7,
+      capturedAt: Date(),
+      currentAttachments: [.status: SCFrameStatus.idle.rawValue]
     )
+    await capture.emit(ineligibleIdleFrame)
     try await waitUntil { model.capturedFrameCount == 7 }
     #expect(!overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .blocked)
+    #expect(model.productionOverlayPresentationState == .hidden)
 
     eligibility.state = .eligible
     await capture.emit(
-      frame(
+      CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: ineligibleIdleFrame,
         sequenceNumber: 8,
-        image: geometry.image,
-        captureSurfaceGeometry: geometry.surface,
-        captureScreenGeometry: geometry.initialScreen
+        capturedAt: Date(),
+        currentAttachments: [.status: SCFrameStatus.idle.rawValue]
       )
     )
     try await waitUntil { model.capturedFrameCount == 8 }
     #expect(overlay.renderCallCount == 2)
     #expect(overlay.isVisible)
+    #expect(model.productionOverlayEligibilityState == .allowed)
+    #expect(model.productionOverlayPresentationState == .renderRequested)
     await model.stopWindowCapture()
+    #expect(model.productionOverlayEligibilityState == .notEvaluated)
+    #expect(model.productionOverlayPresentationState == .hidden)
   }
 
   @Test func unavailableCaptureContentHidesOverlayAndStaleSessionNoticeIsIgnored() async throws {
@@ -748,13 +798,6 @@ struct AppSlideCanvasIntegrationTests {
       ),
       startIndex: 1
     )
-    transcription.emitRetained(
-      TranscriptionObservation(
-        segment: boardProposalDefinition(text: "Resilience means retaining function."),
-        sourceMachTime: UInt64.max
-      ),
-      startIndex: 1
-    )
     try await waitUntil("post-unavailable proposal render") { overlay.isVisible }
     #expect(overlay.renderCallCount == 2)
 
@@ -772,6 +815,58 @@ struct AppSlideCanvasIntegrationTests {
     await drainMainActorQueue()
     #expect(overlay.isVisible)
     #expect(overlay.renderCallCount == 3)
+    await model.stopWindowCapture()
+  }
+
+  @Test func verifiedIdleCannotCrossAConfirmedSemanticSlideBoundary() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let identity = IdentifiedCanvasSlideIdentityProvider()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display],
+      slideIdentityProvider: identity
+    )
+
+    try await establishVisibleProductionOverlay(
+      model: model,
+      capture: capture,
+      geometry: geometry
+    )
+    #expect(overlay.isVisible)
+    let lastNewFrame = frame(
+      sequenceNumber: 5,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
+    )
+
+    await identity.emitTransition(slideID: 2, slideIndex: 2)
+    try await waitUntil { model.boardScene.slideNumber == 2 }
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(!overlay.isVisible)
+
+    await capture.emit(
+      CapturedPowerPointFrameFactory.makeIdleRepeat(
+        from: lastNewFrame,
+        sequenceNumber: 6,
+        capturedAt: Date(),
+        currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+      )
+    )
+    await drainMainActorQueue()
+
+    #expect(model.repeatedCapturedFrameCount == 1)
+    #expect(model.slideIdentityFrameSyncState == .waiting)
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(!overlay.isVisible)
+
     await model.stopWindowCapture()
   }
 
@@ -824,6 +919,8 @@ struct AppSlideCanvasIntegrationTests {
     #expect(model.canShowOverlayDemo)
     model.showOverlayDemo()
     #expect(!model.boardScene.elements.isEmpty)
+    #expect(model.publicBoardElementCount > 0)
+    #expect(model.productionConfirmedBoardElementCount == 0)
     #expect(model.status == .overlayVisible)
     model.hideOverlay()
     #expect(!model.boardScene.elements.isEmpty)
@@ -1184,7 +1281,130 @@ struct AppSlideCanvasIntegrationTests {
     #expect(model.slideCanvasInvalidationReason == nil)
   }
 
-  @Test func metadataEmptyVerifiedIdleRepeatKeepsCanvasButHidesMappedOverlay()
+  @Test func metadataEmptyVerifiedIdleRepeatKeepsCanvasAndRenewsMappedOverlay()
+    async throws
+  {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let scheduler = ManualCanvasProductionOverlayLeaseScheduler()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display],
+      productionOverlayLeaseScheduler: scheduler
+    )
+
+    try await establishVisibleProductionOverlay(
+      model: model,
+      capture: capture,
+      geometry: geometry
+    )
+    #expect(model.slideCanvasOverlayMappingState == .mapped)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(overlay.isVisible)
+
+    let lastNewFrame = frame(
+      sequenceNumber: 5,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
+    )
+    let rendersBeforeIdle = overlay.renderCallCount
+    let leaseCountBeforeIdle = scheduler.scheduledActionCount
+    let preIdleLeaseIndex = leaseCountBeforeIdle - 1
+
+    let repeatedFrame = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: lastNewFrame,
+      sequenceNumber: 6,
+      capturedAt: Date(),
+      currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+    )
+    await capture.emit(repeatedFrame)
+    try await waitUntil { model.repeatedCapturedFrameCount == 1 }
+
+    #expect(repeatedFrame.captureSurfaceGeometry == lastNewFrame.captureSurfaceGeometry)
+    #expect(
+      repeatedFrame.captureScreenGeometry
+        == lastNewFrame.captureScreenGeometry
+    )
+    #expect(model.slideCanvasStatus == .confirmed)
+    #expect(model.slideCanvasInvalidationReason == nil)
+    #expect(model.slideCanvasOverlayMappingState == .mapped)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(overlay.isVisible)
+    #expect(overlay.renderCallCount == rendersBeforeIdle)
+    #expect(scheduler.scheduledActionCount == leaseCountBeforeIdle + 1)
+
+    scheduler.fireRetained(at: preIdleLeaseIndex)
+    #expect(overlay.isVisible)
+    scheduler.fireActive()
+    #expect(!overlay.isVisible)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func carriedIdleScreenPositionWithMismatchedExactWindowHidesWithoutLeaseRenewal()
+    async throws
+  {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let scheduler = ManualCanvasProductionOverlayLeaseScheduler()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let eligibility = PolicyBackedCanvasProductionOverlayEligibilityProvider(
+      exactWindowBounds: geometry.initialScreen.screenRect
+    )
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display],
+      productionOverlayEligibilityProvider: eligibility,
+      productionOverlayLeaseScheduler: scheduler
+    )
+
+    try await establishVisibleProductionOverlay(
+      model: model,
+      capture: capture,
+      geometry: geometry
+    )
+    #expect(overlay.isVisible)
+    let lastNewFrame = frame(
+      sequenceNumber: 5,
+      image: geometry.image,
+      captureSurfaceGeometry: geometry.surface,
+      captureScreenGeometry: geometry.initialScreen
+    )
+    let leaseCountBeforeIdle = scheduler.scheduledActionCount
+
+    eligibility.exactWindowBounds = geometry.movedScreen.screenRect
+    let repeatedFrame = CapturedPowerPointFrameFactory.makeIdleRepeat(
+      from: lastNewFrame,
+      sequenceNumber: 6,
+      capturedAt: Date(),
+      currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+    )
+    await capture.emit(repeatedFrame)
+    try await waitUntil { model.repeatedCapturedFrameCount == 1 }
+
+    #expect(repeatedFrame.captureScreenGeometry == geometry.initialScreen)
+    #expect(model.slideCanvasOverlayMappingState == .mapped)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(!overlay.isVisible)
+    #expect(scheduler.scheduledActionCount == leaseCountBeforeIdle)
+    #expect(!scheduler.hasActiveAction)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func malformedCurrentScreenGeometryOnVerifiedIdleHidesWithoutClearingCanvas()
     async throws
   {
     let capture = ManualCanvasCapture()
@@ -1205,28 +1425,26 @@ struct AppSlideCanvasIntegrationTests {
       capture: capture,
       geometry: geometry
     )
-    #expect(model.slideCanvasOverlayMappingState == .mapped)
-    #expect(!model.boardScene.elements.isEmpty)
-    #expect(overlay.isVisible)
-
     let lastNewFrame = frame(
       sequenceNumber: 5,
       image: geometry.image,
       captureSurfaceGeometry: geometry.surface,
       captureScreenGeometry: geometry.initialScreen
     )
-    let hidesBeforeIdle = overlay.hideCallCount
-
     let repeatedFrame = CapturedPowerPointFrameFactory.makeIdleRepeat(
       from: lastNewFrame,
       sequenceNumber: 6,
       capturedAt: Date(),
-      currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+      currentAttachments: [
+        .status: SCFrameStatus.idle.rawValue,
+        .screenRect: "malformed",
+      ]
     )
+
     await capture.emit(repeatedFrame)
     try await waitUntil { model.repeatedCapturedFrameCount == 1 }
 
-    #expect(repeatedFrame.captureSurfaceGeometry == lastNewFrame.captureSurfaceGeometry)
+    #expect(repeatedFrame.captureSurfaceGeometry == geometry.surface)
     #expect(repeatedFrame.captureScreenGeometry == nil)
     #expect(model.slideCanvasStatus == .confirmed)
     #expect(model.slideCanvasInvalidationReason == nil)
@@ -1235,7 +1453,6 @@ struct AppSlideCanvasIntegrationTests {
     )
     #expect(!model.boardScene.elements.isEmpty)
     #expect(!overlay.isVisible)
-    #expect(overlay.hideCallCount > hidesBeforeIdle)
 
     await model.stopWindowCapture()
   }
@@ -1806,13 +2023,12 @@ struct AppSlideCanvasIntegrationTests {
       startTime: 0,
       endTime: 5,
       language: .englishUS,
-      confidence: 0.95,
-      emphasis: 0.9
+      confidence: 0.5,
+      emphasis: 0.5
     )
   }
 
   private func receiveConfirmedBoardProposal(_ text: String, on model: AppModel) {
-    model.receive(boardProposalDefinition(text: text))
     model.receive(boardProposalDefinition(text: text))
   }
 
@@ -1908,6 +2124,41 @@ private final class MutableCanvasProductionOverlayEligibilityProvider:
 }
 
 @MainActor
+private final class PolicyBackedCanvasProductionOverlayEligibilityProvider:
+  ProductionOverlayEligibilityProviding
+{
+  var exactWindowBounds: CGRect
+
+  init(exactWindowBounds: CGRect) {
+    self.exactWindowBounds = exactWindowBounds
+  }
+
+  func allowsProductionOverlay(
+    for identity: PowerPointWindowIdentity,
+    screenGeometry: CaptureScreenGeometry
+  ) -> Bool {
+    guard
+      let exactWindow = ProductionOverlayWindowSnapshot(
+        windowID: identity.windowID,
+        ownerProcessID: identity.ownerProcessID,
+        layer: 0,
+        isOnScreen: true,
+        bounds: exactWindowBounds
+      )
+    else {
+      return false
+    }
+    return ProductionOverlayEligibilityPolicy.allowsProductionOverlay(
+      identity: identity,
+      screenGeometry: screenGeometry,
+      frontmostProcessID: identity.ownerProcessID,
+      frontmostBundleIdentifier: identity.bundleIdentifier,
+      windows: [exactWindow]
+    )
+  }
+}
+
+@MainActor
 private final class ManualCanvasProductionOverlayLeaseScheduler:
   ProductionOverlayLeaseScheduling
 {
@@ -1961,14 +2212,26 @@ private final class ManualCanvasProductionOverlaySafetyEventProvider:
 }
 
 private actor IdentifiedCanvasSlideIdentityProvider: PowerPointSlideIdentityProviding {
+  private var operationID: CaptureOperationID?
+  private var identity: PowerPointWindowIdentity?
+  private var observationHandler: PowerPointSlideIdentityObservationHandler?
+  private var sessionToken: String?
+  private var nextSequenceNumber: UInt64 = 1
+
   func start(
     operationID: CaptureOperationID,
     identity: PowerPointWindowIdentity,
     onObservation: @escaping PowerPointSlideIdentityObservationHandler
   ) async {
+    let sessionToken = "synthetic-canvas-session-\(operationID.rawValue)"
+    self.operationID = operationID
+    self.identity = identity
+    observationHandler = onObservation
+    self.sessionToken = sessionToken
+    nextSequenceNumber = 1
     guard
       let sample = SlideIdentitySample(
-        presentationSessionToken: "synthetic-canvas-session-\(operationID.rawValue)",
+        presentationSessionToken: sessionToken,
         slideID: 1,
         slideIndex: 1
       )
@@ -1977,28 +2240,67 @@ private actor IdentifiedCanvasSlideIdentityProvider: PowerPointSlideIdentityProv
     }
     onObservation(
       PowerPointSlideIdentityObservation(
-        sequenceNumber: 1,
+        sequenceNumber: nextSequenceNumber,
         observedAt: Date(),
         targetIdentity: identity,
         signal: .available(sample)
       )
     )
+    nextSequenceNumber += 1
     onObservation(
       PowerPointSlideIdentityObservation(
-        sequenceNumber: 2,
+        sequenceNumber: nextSequenceNumber,
         observedAt: Date(),
         targetIdentity: identity,
         signal: .available(sample)
       )
     )
+    nextSequenceNumber += 1
   }
 
-  func stop(operationID: CaptureOperationID) async {}
+  func stop(operationID: CaptureOperationID) async {
+    guard self.operationID == operationID else { return }
+    self.operationID = nil
+    identity = nil
+    observationHandler = nil
+    sessionToken = nil
+  }
+
+  func emitTransition(slideID: Int, slideIndex: Int) {
+    guard
+      let identity,
+      let observationHandler,
+      let sessionToken,
+      let sample = SlideIdentitySample(
+        presentationSessionToken: sessionToken,
+        slideID: slideID,
+        slideIndex: slideIndex
+      )
+    else {
+      return
+    }
+    for _ in 0..<2 {
+      observationHandler(
+        PowerPointSlideIdentityObservation(
+          sequenceNumber: nextSequenceNumber,
+          observedAt: Date(),
+          targetIdentity: identity,
+          signal: .available(sample)
+        )
+      )
+      nextSequenceNumber += 1
+    }
+  }
 }
 
 @MainActor
 private final class RetainingCanvasTranscriptionProvider: TranscriptionProvider {
   private var observationHandlers: [@MainActor (TranscriptionObservation) -> Void] = []
+  private var terminalEventHandlers:
+    [(
+      operationID: TranscriptionOperationID,
+      handler: @MainActor (TranscriptionTerminalEvent) -> Void
+    )] = []
   private(set) var stopCallCount = 0
 
   var retainedObservationCount: Int {
@@ -2006,14 +2308,27 @@ private final class RetainingCanvasTranscriptionProvider: TranscriptionProvider 
   }
 
   func start(
+    operationID: TranscriptionOperationID,
     language: LanguageTag,
-    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void,
+    onTerminalEvent: @escaping @MainActor (TranscriptionTerminalEvent) -> Void
   ) async throws {
     observationHandlers.append(onObservation)
+    terminalEventHandlers.append((operationID, onTerminalEvent))
   }
 
-  func stop() {
+  func stop(operationID: TranscriptionOperationID) {
     stopCallCount += 1
+  }
+
+  func finishCurrentSegment(operationID: TranscriptionOperationID) {
+    stopCallCount += 1
+    terminalEventHandlers.last(where: { $0.operationID == operationID })?.handler(
+      TranscriptionTerminalEvent(
+        operationID: operationID,
+        outcome: .gracefulStopCompleted
+      )
+    )
   }
 
   func emitRetained(_ observation: TranscriptionObservation, startIndex: Int) {
@@ -2140,6 +2455,12 @@ private actor RecordingCanvasAnalyzer: SlideVisualAnalyzing {
     lastImageSize = (frame.image.width, frame.image.height)
     return SlideVisualAnalysis(
       title: "confirmed canvas",
+      textBlocks: [
+        SlideTextBlock(
+          text: "Sustainability Resilience Adaptation",
+          region: NormalizedRect(x: 0.1, y: 0.1, width: 0.8, height: 0.1)
+        )
+      ],
       occupiedRegions: occupiedRegions
     )
   }
@@ -2167,6 +2488,12 @@ private actor SecondAnalysisSuspendingCanvasAnalyzer: SlideVisualAnalyzing {
     guard invocationCount > 1 else {
       return SlideVisualAnalysis(
         title: "initial grounded analysis",
+        textBlocks: [
+          SlideTextBlock(
+            text: "Sustainability Resilience Adaptation",
+            region: NormalizedRect(x: 0.1, y: 0.1, width: 0.8, height: 0.1)
+          )
+        ],
         occupiedRegions: occupiedRegions
       )
     }
@@ -2187,6 +2514,12 @@ private actor SecondAnalysisSuspendingCanvasAnalyzer: SlideVisualAnalyzing {
     secondContinuation?.resume(
       returning: SlideVisualAnalysis(
         title: "fresh grounded analysis",
+        textBlocks: [
+          SlideTextBlock(
+            text: "Sustainability Resilience Adaptation",
+            region: NormalizedRect(x: 0.1, y: 0.1, width: 0.8, height: 0.1)
+          )
+        ],
         occupiedRegions: occupiedRegions
       )
     )

@@ -286,8 +286,11 @@ struct CGImageRasterizerTests {
   }
 
   @Test func idleRepeatReusesPriorGeometryWhenAllCurrentSurfaceMetadataIsAbsent() throws {
+    let previousScreenRect = CGRect(x: 20, y: 30, width: 320, height: 180)
+    let currentScreenRect = CGRect(x: -700, y: 50, width: 320, height: 180)
     let frame = try makeFactoryTestFrame(
-      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+      screenRect: previousScreenRect
     )
 
     let missingSurfaceMetadata = CapturedPowerPointFrameFactory.makeIdleRepeat(
@@ -296,14 +299,14 @@ struct CGImageRasterizerTests {
       capturedAt: Date(timeIntervalSince1970: 124),
       currentAttachments: [
         .status: SCFrameStatus.idle.rawValue,
-        .screenRect: CGRect(x: -700, y: 50, width: 320, height: 180),
+        .screenRect: currentScreenRect,
       ]
     )
 
     #expect(frame.captureSurfaceGeometry != nil)
     #expect(missingSurfaceMetadata.image === frame.image)
     #expect(missingSurfaceMetadata.captureSurfaceGeometry == frame.captureSurfaceGeometry)
-    #expect(missingSurfaceMetadata.captureScreenGeometry == nil)
+    #expect(missingSurfaceMetadata.captureScreenGeometry?.screenRect == currentScreenRect)
   }
 
   @Test func idleRepeatRejectsEveryProperSubsetOfCurrentSurfaceMetadata() throws {
@@ -421,7 +424,8 @@ struct CGImageRasterizerTests {
 
   @Test func idleRepeatRejectsAbsentSurfaceMetadataWithoutVerifiedIdleStatus() throws {
     let frame = try makeFactoryTestFrame(
-      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+      screenRect: CGRect(x: 20, y: 30, width: 320, height: 180)
     )
     let invalidStatuses: [(String, Any?)] = [
       ("missing", nil),
@@ -568,13 +572,18 @@ struct CGImageRasterizerTests {
         absentAfterNewFrame.captureSurfaceGeometry == recoveredFrame.captureSurfaceGeometry,
         "Did not recover after new frame for \(name)"
       )
-      #expect(absentAfterNewFrame.captureScreenGeometry == nil)
+      #expect(
+        absentAfterNewFrame.captureScreenGeometry
+          == recoveredFrame.captureScreenGeometry
+      )
     }
   }
 
   @Test func validIdleGeometryRemainsLatchedAcrossMetadataEmptyIdleRepeats() throws {
+    let screenRect = CGRect(x: 20, y: 30, width: 320, height: 180)
     let frame = try makeFactoryTestFrame(
-      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160)
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+      screenRect: screenRect
     )
     var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
     continuity.acceptNewPayload(frame)
@@ -604,7 +613,8 @@ struct CGImageRasterizerTests {
 
     #expect(matching.captureSurfaceGeometry == frame.captureSurfaceGeometry)
     #expect(absent.captureSurfaceGeometry == matching.captureSurfaceGeometry)
-    #expect(absent.captureScreenGeometry == nil)
+    #expect(matching.captureScreenGeometry?.screenRect == screenRect)
+    #expect(absent.captureScreenGeometry?.screenRect == screenRect)
   }
 
   @Test func idleRepeatDoesNotAdoptGeometryWhenPriorGeometryWasMissing() throws {
@@ -623,7 +633,7 @@ struct CGImageRasterizerTests {
     #expect(repeated.captureSurfaceGeometry == nil)
   }
 
-  @Test func idleRepeatUsesOnlyTheCurrentSamplesScreenPosition() throws {
+  @Test func idleRepeatUsesCurrentScreenPositionOrReusesPriorOnlyWhenAbsent() throws {
     let previousRect = CGRect(x: 20, y: 30, width: 320, height: 180)
     let currentRect = CGRect(x: -700, y: 50, width: 320, height: 180)
     let frame = try makeFactoryTestFrame(
@@ -660,8 +670,66 @@ struct CGImageRasterizerTests {
 
     #expect(frame.captureScreenGeometry?.screenRect == previousRect)
     #expect(moved.captureScreenGeometry?.screenRect == currentRect)
-    #expect(missing.captureScreenGeometry == nil)
+    #expect(missing.captureScreenGeometry?.screenRect == previousRect)
     #expect(invalid.captureScreenGeometry == nil)
+  }
+
+  @Test func malformedIdleScreenPositionCannotBeRevivedByAnAbsentIdleButValidIdleRecovers()
+    throws
+  {
+    let originalRect = CGRect(x: 20, y: 30, width: 320, height: 180)
+    let recoveredRect = CGRect(x: -700, y: 50, width: 320, height: 180)
+    let frame = try makeFactoryTestFrame(
+      geometryRect: CGRect(x: 3, y: 4, width: 300, height: 160),
+      screenRect: originalRect
+    )
+    var continuity = CaptureOutputContinuity<CapturedPowerPointFrame>()
+    continuity.acceptNewPayload(frame)
+
+    let malformed = try #require(
+      continuity.makeAndAcceptRepeatedPayload { lastFrame in
+        CapturedPowerPointFrameFactory.makeIdleRepeat(
+          from: lastFrame,
+          sequenceNumber: 8,
+          capturedAt: Date(timeIntervalSince1970: 124),
+          currentAttachments: [
+            .status: SCFrameStatus.idle.rawValue,
+            .screenRect: "malformed",
+          ]
+        )
+      }
+    )
+    let absentAfterMalformed = try #require(
+      continuity.makeAndAcceptRepeatedPayload { lastFrame in
+        CapturedPowerPointFrameFactory.makeIdleRepeat(
+          from: lastFrame,
+          sequenceNumber: 9,
+          capturedAt: Date(timeIntervalSince1970: 125),
+          currentAttachments: [.status: SCFrameStatus.idle.rawValue]
+        )
+      }
+    )
+    let validRecovery = try #require(
+      continuity.makeAndAcceptRepeatedPayload { lastFrame in
+        CapturedPowerPointFrameFactory.makeIdleRepeat(
+          from: lastFrame,
+          sequenceNumber: 10,
+          capturedAt: Date(timeIntervalSince1970: 126),
+          currentAttachments: [
+            .status: SCFrameStatus.idle.rawValue,
+            .screenRect: recoveredRect,
+          ]
+        )
+      }
+    )
+
+    #expect(frame.captureScreenGeometry?.screenRect == originalRect)
+    #expect(malformed.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(malformed.captureScreenGeometry == nil)
+    #expect(absentAfterMalformed.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(absentAfterMalformed.captureScreenGeometry == nil)
+    #expect(validRecovery.captureSurfaceGeometry == frame.captureSurfaceGeometry)
+    #expect(validRecovery.captureScreenGeometry?.screenRect == recoveredRect)
   }
 
   @Test func parsesCompleteScreenCaptureKitSurfaceGeometry() throws {

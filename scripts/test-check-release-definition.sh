@@ -442,6 +442,17 @@ mv "$fixture_root/docs/user-acceptance-ja.backup" "$fixture_root/docs/user-accep
 
 cp "$fixture_root/docs/user-acceptance-ja.md" \
   "$fixture_root/docs/user-acceptance-ja.backup"
+sed 's/少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する/診断値だけを成功とみなす/' \
+  "$fixture_root/docs/user-acceptance-ja.backup" \
+  >"$fixture_root/docs/user-acceptance-ja.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted owner acceptance without visible automatic board output.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/user-acceptance-ja.backup" "$fixture_root/docs/user-acceptance-ja.md"
+
+cp "$fixture_root/docs/user-acceptance-ja.md" \
+  "$fixture_root/docs/user-acceptance-ja.backup"
 /usr/bin/python3 -I - "$fixture_root/docs/user-acceptance-ja.md" <<'PY'
 import pathlib
 import sys

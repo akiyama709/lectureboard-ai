@@ -112,6 +112,7 @@ struct AppSlideIdentityIntegrationTests {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
     let analyzer = CountingSlideIdentityAnalyzer(
+      title: "Sustainability and Resilience",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     let model = makeModel(capture: capture, provider: provider, analyzer: analyzer)
@@ -202,6 +203,7 @@ struct AppSlideIdentityIntegrationTests {
     let identityProvider = ControllableSlideIdentityProvider()
     let transcriptionProvider = ControllableTranscriptionProvider()
     let analyzer = CountingSlideIdentityAnalyzer(
+      title: "Sustainability",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     let model = makeModel(
@@ -230,12 +232,14 @@ struct AppSlideIdentityIntegrationTests {
     await model.startTranscription()
     #expect(transcriptionProvider.startCount == 1)
     #expect(model.status == .listening)
+    #expect(model.transcriptionLifecycleState == .listening)
 
     await identityProvider.emit(sequenceNumber: 3, signal: .available(secondSlide))
     await identityProvider.emit(sequenceNumber: 4, signal: .available(secondSlide))
     try await waitUntil { model.slideChangeCount == 1 }
     #expect(transcriptionProvider.stopCount == 1)
     #expect(model.status == .ready)
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
     #expect(model.liveTranscript.isEmpty)
 
     await emitStableFrames(
@@ -247,6 +251,7 @@ struct AppSlideIdentityIntegrationTests {
     try await waitUntil { model.slideAnalysisStatus == .ready }
     try await waitUntil { transcriptionProvider.startCount == 2 }
     #expect(model.status == .listening)
+    #expect(model.transcriptionLifecycleState == .listening)
 
     transcriptionProvider.emit(
       startIndex: 0,
@@ -258,13 +263,6 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.liveTranscript.isEmpty)
     #expect(model.boardScene.elements.isEmpty)
 
-    transcriptionProvider.emit(
-      startIndex: 1,
-      observation: TranscriptionObservation(
-        segment: definitionSegment(),
-        sourceMachTime: mach_absolute_time()
-      )
-    )
     transcriptionProvider.emit(
       startIndex: 1,
       observation: TranscriptionObservation(
@@ -412,6 +410,314 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.liveTranscript == "current operation")
 
     model.stopTranscription()
+  }
+
+  @Test func currentSpeechTerminalEventClearsListeningStateAndRejectsRetainedResults()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "accepted before failure"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "accepted before failure")
+    #expect(model.liveTranscriptPhase == .partial)
+
+    transcriptionProvider.emitTerminal(
+      startIndex: 0,
+      error: .recognitionFinalizationTimedOut
+    )
+
+    #expect(
+      model.status
+        == .error(TranscriptionError.recognitionFinalizationTimedOut.localizedDescription)
+    )
+    #expect(
+      model.transcriptionLifecycleState
+        == .failed(TranscriptionError.recognitionFinalizationTimedOut.localizedDescription)
+    )
+    #expect(model.liveTranscript.isEmpty)
+    #expect(model.liveTranscriptPhase == .empty)
+    #expect(transcriptionProvider.stopCount == 0)
+    #expect(transcriptionProvider.startCount == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "retained after failure"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    await drainMainActorQueue()
+    #expect(model.liveTranscript.isEmpty)
+    #expect(model.liveTranscriptPhase == .empty)
+    #expect(transcriptionProvider.startCount == 1)
+  }
+
+  @Test func transcriptPhaseTracksAcceptedPartialFinalAndNewOperationReset() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    #expect(model.liveTranscriptPhase == .empty)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "partial segment"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "partial segment")
+    #expect(model.liveTranscriptPhase == .partial)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: "final segment"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "final segment")
+    #expect(model.liveTranscriptPhase == .final)
+
+    await model.startTranscription()
+    #expect(model.liveTranscript.isEmpty)
+    #expect(model.liveTranscriptPhase == .empty)
+    #expect(transcriptionProvider.startCount == 2)
+
+    model.stopTranscription()
+  }
+
+  @Test func manualStopAcceptsTheFinalTailBeforeCompletingAndPreservesIt() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    transcriptionProvider.automaticallyCompletesGracefulStop = false
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "unfinished tail"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    model.stopTranscription()
+    #expect(model.status == .finalizingTranscription)
+    #expect(model.transcriptionLifecycleState == .finalizing)
+    #expect(model.liveTranscript == "unfinished tail")
+    #expect(model.liveTranscriptPhase == .partial)
+    #expect(transcriptionProvider.stopCount == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: "finalized tail",
+          startTime: 0,
+          endTime: 2,
+          language: .englishUS,
+          confidence: 0,
+          isFinal: true,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "finalized tail")
+    #expect(model.liveTranscriptPhase == .final)
+    transcriptionProvider.emitGracefulCompletion(startIndex: 0)
+
+    #expect(model.status == .ready)
+    #expect(model.transcriptionLifecycleState == .idle)
+    #expect(model.liveTranscript == "finalized tail")
+    #expect(model.liveTranscriptPhase == .final)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "stale after completion"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "finalized tail")
+  }
+
+  @Test func manualStopWhileProviderStartIsSuspendedCompletesWithoutHanging() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    transcriptionProvider.suspendStart = true
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    let startTask = Task { await model.startTranscription() }
+    try await waitUntil { transcriptionProvider.startCount == 1 }
+    #expect(model.transcriptionLifecycleState == .starting)
+    model.stopTranscription()
+
+    #expect(model.status == .ready)
+    #expect(model.transcriptionLifecycleState == .idle)
+    #expect(transcriptionProvider.stopCount == 1)
+    await startTask.value
+    #expect(model.status == .ready)
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(transcriptionProvider.stopCount == 1)
+  }
+
+  @Test func staleAndDuplicateSpeechTerminalEventsCannotStopANewerSession() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    model.stopTranscription()
+    await model.startTranscription()
+    #expect(model.status == .listening)
+    #expect(transcriptionProvider.startCount == 2)
+    #expect(transcriptionProvider.stopCount == 1)
+
+    transcriptionProvider.emitTerminal(
+      startIndex: 0,
+      error: .recognitionInterrupted
+    )
+    #expect(model.status == .listening)
+    #expect(transcriptionProvider.stopCount == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: partialSegment(text: "current operation"),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscript == "current operation")
+
+    transcriptionProvider.emitTerminal(
+      startIndex: 1,
+      error: .onDeviceRecognitionUnavailable
+    )
+    #expect(
+      model.status
+        == .error(TranscriptionError.onDeviceRecognitionUnavailable.localizedDescription)
+    )
+    #expect(model.liveTranscript.isEmpty)
+    #expect(transcriptionProvider.stopCount == 1)
+
+    model.stopTranscription()
+    transcriptionProvider.emitTerminal(
+      startIndex: 1,
+      error: .recognitionInterrupted
+    )
+    #expect(model.status == .ready)
+    #expect(transcriptionProvider.stopCount == 1)
+  }
+
+  @Test func oneGroundedMinimumAcceptedConfidenceFinalReachesThePublicScene() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    let text =
+      "Sustainability means meeting present needs without undermining future possibilities."
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(!model.lectureSessionScenes.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func groundedZeroConfidenceFinalDefinitionRemainsInternal() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    let text =
+      "Sustainability means meeting present needs without undermining future possibilities."
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text, confidence: 0),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.lectureSessionScenes.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func partialGroundedProviderStrengthDefinitionRemainsInternal() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let text =
+      "Sustainability means meeting present needs without undermining future possibilities."
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text, isFinal: false),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscript == text)
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.lectureSessionScenes.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func groundedProviderStrengthDefinitionQuestionRemainsInternal() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let text = "What does Sustainability mean?"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscript == text)
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.lectureSessionScenes.isEmpty)
+    await model.stopWindowCapture()
   }
 
   @Test func captureLifecycleInvalidatesEachActiveTranscriptionOperation() async throws {
@@ -672,6 +978,7 @@ struct AppSlideIdentityIntegrationTests {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
     let analyzer = CountingSlideIdentityAnalyzer(
+      title: "Sustainability",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     let model = makeModel(capture: capture, provider: provider, analyzer: analyzer)
@@ -1081,6 +1388,7 @@ struct AppSlideIdentityIntegrationTests {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
     let analyzer = CountingSlideIdentityAnalyzer(
+      title: "Sustainability",
       occupiedRegions: boardProposalOccupiedRegions()
     )
     let timeoutWaiter = ControllableSlideIdentityFrameTimeoutWaiter()
@@ -1163,6 +1471,7 @@ struct AppSlideIdentityIntegrationTests {
       capture: capture,
       provider: provider,
       analyzer: ImmediateSlideIdentityAnalyzer(
+        title: "Sustainability",
         occupiedRegions: boardProposalOccupiedRegions()
       )
     )
@@ -1407,6 +1716,39 @@ struct AppSlideIdentityIntegrationTests {
     return model
   }
 
+  private func makeGroundedDefinitionModel(
+    transcriptionProvider: ControllableTranscriptionProvider
+  ) async throws -> AppModel {
+    let capture = SlideIdentityFrameCapture()
+    let identityProvider = ControllableSlideIdentityProvider()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(
+      capture: capture,
+      provider: identityProvider,
+      analyzer: analyzer,
+      transcriptionProvider: transcriptionProvider
+    )
+    let slide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+
+    await model.startWindowCapture()
+    await identityProvider.emit(sequenceNumber: 1, signal: .available(slide))
+    await identityProvider.emit(sequenceNumber: 2, signal: .available(slide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: frameFingerprints(),
+      sequenceNumbers: 1...3
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await model.startTranscription()
+    return model
+  }
+
   private func sample(slideID: Int, slideIndex: Int) throws -> SlideIdentitySample {
     try #require(
       SlideIdentitySample(
@@ -1474,7 +1816,6 @@ struct AppSlideIdentityIntegrationTests {
     on model: AppModel
   ) {
     model.receive(definitionSegment(text: text, startTime: startTime, endTime: endTime))
-    model.receive(definitionSegment(text: text, startTime: startTime, endTime: endTime))
   }
 
   private func partialSegment(text: String) -> TranscriptSegment {
@@ -1485,6 +1826,22 @@ struct AppSlideIdentityIntegrationTests {
       language: .englishUS,
       confidence: 0.95,
       isFinal: false,
+      emphasis: 0.5
+    )
+  }
+
+  private func providerStrengthSegment(
+    text: String,
+    isFinal: Bool = true,
+    confidence: Double = 0.5
+  ) -> TranscriptSegment {
+    TranscriptSegment(
+      text: text,
+      startTime: 0,
+      endTime: 8,
+      language: .englishUS,
+      confidence: confidence,
+      isFinal: isFinal,
       emphasis: 0.5
     )
   }
@@ -1566,25 +1923,92 @@ struct AppSlideIdentityIntegrationTests {
 
 @MainActor
 private final class ControllableTranscriptionProvider: TranscriptionProvider {
-  private var handlers: [@MainActor (TranscriptionObservation) -> Void] = []
-  private(set) var stopCount = 0
-
-  var startCount: Int { handlers.count }
-
-  func start(
-    language: LanguageTag,
-    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void
-  ) async throws {
-    handlers.append(onObservation)
+  private struct Start {
+    let operationID: TranscriptionOperationID
+    let observationHandler: @MainActor (TranscriptionObservation) -> Void
+    let terminalEventHandler: @MainActor (TranscriptionTerminalEvent) -> Void
   }
 
-  func stop() {
+  private var starts: [Start] = []
+  private var suspendedStarts:
+    [(
+      operationID: TranscriptionOperationID,
+      continuation: CheckedContinuation<Void, Never>
+    )] = []
+  private(set) var stopCount = 0
+  var automaticallyCompletesGracefulStop = true
+  var suspendStart = false
+
+  var startCount: Int { starts.count }
+
+  func start(
+    operationID: TranscriptionOperationID,
+    language: LanguageTag,
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void,
+    onTerminalEvent: @escaping @MainActor (TranscriptionTerminalEvent) -> Void
+  ) async throws {
+    starts.append(
+      Start(
+        operationID: operationID,
+        observationHandler: onObservation,
+        terminalEventHandler: onTerminalEvent
+      )
+    )
+    guard suspendStart else { return }
+    await withCheckedContinuation { continuation in
+      suspendedStarts.append((operationID, continuation))
+    }
+    throw CancellationError()
+  }
+
+  func stop(operationID: TranscriptionOperationID) {
     stopCount += 1
   }
 
+  func finishCurrentSegment(operationID: TranscriptionOperationID) {
+    stopCount += 1
+    guard automaticallyCompletesGracefulStop else { return }
+    guard let start = starts.last(where: { $0.operationID == operationID }) else {
+      return
+    }
+    start.terminalEventHandler(
+      TranscriptionTerminalEvent(
+        operationID: operationID,
+        outcome: .gracefulStopCompleted
+      )
+    )
+    if let continuationIndex = suspendedStarts.lastIndex(where: {
+      $0.operationID == operationID
+    }) {
+      suspendedStarts.remove(at: continuationIndex).continuation.resume()
+    }
+  }
+
   func emit(startIndex: Int, observation: TranscriptionObservation) {
-    guard handlers.indices.contains(startIndex) else { return }
-    handlers[startIndex](observation)
+    guard starts.indices.contains(startIndex) else { return }
+    starts[startIndex].observationHandler(observation)
+  }
+
+  func emitTerminal(startIndex: Int, error: TranscriptionError) {
+    guard starts.indices.contains(startIndex) else { return }
+    let start = starts[startIndex]
+    start.terminalEventHandler(
+      TranscriptionTerminalEvent(
+        operationID: start.operationID,
+        error: error
+      )
+    )
+  }
+
+  func emitGracefulCompletion(startIndex: Int) {
+    guard starts.indices.contains(startIndex) else { return }
+    let start = starts[startIndex]
+    start.terminalEventHandler(
+      TranscriptionTerminalEvent(
+        operationID: start.operationID,
+        outcome: .gracefulStopCompleted
+      )
+    )
   }
 }
 
@@ -1730,25 +2154,31 @@ private struct FailingSlideIdentityFrameCapture: PowerPointWindowCapturing {
 }
 
 private struct ImmediateSlideIdentityAnalyzer: SlideVisualAnalyzing {
+  var title = ""
   var occupiedRegions: [NormalizedRect] = []
 
   func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
-    SlideVisualAnalysis(occupiedRegions: occupiedRegions)
+    SlideVisualAnalysis(title: title, occupiedRegions: occupiedRegions)
   }
 }
 
 private actor CountingSlideIdentityAnalyzer: SlideVisualAnalyzing {
   private(set) var analysisCount = 0
+  private let title: String
   private let occupiedRegions: [NormalizedRect]
 
-  init(occupiedRegions: [NormalizedRect] = []) {
+  init(
+    title: String = "Current analysis",
+    occupiedRegions: [NormalizedRect] = []
+  ) {
+    self.title = title
     self.occupiedRegions = occupiedRegions
   }
 
   func analyze(_ frame: CapturedSlideCanvasFrame) async throws -> SlideVisualAnalysis {
     analysisCount += 1
     return SlideVisualAnalysis(
-      title: "Current analysis",
+      title: title,
       occupiedRegions: occupiedRegions
     )
   }
