@@ -1006,20 +1006,23 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
 
   /// Geometry already proves which retained ScreenCaptureKit window belongs to the exact
   /// PowerPoint object. Letterboxing may nevertheless prevent one commanded endpoint from
-  /// occupying half of that window. Keep the symmetric endpoint test when both tones are strong;
-  /// otherwise require one strong endpoint, a substantial opposite endpoint, and a broad,
-  /// overwhelmingly forward response across the exact same sample positions.
+  /// occupying half of that window, while scaling and antialiasing can shift otherwise causal
+  /// samples across the exact endpoint thresholds. Require one strong endpoint, a substantial
+  /// opposite endpoint, and the exact paired signature unless the endpoints are either
+  /// asymmetric from letterboxing or both near-full-frame. Only those bounded cases may use a
+  /// broad, overwhelmingly forward response across the exact same sample positions.
   private func hasGeometryBoundPairedCausalSignature(
     black: FrameFingerprint,
     white: FrameFingerprint
   ) -> Bool {
     let blackCoverage = matchingFraction(black, as: .black)
     let whiteCoverage = matchingFraction(white, as: .white)
-    guard max(blackCoverage, whiteCoverage) >= 0.5 else { return false }
-    if min(blackCoverage, whiteCoverage) >= 0.5 {
-      return hasPairedCausalSignature(black: black, white: white)
-    }
-    guard min(blackCoverage, whiteCoverage) >= 0.25 else { return false }
+    let weakerCoverage = min(blackCoverage, whiteCoverage)
+    guard max(blackCoverage, whiteCoverage) >= 0.5,
+      weakerCoverage >= 0.25
+    else { return false }
+    if hasPairedCausalSignature(black: black, white: white) { return true }
+    guard weakerCoverage < 0.5 || weakerCoverage >= 0.9 else { return false }
     return hasPairedDirectionalSignature(black: black, white: white)
   }
 

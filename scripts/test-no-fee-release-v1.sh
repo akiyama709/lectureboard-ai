@@ -779,7 +779,7 @@ for stage_number in $(/usr/bin/seq 1 26); do
   /usr/bin/printf '[%s/26] fixture stage\n' "$stage_number" >>"$gate_log"
   if [[ "$stage_number" == 2 ]]; then
     /usr/bin/printf '%s\n' \
-      '✔ Test run with 248 tests in 19 suites passed after 0.001 seconds.' >>"$gate_log"
+      '✔ Test run with 250 tests in 19 suites passed after 0.001 seconds.' >>"$gate_log"
   fi
 done
 /usr/bin/printf '%s\n' \
@@ -790,7 +790,7 @@ done
 gate_log_digest="$(sha256 "$gate_log")"
 valid_test_evidence="$root/$release_test_evidence_name"
 /usr/bin/printf '%s\n' \
-  "{\"schema\":\"lectureboard.release-test-evidence.v1\",\"sourceCommit\":\"$commit\",\"generatedAt\":\"2026-09-06T00:00:00Z\",\"prepublicationGate\":{\"command\":\"./scripts/prepublish-check.sh\",\"result\":\"Passed\",\"passedStages\":26,\"totalStages\":26,\"logSha256\":\"$gate_log_digest\",\"scriptBlobOid\":\"dddddddddddddddddddddddddddddddddddddddd\"},\"coreTests\":{\"result\":\"Passed\",\"tests\":248,\"suites\":19,\"failed\":0,\"skipped\":0},\"nativeAppTests\":{\"result\":\"Passed\",\"authoritativeTests\":480,\"deviceRuns\":542,\"parameterizedTests\":14,\"parameterizedRuns\":76,\"failed\":0,\"skipped\":0,\"expectedFailures\":0,\"resultBundleName\":\"${result_bundle##*/}\",\"resultBundleTreeSha256\":\"$result_bundle_digest\"},\"environment\":{\"architecture\":\"arm64\",\"macOS\":\"26.6.2\",\"macOSBuild\":\"25G83\",\"xcode\":\"26.6\",\"xcodeBuild\":\"17F113\"},\"claimBoundary\":\"Automated source-candidate evidence only; no live PowerPoint, user acceptance, installation, publication, or public-redownload result is implied.\"}" \
+  "{\"schema\":\"lectureboard.release-test-evidence.v1\",\"sourceCommit\":\"$commit\",\"generatedAt\":\"2026-09-06T00:00:00Z\",\"prepublicationGate\":{\"command\":\"./scripts/prepublish-check.sh\",\"result\":\"Passed\",\"passedStages\":26,\"totalStages\":26,\"logSha256\":\"$gate_log_digest\",\"scriptBlobOid\":\"dddddddddddddddddddddddddddddddddddddddd\"},\"coreTests\":{\"result\":\"Passed\",\"tests\":250,\"suites\":19,\"failed\":0,\"skipped\":0},\"nativeAppTests\":{\"result\":\"Passed\",\"authoritativeTests\":480,\"deviceRuns\":542,\"parameterizedTests\":14,\"parameterizedRuns\":76,\"failed\":0,\"skipped\":0,\"expectedFailures\":0,\"resultBundleName\":\"${result_bundle##*/}\",\"resultBundleTreeSha256\":\"$result_bundle_digest\"},\"environment\":{\"architecture\":\"arm64\",\"macOS\":\"26.6.2\",\"macOSBuild\":\"25G83\",\"xcode\":\"26.6\",\"xcodeBuild\":\"17F113\"},\"claimBoundary\":\"Automated source-candidate evidence only; no live PowerPoint, user acceptance, installation, publication, or public-redownload result is implied.\"}" \
   >"$valid_test_evidence"
 release_test_evidence_is_valid "$valid_test_evidence" "$commit" \
   || { /usr/bin/printf '%s\n' 'Valid release test evidence was rejected.' >&2; exit 1; }
@@ -1043,7 +1043,7 @@ if release_test_evidence_is_valid \
   exit 1
 fi
 /bin/mkdir "$root/wrong-core-count"
-/usr/bin/sed 's/"tests":248/"tests":249/' \
+/usr/bin/sed 's/"tests":250/"tests":251/' \
   "$valid_test_evidence" >"$root/wrong-core-count/$release_test_evidence_name"
 if release_test_evidence_is_valid \
   "$root/wrong-core-count/$release_test_evidence_name" "$commit"; then

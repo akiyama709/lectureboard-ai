@@ -704,6 +704,37 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     }
   }
 
+  @Test func geometryPixelNonceAcceptsStrongAntialiasedMirrorsWithBroadForwardResponse() {
+    let strongBlack =
+      Array(repeating: UInt8(0), count: 94)
+      + Array(repeating: UInt8(100), count: 6)
+    let shiftedAntialiasedWhite =
+      Array(repeating: UInt8(32), count: 4)
+      + Array(repeating: UInt8(255), count: 96)
+
+    for nonce in [UInt64(40), 41] {
+      var evidence = causalGeometryTranscript(challengeNonce: nonce)
+      for windowID in [20, 10] {
+        replacePhaseFingerprint(
+          &evidence,
+          phase: .pixelBlack,
+          luminance: strongBlack,
+          windowID: windowID
+        )
+        replacePhaseFingerprint(
+          &evidence,
+          phase: .pixelWhite,
+          luminance: shiftedAntialiasedWhite,
+          windowID: windowID
+        )
+      }
+      #expect(
+        run(method: .pixelNonce, observations: evidence, challengeNonce: nonce)
+          == .succeeded(freshnessBoundaryMachAbsoluteTime: 420)
+      )
+    }
+  }
+
   @Test func geometryPixelNonceRejectsWeakOrIncoherentAsymmetricEndpoint() {
     let strongBlack =
       Array(repeating: UInt8(0), count: 60)
@@ -773,6 +804,44 @@ struct ManagedSlideShowRoleChallengePolicyTests {
       run(method: .pixelNonce, observations: incoherentAuxiliary)
         == .rejected(.otherWindowChanged)
     )
+  }
+
+  @Test func geometryPixelNonceRejectsStrongButReversedMirrors() {
+    let strongBlack =
+      Array(repeating: UInt8(0), count: 94)
+      + Array(repeating: UInt8(100), count: 6)
+    let partlyReversedWhite =
+      Array(repeating: UInt8(32), count: 4)
+      + Array(repeating: UInt8(255), count: 93)
+      + Array(repeating: UInt8(0), count: 3)
+
+    for nonce in [UInt64(40), 41] {
+      var candidate = causalGeometryTranscript(challengeNonce: nonce)
+      replacePhaseFingerprint(&candidate, phase: .pixelBlack, luminance: strongBlack)
+      replacePhaseFingerprint(&candidate, phase: .pixelWhite, luminance: partlyReversedWhite)
+      #expect(
+        run(method: .pixelNonce, observations: candidate, challengeNonce: nonce)
+          == .rejected(.wrongVisualSignature)
+      )
+
+      var auxiliary = causalGeometryTranscript(challengeNonce: nonce)
+      replacePhaseFingerprint(
+        &auxiliary,
+        phase: .pixelBlack,
+        luminance: strongBlack,
+        windowID: 10
+      )
+      replacePhaseFingerprint(
+        &auxiliary,
+        phase: .pixelWhite,
+        luminance: partlyReversedWhite,
+        windowID: 10
+      )
+      #expect(
+        run(method: .pixelNonce, observations: auxiliary, challengeNonce: nonce)
+          == .rejected(.otherWindowChanged)
+      )
+    }
   }
 
   @Test func geometryPixelNonceRejectsSmallInconsistentReversedAndUnrestoredChanges() {
