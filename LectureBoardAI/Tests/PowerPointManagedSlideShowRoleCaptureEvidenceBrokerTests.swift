@@ -12,6 +12,193 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
   private let operationID = CaptureOperationID(rawValue: 7)
   private let generation: UInt64 = 9
 
+  @Test func captureAnchorWaitsOnceForDelayedInitialDelivery() async throws {
+    let candidate = identity(20)
+    let gate = BrokerNextDeliveryGate()
+    let primary = BrokerScriptedDeliverySource(
+      identity: candidate,
+      streamMemberToken: "candidate-member",
+      continuityToken: "candidate-continuity",
+      steps: [
+        .delivery(delivery(candidate, sequence: 10, callback: 100, display: 90, luminance: 1))
+      ],
+      nextGate: gate
+    )
+    let lease = try makeLease(
+      candidate: candidate,
+      retained: [BrokerRetainedWindowReference(identity: candidate)],
+      primary: primary,
+      inventory: BrokerWindowInventory([candidate]),
+      factory: BrokerAuxiliaryFactory(sources: [:])
+    )
+
+    let pending = Task { try await lease.captureAnchor() }
+    while await primary.nextCount == 0 { await Task.yield() }
+    await gate.release()
+    let first = try await pending.value
+    let second = try await lease.captureAnchor()
+
+    #expect(first == second)
+    #expect(first.candidateStreamMemberToken == "candidate-member")
+    #expect(first.candidateContinuityToken == "candidate-continuity")
+    #expect(first.minimumCandidateDeliverySequenceExclusive == 10)
+    #expect(await primary.nextCount == 1)
+    #expect(
+      await primary.requests == [
+        PowerPointManagedSlideShowRoleCaptureDeliveryRequest(
+          commandReplyMachAbsoluteTime: 0,
+          requestStartedMachAbsoluteTime: 0
+        )
+      ]
+    )
+  }
+
+  @Test func captureAnchorPreservesBoundedInitialDeliveryTimeout() async throws {
+    let candidate = identity(20)
+    let primary = PowerPointManagedSlideShowRoleCaptureDeliveryBuffer(
+      identity: candidate,
+      captureOperationID: operationID,
+      captureGeneration: generation,
+      streamMemberToken: "candidate-member",
+      continuityToken: "candidate-continuity",
+      deliveryTimeout: 0.1
+    )
+    let lease = try makeLease(
+      candidate: candidate,
+      retained: [BrokerRetainedWindowReference(identity: candidate)],
+      primary: primary,
+      inventory: BrokerWindowInventory([candidate]),
+      factory: BrokerAuxiliaryFactory(sources: [:])
+    )
+
+    #expect(
+      await capturedFailure {
+        _ = try await lease.captureAnchor()
+      } == .deliveryTimedOut
+    )
+    await lease.stop()
+  }
+
+  @Test func stoppedOrCancelledPendingInitialDeliveryCannotIssueAnchor() async throws {
+    for cancellation in [false, true] {
+      let candidate = identity(20)
+      let gate = BrokerNextDeliveryGate()
+      let primary = BrokerScriptedDeliverySource(
+        identity: candidate,
+        streamMemberToken: "candidate-member",
+        continuityToken: "candidate-continuity",
+        steps: [
+          .delivery(delivery(candidate, sequence: 10, callback: 100, display: 90, luminance: 1))
+        ],
+        nextGate: gate
+      )
+      let lease = try makeLease(
+        candidate: candidate,
+        retained: [BrokerRetainedWindowReference(identity: candidate)],
+        primary: primary,
+        inventory: BrokerWindowInventory([candidate]),
+        factory: BrokerAuxiliaryFactory(sources: [:])
+      )
+      let pending = Task { try await lease.captureAnchor() }
+      while await primary.nextCount == 0 { await Task.yield() }
+      if cancellation {
+        pending.cancel()
+      } else {
+        await lease.stop()
+      }
+      await gate.release()
+
+      #expect(
+        await capturedFailure {
+          _ = try await pending.value
+        } == .inactiveLease,
+        "cancellation: \(cancellation)"
+      )
+      if cancellation { await lease.stop() }
+    }
+  }
+
+  @Test
+  func initialDeliveryWaitRetainsExactValidationAndNeverRetriesMalformedCurrent() async throws {
+    for mutation in [
+      BrokerDeliveryMutation.missingIdentity,
+      .blankStatus,
+      .operationDrift,
+      .generationDrift,
+      .streamDrift,
+      .continuityDrift,
+    ] {
+      let candidate = identity(20)
+      let primary = BrokerScriptedDeliverySource(
+        identity: candidate,
+        streamMemberToken: "candidate-member",
+        continuityToken: "candidate-continuity",
+        steps: [
+          .delivery(
+            delivery(
+              candidate,
+              sequence: 10,
+              callback: 100,
+              display: 90,
+              luminance: 1,
+              mutation: mutation
+            )
+          )
+        ]
+      )
+      let lease = try makeLease(
+        candidate: candidate,
+        retained: [BrokerRetainedWindowReference(identity: candidate)],
+        primary: primary,
+        inventory: BrokerWindowInventory([candidate]),
+        factory: BrokerAuxiliaryFactory(sources: [:])
+      )
+
+      #expect(
+        await capturedFailure {
+          _ = try await lease.captureAnchor()
+        } == mutation.expectedFailure,
+        "awaited mutation: \(mutation)"
+      )
+      #expect(await primary.nextCount == 1)
+    }
+
+    for mutation in [BrokerDeliveryMutation.missingIdentity, .operationDrift] {
+      let candidate = identity(20)
+      let invalidCurrent = BrokerScriptedDeliverySource(
+        identity: candidate,
+        streamMemberToken: "candidate-member",
+        continuityToken: "candidate-continuity",
+        current: delivery(
+          candidate,
+          sequence: 10,
+          callback: 100,
+          display: 90,
+          luminance: 1,
+          mutation: mutation
+        ),
+        steps: [
+          .delivery(delivery(candidate, sequence: 11, callback: 110, display: 100, luminance: 2))
+        ]
+      )
+      let invalidLease = try makeLease(
+        candidate: candidate,
+        retained: [BrokerRetainedWindowReference(identity: candidate)],
+        primary: invalidCurrent,
+        inventory: BrokerWindowInventory([candidate]),
+        factory: BrokerAuxiliaryFactory(sources: [:])
+      )
+
+      #expect(
+        await capturedFailure {
+          _ = try await invalidLease.captureAnchor()
+        } == mutation.expectedFailure,
+        "current mutation: \(mutation)"
+      )
+      #expect(await invalidCurrent.nextCount == 0)
+    }
+  }
+
   @Test func primaryIdleAndSamePayloadAuxiliaryIdlePreserveExactContinuity() async throws {
     let candidate = identity(20)
     let other = identity(21)
@@ -586,9 +773,11 @@ private actor BrokerScriptedDeliverySource: PowerPointManagedSlideShowRoleCaptur
   private let current: PowerPointManagedSlideShowRoleCaptureDelivery?
   private var steps: [BrokerDeliveryStep]
   private let stopGate: BrokerStopGate?
+  private let nextGate: BrokerNextDeliveryGate?
   private(set) var startCount = 0
   private(set) var nextCount = 0
   private(set) var stopCount = 0
+  private(set) var requests: [PowerPointManagedSlideShowRoleCaptureDeliveryRequest] = []
 
   init(
     identity: PowerPointWindowIdentity,
@@ -596,7 +785,8 @@ private actor BrokerScriptedDeliverySource: PowerPointManagedSlideShowRoleCaptur
     continuityToken: String,
     current: PowerPointManagedSlideShowRoleCaptureDelivery? = nil,
     steps: [BrokerDeliveryStep],
-    stopGate: BrokerStopGate? = nil
+    stopGate: BrokerStopGate? = nil,
+    nextGate: BrokerNextDeliveryGate? = nil
   ) {
     retainedIdentity = identity
     self.streamMemberToken = streamMemberToken
@@ -604,6 +794,7 @@ private actor BrokerScriptedDeliverySource: PowerPointManagedSlideShowRoleCaptur
     self.current = current
     self.steps = steps
     self.stopGate = stopGate
+    self.nextGate = nextGate
   }
 
   func start() async throws {
@@ -618,6 +809,8 @@ private actor BrokerScriptedDeliverySource: PowerPointManagedSlideShowRoleCaptur
     after request: PowerPointManagedSlideShowRoleCaptureDeliveryRequest
   ) async throws -> PowerPointManagedSlideShowRoleCaptureDelivery {
     nextCount += 1
+    requests.append(request)
+    if let nextGate { await nextGate.wait() }
     guard !steps.isEmpty else {
       throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.deliveryUnavailable
     }
@@ -630,6 +823,23 @@ private actor BrokerScriptedDeliverySource: PowerPointManagedSlideShowRoleCaptur
   func stop() async {
     stopCount += 1
     if let stopGate { await stopGate.wait() }
+  }
+}
+
+private actor BrokerNextDeliveryGate {
+  private var released = false
+  private var continuations: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    guard !released else { return }
+    await withCheckedContinuation { continuations.append($0) }
+  }
+
+  func release() {
+    released = true
+    let pending = continuations
+    continuations.removeAll()
+    for continuation in pending { continuation.resume() }
   }
 }
 

@@ -200,12 +200,35 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
   }
 
   func captureAnchor() async throws -> ManagedSlideShowRoleChallengeCaptureAnchor {
-    guard !stopped, !poisoned else {
+    guard !stopped, !poisoned, !Task.isCancelled else {
       throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
     }
     if let issuedCaptureAnchor { return issuedCaptureAnchor }
-    guard let delivery = await primarySource.currentDelivery() else {
-      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.captureAnchorUnavailable
+    let delivery: PowerPointManagedSlideShowRoleCaptureDelivery
+    if let currentDelivery = await primarySource.currentDelivery() {
+      delivery = currentDelivery
+    } else {
+      guard !stopped, !poisoned, !Task.isCancelled else {
+        throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
+      }
+      do {
+        // This recorder is created for the exact primary stream before that stream starts. Zero is
+        // therefore the lower bound for its first attested positive callback, not an invented
+        // command time.
+        delivery = try await primarySource.nextDelivery(
+          after: PowerPointManagedSlideShowRoleCaptureDeliveryRequest(
+            commandReplyMachAbsoluteTime: 0,
+            requestStartedMachAbsoluteTime: 0
+          )
+        )
+      } catch let failure as PowerPointManagedSlideShowRoleCaptureEvidenceFailure {
+        throw failure
+      } catch {
+        throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.captureAnchorUnavailable
+      }
+    }
+    guard !stopped, !poisoned, !Task.isCancelled else {
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
     }
     let validated = try validate(
       delivery,

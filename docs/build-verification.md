@@ -1650,3 +1650,37 @@ passed 460 tests in 40 suites. A disposable-copy query independently confirmed 4
 tests, 522 device runs, 14 parameterized tests/76 runs, and zero failures, skips or expected
 failures. Along with the 237-test/18-suite Core run, this verifies the new transition policy's
 deterministic tests only. The fixed application has not yet exercised the corrected transition.
+
+### 2026-09-06 first-frame readiness and live Stage B inventory diagnosis
+
+The diagnostic copy based on `3cff0ece878fbb5ba316271bf20c2e2cc89f5291` passed
+Stage A but initially returned `captureAnchorUnavailable`: `SCStream.startCapture()` had
+completed before the primary recorder received its first frame. The lease now uses its existing
+bounded delivery waiter when no first delivery exists, validates the actual returned frame, and
+issues an anchor only after that validation. Existing malformed deliveries are not retried.
+Stop and cancellation still fail closed; cancellation can take until the existing delivery
+deadline rather than promising immediate cancellation. Four regressions cover delayed delivery,
+no-frame timeout, stop/cancellation, and malformed delivery without retry.
+
+The complete native working-tree run at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_20-58-16-+0900.xcresult`
+passed 464 tests in 40 suites. Querying a disposable copy independently confirmed 464 authoritative
+tests, 526 device runs, 14 parameterized tests/76 runs, and zero failures, skips or expected
+failures. Release-tool evidence expectations and negative fixtures were synchronized; the
+release-tool boundary suite passed. Core remains at the separately verified 237-test checkpoint.
+These are not exact-clean-commit release evidence or live lecture acceptance.
+
+With this first-frame change, the instrumented, `UNBOUND` diagnostic application repeatedly
+passed Stage A and then rejected Stage B with `inventoryDrift` before any visibility mutation.
+At capture setup the retained PowerPoint inventory had one window; at the first baseline read it
+had two, with one added and none missing. The original candidate was still present. The second
+on-screen layer-zero window measured 66 by 20 points, alongside the 1600 by 900-point show.
+Moving the mouse outside the synthetic show did not prevent it. A narrowly scoped diagnostic
+screenshot of that small window contained a miniature synthetic-slide image, so it must not be
+treated as an ignorable tooltip based on its size. The title was the generic `Window` and its
+filter rectangle was also 66 by 20. No size/title exclusion has been added. The production
+inventory and role-uniqueness requirements remain unchanged pending a safe initialization design.
+The controlled attempts used only the disposable synthetic presentation, not the owner's lecture
+content. Earlier independent count checks after failed starts found one presentation and zero
+slide shows. Successful role proof, semantic polling, microphone input, visible automatic board
+content, owner acceptance and normal LaunchServices permission persistence remain unverified.
