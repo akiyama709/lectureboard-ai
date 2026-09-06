@@ -112,6 +112,18 @@ Implemented:
   generated-deck evidence only, not owner-PPTX, microphone, visible-board, distributed-production,
   Gatekeeper, or public-release evidence. See the latest handoff and verification entry.
 
+- The exact production owner-trial app is frozen from code-bearing commit
+  `c525ee468283bee333166cb301a3c9570fae0086` at
+  `/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/LectureBoard AI.app`.
+  Its executable SHA-256 is `f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c`
+  and its ad hoc Hardened Runtime CDHash is `ad850f341f0fb45ddafde45ec074801a8dfdedf6`.
+  Strict deep signature and byte identity passed. An ordinary LaunchServices launch opened one
+  ready app window and exited normally, but Screen Recording preflight was false for this new
+  ad hoc privacy identity, so capture and managed start correctly remained disabled. Do not
+  rebuild, replace, move, or repeatedly launch this app before the owner grants that exact path
+  Screen Recording once. Microphone, visible board, owner PPTX, export and acceptance remain
+  unverified.
+
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
@@ -164,7 +176,7 @@ Not yet implemented or verified:
 
 ## Immediate next milestone
 
-Keep every historical verification app and evidence file fixed; never substitute it for current-source evidence. Freeze one new exact production owner-trial app from `fa62c73` and validate the remaining narrow contract in `docs/supported-environment.md`: real microphone-to-board output, owner-confirmed canvas, visible alignment, click-through mouse priority, JSON/SVG export, original-file immutability, and bounded cleanup/recovery on a working copy of an owner-selected PPTX. Full-screen, Presenter View, multiple displays, code switching, physical pen tablets, speaker-note import, and cloud adapters are post-v1 work. After the live gate, run one final integrated automated gate, produce and verify the no-fee release archive, and obtain explicit publication approval naming the exact commit and ZIP SHA-256.
+Keep every historical verification app and evidence file fixed; never substitute it for current-source evidence. The exact production owner-trial app is already frozen at the `Mock-Lecture-c525ee4` path above. The next unavoidable human boundary is one Screen Recording authorization for that exact app, followed by validation of the remaining narrow contract in `docs/supported-environment.md`: real microphone-to-board output, owner-confirmed canvas, visible alignment, click-through mouse priority, JSON/SVG export, original-file immutability, and bounded cleanup/recovery on a working copy of an owner-selected PPTX. Do not rebuild the app while waiting for that authorization. Full-screen, Presenter View, multiple displays, code switching, physical pen tablets, speaker-note import, and cloud adapters are post-v1 work. After the live gate, run one final integrated automated gate, produce and verify the no-fee release archive, and obtain explicit publication approval naming the exact commit and ZIP SHA-256.
 
 Implement and validate the observable lecture path in this order:
 

@@ -21,8 +21,11 @@ Current status: the repository contains a pre-release development tree. Commit
 authoritative native App tests, and all 26 `make verify` stages. A bounded diagnostic build with
 the same final role-evidence policy completed one generated single-document windowed PowerPoint
 session through exact binding, explicit canvas confirmation, two semantic slide transitions, and
-normal cleanup. The exact production commit has not yet completed a distributed owner trial.
-Real microphone input, stable-partial timing, visible automatic board content, human-input
+normal cleanup. An exact Hardened Runtime, arm64, ad hoc-signed owner-trial app was subsequently
+frozen from code-bearing commit `c525ee468283bee333166cb301a3c9570fae0086`; ordinary
+LaunchServices launch and fail-closed behavior without Screen Recording authorization passed.
+That exact app still requires one owner-mediated authorization and has not completed its live
+trial. Real microphone input, stable-partial timing, visible automatic board content, human-input
 priority, live export, representative PPTX use, owner acceptance, installation, and public release
 remain unverified. No application GitHub Release has been published.
 
@@ -61,7 +64,7 @@ remain unverified. No application GitHub Release has been published.
 
 **Exit criterion:** a ten-minute Japanese or English lecture can run without overlap on a controlled slide deck.
 
-**Next implementation and live checkpoint:** preserve all historical fixed apps and evidence without replacing or reinterpreting them. Build a new Hardened Runtime, arm64, ad hoc-signed owner-trial app from exact production commit `fa62c73`, inspect its embedded commit, signature and hash, and keep every older trial app unchanged. The owner then uses that exact app and a working copy of a self-selected PPTX for one bounded mock lecture. The acceptance must observe ordinary launch, real microphone partials, conservative pre-final promotion, actual visible board output and latency, exact managed binding, owner-confirmed canvas, mouse-input priority, overlay alignment and click-through behavior, JSON/SVG export, normal stop, and original-file immutability. Cancellation, permission denial, window closure and interruption cleanup remain separate supported-path checks. Full-screen, Presenter View, multiple displays, code switching, a physical pen tablet, speaker-note import, and cloud adapters are explicit post-v1 work and must not be inferred from this gate. After every live blocker is resolved, run the final automated gate against one clean exact commit, build the five-asset ad hoc-signed archive, verify installation through Apple's per-application Open Anyway path, and request publication approval naming the exact commit and archive SHA-256.
+**Next implementation and live checkpoint:** preserve all historical fixed apps and evidence without replacing or reinterpreting them. The exact owner-trial app is now frozen at `/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/LectureBoard AI.app`, with executable SHA-256 `f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c` and embedded commit `c525ee468283bee333166cb301a3c9570fae0086`. Do not rebuild, replace, or move it during the trial, because doing so may create another macOS privacy identity. The owner first grants Screen Recording to that exact app once, then uses it and a working copy of a self-selected PPTX for one bounded mock lecture. The acceptance must observe ordinary launch, real microphone partials, conservative pre-final promotion, actual visible board output and latency, exact managed binding, owner-confirmed canvas, mouse-input priority, overlay alignment and click-through behavior, JSON/SVG export, normal stop, and original-file immutability. Cancellation, permission denial, window closure and interruption cleanup remain separate supported-path checks. Full-screen, Presenter View, multiple displays, code switching, a physical pen tablet, speaker-note import, and cloud adapters are explicit post-v1 work and must not be inferred from this gate. After every live blocker is resolved, run the final automated gate against one clean exact commit, build the five-asset ad hoc-signed archive, verify installation through Apple's per-application Open Anyway path, and request publication approval naming the exact commit and archive SHA-256.
 
 ## Milestone 2 — Contextual board quality
 

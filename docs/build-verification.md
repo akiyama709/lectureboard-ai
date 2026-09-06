@@ -2103,3 +2103,55 @@ timing, importance quality, visible automatic board content, overlay alignment o
 human-ink priority, JSON/SVG export, the owner's private PPTX or mock lecture, original-file
 immutability for that private deck, Gatekeeper installation, final release assets, GitHub
 publication, or public re-download.
+
+### 2026-09-07 exact owner-trial build and normal-launch permission boundary
+
+After the release documents were synchronized, exact clean HEAD
+`c525ee468283bee333166cb301a3c9570fae0086` completed `make doctor` with zero failures and one
+warning: GitHub CLI was installed but not authenticated. Chrome authentication does not establish
+GitHub CLI authentication. This warning does not block local compilation but must be resolved
+before a future CLI push or Release operation. `make local-setup` passed all 250 Core tests in 19
+suites and regenerated the Xcode project. The retained doctor and setup logs have SHA-256 values
+`235e855ac22de9eb8cb7ec66e44ebd00fcd61e4daf90140be7f8226989a03115` and
+`00313855e809b7be9e0e4d072be68fd4a159d03c117c8ba37ef2178419ab9b5a`. The earlier exact code
+commit gate remains the 26-stage `fa62c73` result above; these documentation-only commits did not
+alter the tested app source.
+
+A new private owner-trial app was built from that exact clean HEAD with Release configuration,
+arm64 only, version 1.0.0 build 1, ad hoc signing, Hardened Runtime, no injected base entitlements,
+and no debug dylib. It embeds source commit
+`c525ee468283bee333166cb301a3c9570fae0086` and `UNBOUND` release-tag fields. Its only
+entitlements are Automation Apple Events and audio input. Strict deep bundle-signature verification
+passed. The signature reports `adhoc,runtime`, no team identifier, and CDHash
+`ad850f341f0fb45ddafde45ec074801a8dfdedf6`. The executable SHA-256 is
+`f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c`; the saved copy is
+byte-identical to the build. The build log SHA-256 is
+`1437b4ba0ae087803f5ccc7e53abe562b2e3a99ed776fc062b6cab4a3980e01e`.
+
+The app and records are frozen without replacing earlier trials at
+`/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/`. The owner
+procedure `本人模擬講義の試用手順.md` has SHA-256
+`95c9d53fd30dc682e700494d0923f340dec2595f4894a81a4b6fc14ddf677445`. It requires a working
+copy, one presentation, a windowed show, one display, one-time permissions for this exact app,
+observable partial speech, visible board output and latency, mouse priority, export inspection,
+normal stop, and content-free result reporting. Adding the procedure does not perform acceptance.
+
+The fixed app was launched once through LaunchServices from its exact saved path. It produced one
+app window, reported the application ready and transcription stopped, and remained running without
+a crash. Screen Recording preflight was unavailable for this newly signed app, so the permission
+control was enabled, PowerPoint refresh and managed start remained disabled, and no target was
+selected. No permission control, System Settings toggle, microphone control, PowerPoint input, or
+retry was performed. The exact app was then quit normally and no matching process remained.
+PowerPoint was independently confirmed to contain the generated synthetic presentation only and
+zero slide-show windows before and after this attempt. The app-only screenshot
+`normal-launch-screen-recording-closed.png` has SHA-256
+`770254c720194a692fc24575bec9a481f4485d680cb9e157fb4213ffa852c3a1`.
+
+This is exact production-app build, signature, copy, ordinary-launch, fail-closed permission, and
+normal-exit evidence. It is not Screen Recording authorization or persistence evidence. Ad hoc
+builds can acquire a different macOS privacy identity when their signed bytes change; the owner
+must authorize this now-frozen exact app once before its managed trial. The app will not be rebuilt
+during that trial. Exact-production managed binding, microphone recognition, visible automatic
+board output, owner canvas, representative PPTX behavior, latency, mouse priority, export,
+original-file immutability, Gatekeeper installation, publication, and public re-download remain
+unverified.

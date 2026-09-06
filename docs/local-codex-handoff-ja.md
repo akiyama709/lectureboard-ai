@@ -2,7 +2,15 @@
 
 更新日：2026年9月7日
 
-## 最新の再開点（2026年9月7日2時台）
+## 最新の再開点（2026年9月7日3時台）
+
+　本人試用に使用するproduction Appは，exact code-bearing commit `c525ee468283bee333166cb301a3c9570fae0086`から，arm64 Release，version 1.0.0 build 1，Hardened Runtime，ad hoc署名として作成し，`/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/LectureBoard AI.app`へ固定した．executable SHA-256は`f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c`，CDHashは`ad850f341f0fb45ddafde45ec074801a8dfdedf6`であり，build元とのbyte同一性とstrict deep署名を確認した．このAppは本人試用中に再build・置換・移動しない．
+
+　同じcommitで`make doctor`は失敗0件，GitHub CLI未認証のwarning 1件で完了した．ChromeへのGitHub loginはCLI認証を意味しないが，local buildは妨げない．`make local-setup`はCore 250件・19 suiteを含めて合格した．固定Appの通常LaunchServices起動も，App window 1件，application ready，文字起こし停止，crashなしを確認した．ただし，新しいad hoc署名のprivacy identityには画面収録権限がまだなく，AppはPowerPoint refresh及びmanaged開始をfail closedで無効にした．許可button，System Settings，microphone，PowerPoint入力及び再試行には進まず，正常終了させた．
+
+　次の人手境界は，このexact pathのAppだけをmacOSの「画面収録とシステムオーディオ録音」で1回許可し，必要なら同じAppを終了・再起動することである．その後，短い実マイク確認と，本人選択PPTXの作業用copyによる模擬講義で，partial認識，発話中の可視自動板書，遅延，canvas，overlay alignment，mouse優先，export及び原本不変を確認する．これらは現時点では未検証である．許可前に同じ試行を反復せず，このAppを再buildして新しいprivacy identityを作らない．本人受入前にGitHub Releaseを公開しない．
+
+## 直前の再開点（2026年9月7日2時台）
 
 　最新のコード修正commitは`fa62c73eada6d94daf094ac92c8032135fdd1e72`である．PowerPointの正確な返却objectとgeometryで結合済みの補助surfaceについて，黒帯又はnear-full-frameのアンチエイリアスに限り，黒白endpointの厳密pairに加えて98%以上の同方向変化を受理するようにした．中間的なendpoint coverageは従来どおり厳密pairを要求する．最初の広すぎる案は既存の否定test 2件を失敗させたため採用せず，狭い条件へ修正した．正方向と逆方向を含む新規回帰testを追加した．
 
@@ -10,7 +18,7 @@
 
 　commit `38d1482…`を基準に同じ最終policy修正と限定printを加えた固定診断Appは，生成した非privateのPowerPoint資料1件，windowed slide show，display 1台の条件で，managed開始，Stage A／B，challenge property復元，exact capture／semantic identity結合，calibration UIによるslide面の明示確定，日本語slide ID 257及び英語slide ID 258への意味的切替，切替後のVision解析，managed停止及び正常終了を完了した．canvas drag／確定とslide advanceは，利用者が本件に許可した限定local automationで合成資料だけへ実行した．これは手動の本人確認又は本人資料の検証ではない．role logのSHA-256は`df003b9dfed7aec6027de4bf45c45b9730c2028366270736ccacb602c2439f6e`である．証拠fileの詳細は`docs/build-verification.md`末尾にある．
 
-　次は，`fa62c73…`のproduction sourceから新しいowner trial Appを，旧版を置換せず作成して署名・commit・hashを検査する．秋山さんが起きた後，そのexact Appと本人選択の作業用PPTXで，実マイクのpartial認識，発話中の可視自動板書，遅延，overlay alignment，mouse優先，export及び原本不変を短い模擬講義として確認する．これらは現時点では未検証である．本人受入前にGitHub Releaseを公開せず，画面収録の登録変更又はTCC resetも繰り返さない．
+　この時点の次作業はowner trial Appの作成であり，現在は上記のとおり完了した．本人模擬講義の結果はまだ得ていない．
 
 ## 直前の再開点（2026年9月7日0時台）
 
@@ -184,7 +192,7 @@ make test-runtime-launch-smoke
 
 　選択したPowerPoint windowの連続取得からoverlayのfail-closedな座標変換までの決定論的基盤に加え，schema 10のbounded capture-terminal診断，schema 11のcontent revision interval，post-baseline coarse／dense候補に限定したbounded one-shot sample経路，8秒単位の端末内音声認識継続，保守的grounding及び誤解を避ける実行時診断を実装した．現行working treeはCore 235件・18 suite，App 455件・40 suite及び全26段階gateに合格する．decoder-hardening後の固定Appは，static exact-window capture，6件のdynamic visual revision及びsingle-stroke／eraseを完了した．operator-captured helper sidecarとの組合せは，8秒間隔の6入力windowへのattributionを支持するが，runtime reportへ暗号的に結合されておらず，release-grade provenanceではない．dynamic sourceはcoarse 5件及びcontinuous dense idle repeat 1件，stroke runもcontinuous dense 2件であり，`boundedFreshSample`をliveには通っていない．手書き後の赤線と消去後のbyte-identical復元はpixel証拠であり，意味的又は入力ごとのink／erase分類，既存ink検出，semantic slide identity，利用者確認精度，目視alignment，AI rendering又はproduction挙動の証拠ではない．
 
-　exact-window-bound managed identity provider，条件付き文字起こし自動再開，公開scene限定JSON／SVG export及びno-fee release metadataは現行sourceへ実装済みであり，それぞれ対象testが合格している．2026年9月7日の固定診断Appは，合成資料に限ってmanaged開始，exact object／window／slide binding，明示canvas確定，2回の意味的slide切替，切替後解析，managed停止及び正常終了を完了した．この結果に対応する最終policyはcommit `fa62c73…`へ固定し，全26段階gateに合格した．次はこのproduction sourceからowner trial Appを作成し，前節2以降の実マイク・可視板書・本人資料受入を行う．全固定App及び証拠fileは移動・置換しない．
+　exact-window-bound managed identity provider，条件付き文字起こし自動再開，公開scene限定JSON／SVG export及びno-fee release metadataは現行sourceへ実装済みであり，それぞれ対象testが合格している．2026年9月7日の固定診断Appは，合成資料に限ってmanaged開始，exact object／window／slide binding，明示canvas確定，2回の意味的slide切替，切替後解析，managed停止及び正常終了を完了した．この結果に対応する最終policyはcommit `fa62c73…`へ固定し，全26段階gateに合格した．production owner trial Appはcommit `c525ee4…`から上記exact pathへ固定し，通常起動と権限未付与時のfail-closed停止まで確認した．次は同じAppへ画面収録を1回許可し，前節2以降の実マイク・可視板書・本人資料受入を行う．全固定App及び証拠fileは移動・置換しない．
 
 　AIやクラウドサービスを先に接続してはならない．まず，何を見て，どのスライドを対象とし，どこが空いており，どの発話を根拠としたかを観察・記録できる基盤を完成させる．
 
