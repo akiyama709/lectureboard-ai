@@ -7,6 +7,28 @@ import Testing
 
 @MainActor
 struct PermissionServiceTests {
+  @Test func speechCycleKeepsOneTranscriptSegmentIdentityUntilReset() throws {
+    var operationGate = TranscriptionOperationGate()
+    let operationID = operationGate.begin()
+    var nextRequest = 0
+    let handoff = SpeechRecognitionRollingHandoff<Int, Int>(
+      makeRequest: {
+        defer { nextRequest += 1 }
+        return nextRequest
+      },
+      appendBuffer: { _, _ in }
+    )
+    let session = try #require(handoff.beginSession(operationID: operationID))
+    var store = SpeechRecognitionSegmentIdentityStore()
+
+    let first = store.identifier(for: session.active.cycleID)
+    #expect(store.identifier(for: session.active.cycleID) == first)
+    #expect(store.identifier(for: session.standby.cycleID) != first)
+
+    store.reset()
+    #expect(store.identifier(for: session.active.cycleID) != first)
+  }
+
   @Test func audioCallbackAcceptsBufferOnBackgroundQueueWithoutActorInheritance() async {
     let frames: AVAudioFrameCount = await withCheckedContinuation { continuation in
       let callback = SpeechRecognitionAudioCallback.make { buffer in

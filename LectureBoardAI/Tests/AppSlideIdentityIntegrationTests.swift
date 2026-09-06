@@ -719,6 +719,49 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func twoStablePartialRevisionsCanReachThePublicSceneBeforeFinal() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let text =
+      "Sustainability means meeting present needs without undermining future possibilities."
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text, id: segmentID, isFinal: false),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscriptPhase == .partial)
+    #expect(model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text, id: segmentID, isFinal: false),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscriptPhase == .partial)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(!model.lectureSessionScenes.isEmpty)
+    let sceneAfterPartialCommit = model.boardScene
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text, id: segmentID),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.liveTranscriptPhase == .final)
+    #expect(model.boardScene == sceneAfterPartialCommit)
+    await model.stopWindowCapture()
+  }
+
   @Test func groundedProviderStrengthDefinitionQuestionRemainsInternal() async throws {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let model = try await makeGroundedDefinitionModel(
@@ -1852,10 +1895,12 @@ struct AppSlideIdentityIntegrationTests {
 
   private func providerStrengthSegment(
     text: String,
+    id: UUID = UUID(),
     isFinal: Bool = true,
     confidence: Double = 0.5
   ) -> TranscriptSegment {
     TranscriptSegment(
+      id: id,
       text: text,
       startTime: 0,
       endTime: 8,

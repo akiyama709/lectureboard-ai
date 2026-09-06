@@ -256,6 +256,7 @@ final class AppModel: ObservableObject {
   private var latestCompletedAnalysisGeneration: Int?
   private var boardCandidateContext = BoardCandidateContext()
   private var boardSceneAnalysisGeneration: Int?
+  private var stablePartialTranscriptCommitter = StablePartialTranscriptCommitter()
   private var transcriptionOperationGate = TranscriptionOperationGate()
   private var transcriptionRequestedByUser = false
   private var automaticTranscriptionResumeTask: Task<Void, Never>?
@@ -958,7 +959,9 @@ final class AppModel: ObservableObject {
     } else {
       liveTranscriptPhase = segment.isFinal ? .final : .partial
     }
-    guard segment.isFinal else { return }
+    if segment.isFinal {
+      _ = stablePartialTranscriptCommitter.observe(segment)
+    }
     guard
       slideCanvasStatus == .confirmed,
       slideAnalysisStatus == .ready,
@@ -990,7 +993,17 @@ final class AppModel: ObservableObject {
       return
     }
 
-    boardCandidateContext.transcriptSegments.append(segment)
+    let boardSegment: TranscriptSegment
+    if segment.isFinal {
+      boardSegment = segment
+    } else {
+      guard let committedPartial = stablePartialTranscriptCommitter.observe(segment) else {
+        return
+      }
+      boardSegment = committedPartial
+    }
+
+    boardCandidateContext.transcriptSegments.append(boardSegment)
     let fallbackTitle =
       selectedLanguage.rawValue.hasPrefix("ja") ? "現在のスライド" : "Current slide"
     let analysisTitle = slideAnalysis.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2542,6 +2555,7 @@ final class AppModel: ObservableObject {
   }
 
   private func clearLiveTranscript() {
+    stablePartialTranscriptCommitter.reset()
     liveTranscript = ""
     liveTranscriptPhase = .empty
   }

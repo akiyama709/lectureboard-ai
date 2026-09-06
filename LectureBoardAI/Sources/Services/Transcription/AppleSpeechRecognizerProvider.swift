@@ -43,6 +43,21 @@ struct SpeechRecognitionCycleID: Equatable, Hashable, Sendable {
   fileprivate let rawValue: UInt64
 }
 
+struct SpeechRecognitionSegmentIdentityStore: Sendable {
+  private var identifiers: [SpeechRecognitionCycleID: UUID] = [:]
+
+  mutating func identifier(for cycleID: SpeechRecognitionCycleID) -> UUID {
+    if let identifier = identifiers[cycleID] { return identifier }
+    let identifier = UUID()
+    identifiers[cycleID] = identifier
+    return identifier
+  }
+
+  mutating func reset() {
+    identifiers.removeAll(keepingCapacity: true)
+  }
+}
+
 struct SpeechRecognitionRestartPolicy: Equatable, Sendable {
   enum Decision: Equatable, Sendable {
     case restart(afterNanoseconds: UInt64)
@@ -1032,6 +1047,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
   private var gracefulStopRequestedOperationID: TranscriptionOperationID?
   private var hasBegunRecognitionSession = false
   private var lifecycle = SpeechRecognitionProviderLifecycle()
+  private var segmentIdentityStore = SpeechRecognitionSegmentIdentityStore()
 
   func start(
     operationID: TranscriptionOperationID,
@@ -1213,6 +1229,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     sessionStartedAtUptimeNanoseconds = nil
     gracefulStopRequestedOperationID = nil
     hasBegunRecognitionSession = false
+    segmentIdentityStore.reset()
   }
 
   private func stopAudioInput() {
@@ -1274,6 +1291,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
       guard
         deliver(
           result: event.result,
+          cycleID: event.cycleID,
           sourceMachTime: event.sourceMachTime,
           observedAtUptimeNanoseconds: event.observedAtUptimeNanoseconds
         )
@@ -1297,6 +1315,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
         guard
           deliver(
             result: event.result,
+            cycleID: event.cycleID,
             sourceMachTime: event.sourceMachTime,
             observedAtUptimeNanoseconds: event.observedAtUptimeNanoseconds
           )
@@ -1337,6 +1356,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
       if completion.shouldDeliverResult,
         !deliver(
           result: event.result,
+          cycleID: event.cycleID,
           sourceMachTime: event.sourceMachTime,
           observedAtUptimeNanoseconds: event.observedAtUptimeNanoseconds
         )
@@ -1360,6 +1380,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
       if termination.shouldDeliverResult {
         _ = deliver(
           result: event.result,
+          cycleID: event.cycleID,
           sourceMachTime: event.sourceMachTime,
           observedAtUptimeNanoseconds: event.observedAtUptimeNanoseconds
         )
@@ -1707,6 +1728,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
 
   private func deliver(
     result: SFSpeechRecognitionResult?,
+    cycleID: SpeechRecognitionCycleID,
     sourceMachTime: UInt64,
     observedAtUptimeNanoseconds: UInt64
   ) -> Bool {
@@ -1721,6 +1743,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     observationHandler(
       TranscriptionObservation(
         segment: TranscriptSegment(
+          id: segmentIdentityStore.identifier(for: cycleID),
           text: result.bestTranscription.formattedString,
           startTime: 0,
           endTime: elapsed,
