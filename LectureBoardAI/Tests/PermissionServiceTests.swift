@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Speech
 import Testing
@@ -6,6 +7,38 @@ import Testing
 
 @MainActor
 struct PermissionServiceTests {
+  @Test func audioCallbackAcceptsBufferOnBackgroundQueueWithoutActorInheritance() async {
+    let frames: AVAudioFrameCount = await withCheckedContinuation { continuation in
+      let callback = SpeechRecognitionAudioCallback.make { buffer in
+        continuation.resume(returning: buffer.frameLength)
+      }
+      DispatchQueue.global().async {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 8_000, channels: 1),
+          let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 64)
+        else {
+          continuation.resume(returning: 0)
+          return
+        }
+        buffer.frameLength = 64
+        callback(buffer, AVAudioTime(sampleTime: 0, atRate: 8_000))
+      }
+    }
+    #expect(frames == 64)
+  }
+
+  @Test func speechAuthorizationCallbackResumesFromBackgroundWithoutActorInheritance() async {
+    for status in [
+      SFSpeechRecognizerAuthorizationStatus.authorized, .denied, .restricted,
+      .notDetermined,
+    ] {
+      let authorized = await withCheckedContinuation { continuation in
+        let callback = SpeechRecognitionAuthorizationCallback.make(continuation: continuation)
+        DispatchQueue.global().async { callback(status) }
+      }
+      #expect(authorized == (status == .authorized))
+    }
+  }
+
   @Test
   func onDeviceSpeechPolicyRequiresAnAvailableLocalRecognizer() {
     #expect(

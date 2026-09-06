@@ -2,6 +2,16 @@ import AVFoundation
 import CoreGraphics
 import Speech
 
+enum SpeechRecognitionAuthorizationCallback {
+  // Speech may invoke this from a background queue. Do not inherit MainActor from
+  // either permission caller; only resume its sendable continuation here.
+  nonisolated static func make(
+    continuation: CheckedContinuation<Bool, Never>
+  ) -> @Sendable (SFSpeechRecognizerAuthorizationStatus) -> Void {
+    { status in continuation.resume(returning: status == .authorized) }
+  }
+}
+
 @MainActor
 protocol ScreenCapturePermissionClient {
   var isAuthorized: Bool { get }
@@ -63,9 +73,9 @@ final class PermissionService {
 
   func requestSpeechRecognition() async -> Bool {
     await withCheckedContinuation { continuation in
-      SFSpeechRecognizer.requestAuthorization { status in
-        continuation.resume(returning: status == .authorized)
-      }
+      SFSpeechRecognizer.requestAuthorization(
+        SpeechRecognitionAuthorizationCallback.make(continuation: continuation)
+      )
     }
   }
 }

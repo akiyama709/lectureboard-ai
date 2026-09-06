@@ -4,6 +4,14 @@ import Foundation
 import LectureBoardCore
 @preconcurrency import Speech
 
+enum SpeechRecognitionAudioCallback {
+  nonisolated static func make(
+    append: @escaping @Sendable (AVAudioPCMBuffer) -> Void
+  ) -> @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void {
+    { buffer, _ in append(buffer) }
+  }
+}
+
 enum OnDeviceSpeechRecognitionPolicy {
   enum Decision: Equatable {
     case accept
@@ -1083,10 +1091,11 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     inputNode.installTap(
       onBus: 0,
       bufferSize: 1_024,
-      format: format
-    ) { [rollingHandoff] buffer, _ in
-      rollingHandoff.append(buffer)
-    }
+      format: format,
+      block: SpeechRecognitionAudioCallback.make { [rollingHandoff] buffer in
+        rollingHandoff.append(buffer)
+      }
+    )
     tapInstalled = true
 
     recognitionRequest = session.active.request
@@ -1225,7 +1234,7 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     let rollingHandoff = rollingHandoff
     let callbackMailbox = callbackMailbox
     let callbackIngress = callbackIngress
-    return recognizer.recognitionTask(with: request) { result, error in
+    return recognizer.recognitionTask(with: request) { @Sendable result, error in
       callbackIngress.perform {
         let observedAtUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         let action = rollingHandoff.acceptCallback(
@@ -1780,9 +1789,9 @@ final class AppleSpeechRecognizerProvider: TranscriptionProvider {
     guard microphone else { return false }
 
     let speech: Bool = await withCheckedContinuation { continuation in
-      SFSpeechRecognizer.requestAuthorization { status in
-        continuation.resume(returning: status == .authorized)
-      }
+      SFSpeechRecognizer.requestAuthorization(
+        SpeechRecognitionAuthorizationCallback.make(continuation: continuation)
+      )
     }
     guard lifecycle.isCurrent(operationID) else { return nil }
     return speech
