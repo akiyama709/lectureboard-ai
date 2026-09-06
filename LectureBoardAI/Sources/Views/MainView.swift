@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 struct MainView: View {
   @EnvironmentObject private var model: AppModel
+  @Environment(\.scenePhase) private var scenePhase
   @State private var sessionExportError: String?
 
   var body: some View {
@@ -44,6 +45,10 @@ struct MainView: View {
         )
       )
     }
+    .onChange(of: scenePhase) { _, phase in
+      guard phase == .active else { return }
+      model.recheckScreenCapturePermission()
+    }
     .onDisappear {
       Task { await model.stopWindowCapture() }
     }
@@ -63,6 +68,7 @@ struct MainView: View {
       return
     case .requestScreenCapturePermission:
       let granted = model.requestScreenCapturePermission()
+      model.recheckScreenCapturePermission()
       await performScreenCaptureSetupAction(
         ScreenCaptureSetupPolicy.action(
           for: .permissionRequestCompleted(granted: granted)

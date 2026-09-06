@@ -492,6 +492,10 @@ final class AppModel: ObservableObject {
     permissionService.requestScreenCaptureAccess()
   }
 
+  func recheckScreenCapturePermission() {
+    objectWillChange.send()
+  }
+
   func refreshPowerPointWindows() async {
     guard
       CaptureControlPolicy.canRefreshPowerPointWindows(

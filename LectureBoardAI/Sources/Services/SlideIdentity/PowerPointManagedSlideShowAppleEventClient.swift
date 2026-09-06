@@ -504,8 +504,8 @@ actor PowerPointManagedSlideShowAppleEventClient:
     try await verifyStartPreconditions(request, operationToken: operationToken)
 
     guard
-      let settings = codec.propertySpecifier(
-        .slideShowSettings,
+      let settings = codec.preStartPresentationPropertySpecifier(
+        [.slideShowSettings],
         of: activePresentation
       ),
       let runEvent = codec.runSlideShowEvent(
@@ -1227,7 +1227,7 @@ actor PowerPointManagedSlideShowAppleEventClient:
     operationToken: UUID
   ) throws {
     guard
-      let showType = codec.nestedPropertySpecifier(
+      let showType = codec.preStartPresentationPropertySpecifier(
         [.slideShowSettings, .slideShowType], of: activePresentation
       ),
       let event = codec.getEvent(processIdentifier: Int32(processIdentifier), object: showType)

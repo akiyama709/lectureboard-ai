@@ -790,7 +790,7 @@ done
 gate_log_digest="$(sha256 "$gate_log")"
 valid_test_evidence="$root/$release_test_evidence_name"
 /usr/bin/printf '%s\n' \
-  "{\"schema\":\"lectureboard.release-test-evidence.v1\",\"sourceCommit\":\"$commit\",\"generatedAt\":\"2026-09-06T00:00:00Z\",\"prepublicationGate\":{\"command\":\"./scripts/prepublish-check.sh\",\"result\":\"Passed\",\"passedStages\":26,\"totalStages\":26,\"logSha256\":\"$gate_log_digest\",\"scriptBlobOid\":\"dddddddddddddddddddddddddddddddddddddddd\"},\"coreTests\":{\"result\":\"Passed\",\"tests\":235,\"suites\":18,\"failed\":0,\"skipped\":0},\"nativeAppTests\":{\"result\":\"Passed\",\"authoritativeTests\":455,\"deviceRuns\":517,\"parameterizedTests\":14,\"parameterizedRuns\":76,\"failed\":0,\"skipped\":0,\"expectedFailures\":0,\"resultBundleName\":\"${result_bundle##*/}\",\"resultBundleTreeSha256\":\"$result_bundle_digest\"},\"environment\":{\"architecture\":\"arm64\",\"macOS\":\"26.6.2\",\"macOSBuild\":\"25G83\",\"xcode\":\"26.6\",\"xcodeBuild\":\"17F113\"},\"claimBoundary\":\"Automated source-candidate evidence only; no live PowerPoint, user acceptance, installation, publication, or public-redownload result is implied.\"}" \
+  "{\"schema\":\"lectureboard.release-test-evidence.v1\",\"sourceCommit\":\"$commit\",\"generatedAt\":\"2026-09-06T00:00:00Z\",\"prepublicationGate\":{\"command\":\"./scripts/prepublish-check.sh\",\"result\":\"Passed\",\"passedStages\":26,\"totalStages\":26,\"logSha256\":\"$gate_log_digest\",\"scriptBlobOid\":\"dddddddddddddddddddddddddddddddddddddddd\"},\"coreTests\":{\"result\":\"Passed\",\"tests\":235,\"suites\":18,\"failed\":0,\"skipped\":0},\"nativeAppTests\":{\"result\":\"Passed\",\"authoritativeTests\":459,\"deviceRuns\":521,\"parameterizedTests\":14,\"parameterizedRuns\":76,\"failed\":0,\"skipped\":0,\"expectedFailures\":0,\"resultBundleName\":\"${result_bundle##*/}\",\"resultBundleTreeSha256\":\"$result_bundle_digest\"},\"environment\":{\"architecture\":\"arm64\",\"macOS\":\"26.6.2\",\"macOSBuild\":\"25G83\",\"xcode\":\"26.6\",\"xcodeBuild\":\"17F113\"},\"claimBoundary\":\"Automated source-candidate evidence only; no live PowerPoint, user acceptance, installation, publication, or public-redownload result is implied.\"}" \
   >"$valid_test_evidence"
 release_test_evidence_is_valid "$valid_test_evidence" "$commit" \
   || { /usr/bin/printf '%s\n' 'Valid release test evidence was rejected.' >&2; exit 1; }
@@ -802,7 +802,7 @@ for pinned_mutation in authoritative-tests environment generated-at; do
   /bin/mkdir "$pinned_root"
   case "$pinned_mutation" in
     authoritative-tests)
-      /usr/bin/sed 's/"authoritativeTests":455/"authoritativeTests":456/' \
+      /usr/bin/sed 's/"authoritativeTests":459/"authoritativeTests":460/' \
         "$valid_test_evidence" >"$pinned_root/$release_test_evidence_name"
       ;;
     environment)
@@ -1043,7 +1043,7 @@ if release_test_evidence_is_valid \
   exit 1
 fi
 /bin/mkdir "$root/inconsistent-runs"
-/usr/bin/sed 's/"deviceRuns":517/"deviceRuns":518/' \
+/usr/bin/sed 's/"deviceRuns":521/"deviceRuns":522/' \
   "$valid_test_evidence" >"$root/inconsistent-runs/$release_test_evidence_name"
 if release_test_evidence_is_valid \
   "$root/inconsistent-runs/$release_test_evidence_name" "$commit"; then
@@ -1125,7 +1125,7 @@ native_result_summary_is_valid \
   "$valid_test_evidence" "$summary_fixture" "$build_fixture" "$action_fixture" "$commit" \
   26.6.2 25G83 26.6 17F113 \
   || { /usr/bin/printf '%s\n' 'Matching xcresult summary was rejected.' >&2; exit 1; }
-/usr/bin/sed 's/"passedTests":455/"passedTests":454/' \
+/usr/bin/sed 's/"passedTests":459/"passedTests":458/' \
   "$summary_fixture" >"$root/wrong-result-summary.json"
 if native_result_summary_is_valid \
   "$valid_test_evidence" "$root/wrong-result-summary.json" "$build_fixture" \

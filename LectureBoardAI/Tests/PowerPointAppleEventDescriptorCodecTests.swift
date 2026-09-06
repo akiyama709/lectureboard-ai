@@ -305,6 +305,149 @@ struct PowerPointAppleEventDescriptorCodecTests {
     )
   }
 
+  @Test func preStartPathsCanonicalizeOnlyTheExactRootActivePresentationAlias() throws {
+    let codec = PowerPointAppleEventDescriptorCodec()
+    let alias = try #require(
+      objectSpecifier(
+        desiredClass: .presentation,
+        keyForm: OSType(formPropertyID),
+        keyData: NSAppleEventDescriptor(typeCode: PowerPointAppleEventCode.activePresentation),
+        container: nullDescriptor()
+      )
+    )
+    let originalAliasData = alias.data
+    let runtime = try parsedRuntimeObject(codec, descriptor: alias, expectedClass: .presentation)
+
+    let settings = try #require(
+      codec.preStartPresentationPropertySpecifier([.slideShowSettings], of: runtime)
+    )
+    let showType = try #require(
+      codec.preStartPresentationPropertySpecifier(
+        [.slideShowSettings, .slideShowType],
+        of: runtime
+      )
+    )
+    for path in [settings, showType] {
+      let root = try #require(rootObjectSpecifier(path))
+      expectObjectSpecifier(
+        root,
+        desiredClass: OSType(typeProperty),
+        keyForm: OSType(formPropertyID),
+        keyType: DescType(typeType),
+        keyCode: PowerPointAppleEventCode.activePresentation,
+        containerType: DescType(typeNull)
+      )
+    }
+
+    #expect(alias.data == originalAliasData)
+    let ordinaryRuntimePath = try #require(
+      codec.nestedPropertySpecifier([.slideShowSettings], of: runtime)
+    )
+    #expect(rootObjectClass(ordinaryRuntimePath) == .presentation)
+    #expect(
+      codec.preStartPresentationPropertySpecifier([.visible], of: runtime) == nil
+    )
+
+    let slideShowWindow = try #require(
+      codec.elementSpecifier(.slideShowWindow, at: 1, in: nullDescriptor())
+    )
+    let unrelatedRuntime = try parsedRuntimeObject(
+      codec,
+      descriptor: slideShowWindow,
+      expectedClass: .slideShowWindow
+    )
+    #expect(
+      codec.preStartPresentationPropertySpecifier(
+        [.slideShowSettings],
+        of: unrelatedRuntime
+      ) == nil
+    )
+
+    let malformedAlias = try #require(
+      objectSpecifier(
+        desiredClass: .presentation,
+        keyForm: OSType(formPropertyID),
+        keyData: NSAppleEventDescriptor(typeCode: PowerPointAppleEventCode.activePresentation),
+        container: nullDescriptor(),
+        extraField: true
+      )
+    )
+    expectFailure(
+      codec.parseObjectSpecifierReply(
+        reply(direct: malformedAlias),
+        expectedClass: .presentation
+      ),
+      .malformedObjectSpecifier
+    )
+  }
+
+  @Test func preStartPathsPreserveOtherValidPresentationReferences() throws {
+    let codec = PowerPointAppleEventDescriptorCodec()
+    let indexedContainer = try #require(
+      objectSpecifier(
+        desiredClass: .presentation,
+        keyForm: OSType(formAbsolutePosition),
+        keyData: NSAppleEventDescriptor(int32: 4),
+        container: nullDescriptor()
+      )
+    )
+    let references = try [
+      #require(
+        objectSpecifier(
+          desiredClass: .presentation,
+          keyForm: OSType(formAbsolutePosition),
+          keyData: NSAppleEventDescriptor(int32: 3),
+          container: nullDescriptor()
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .presentation,
+          keyForm: OSType(formUniqueID),
+          keyData: NSAppleEventDescriptor(int32: 27),
+          container: nullDescriptor()
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .presentation,
+          keyForm: OSType(formName),
+          keyData: NSAppleEventDescriptor(string: "Stable Presentation"),
+          container: nullDescriptor()
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .presentation,
+          keyForm: OSType(formPropertyID),
+          keyData: NSAppleEventDescriptor(typeCode: PowerPointAppleEventCode.presentation),
+          container: nullDescriptor()
+        )
+      ),
+      #require(
+        objectSpecifier(
+          desiredClass: .presentation,
+          keyForm: OSType(formPropertyID),
+          keyData: NSAppleEventDescriptor(typeCode: PowerPointAppleEventCode.activePresentation),
+          container: indexedContainer
+        )
+      ),
+    ]
+
+    for reference in references {
+      let runtime = try parsedRuntimeObject(
+        codec,
+        descriptor: reference,
+        expectedClass: .presentation
+      )
+      let path = try #require(
+        codec.preStartPresentationPropertySpecifier([.slideShowSettings], of: runtime)
+      )
+      let root = try #require(rootObjectSpecifier(path))
+      #expect(root.data == reference.data)
+    }
+  }
+
   @Test func objectSpecifierRepliesAllowOnlyClassSpecificFormsAndBoundedContainers() throws {
     let codec = PowerPointAppleEventDescriptorCodec()
     let null = nullDescriptor()
@@ -469,6 +612,16 @@ struct PowerPointAppleEventDescriptorCodecTests {
       codec.parseInt32Reply(
         reply(
           direct: NSAppleEventDescriptor(int32: 42),
+          eventClass: AEEventClass(kAECoreSuite),
+          eventID: AEEventID(kAEAnswer)
+        )
+      ),
+      .malformedReply
+    )
+    expectFailure(
+      codec.parseInt32Reply(
+        reply(
+          direct: NSAppleEventDescriptor(int32: 42),
           eventID: AEEventID(kAEAnswer) + 1
         )
       ),
@@ -565,13 +718,67 @@ struct PowerPointAppleEventDescriptorCodecTests {
         .appleEventError(expected)
       )
     }
+
+    for (status, expected) in statuses {
+      guard let shortStatus = Int16(exactly: status) else { continue }
+      expectFailure(
+        codec.parseBooleanReply(
+          reply(
+            direct: NSAppleEventDescriptor(boolean: true),
+            error: signedIntegerDescriptor(shortStatus)
+          )
+        ),
+        .appleEventError(expected)
+      )
+    }
+
+    switch codec.parseBooleanReply(
+      reply(
+        direct: NSAppleEventDescriptor(boolean: true),
+        error: signedIntegerDescriptor(Int16(0))
+      )
+    ) {
+    case .value(let value): #expect(value)
+    case .failure(let failure): Issue.record("Unexpected short-error parse failure: \(failure)")
+    }
+
+    for malformedError in [
+      rawIntegerDescriptor(type: DescType(typeSInt16), byteCount: 1),
+      rawIntegerDescriptor(type: DescType(typeSInt16), byteCount: 4),
+      rawIntegerDescriptor(type: DescType(typeSInt32), byteCount: 2),
+      rawIntegerDescriptor(type: DescType(typeSInt32), byteCount: 8),
+    ] {
+      expectFailure(
+        codec.parseBooleanReply(
+          reply(
+            direct: NSAppleEventDescriptor(boolean: true),
+            error: malformedError
+          )
+        ),
+        .malformedReply
+      )
+    }
+  }
+
+  @Test func genuineAppleEventAnswerReplyIsAccepted() {
+    let codec = PowerPointAppleEventDescriptorCodec()
+    switch codec.parseInt32Reply(
+      reply(
+        direct: NSAppleEventDescriptor(int32: 42),
+        eventClass: AEEventClass(kCoreEventClass),
+        eventID: AEEventID(kAEAnswer)
+      )
+    ) {
+    case .value(let value): #expect(value == 42)
+    case .failure(let failure): Issue.record("Unexpected failure: \(failure)")
+    }
   }
 }
 
 private func reply(
   direct: NSAppleEventDescriptor?,
   error: NSAppleEventDescriptor? = nil,
-  eventClass: AEEventClass = AEEventClass(kAECoreSuite),
+  eventClass: AEEventClass = AEEventClass(kCoreEventClass),
   eventID: AEEventID = AEEventID(kAEAnswer)
 ) -> NSAppleEventDescriptor {
   let reply = NSAppleEventDescriptor(
@@ -639,6 +846,53 @@ private func objectSpecifier(
 
 private func nullDescriptor() -> NSAppleEventDescriptor {
   NSAppleEventDescriptor.null()
+}
+
+private func parsedRuntimeObject(
+  _ codec: PowerPointAppleEventDescriptorCodec,
+  descriptor: NSAppleEventDescriptor,
+  expectedClass: PowerPointAppleEventObjectClass
+) throws -> PowerPointAppleEventRuntimeObjectSpecifier {
+  switch codec.parseObjectSpecifierReply(
+    reply(direct: descriptor),
+    expectedClass: expectedClass
+  ) {
+  case .value(let runtime):
+    return runtime
+  case .failure(let failure):
+    Issue.record("Unexpected object parse failure: \(failure)")
+    throw CocoaError(.coderReadCorrupt)
+  }
+}
+
+private func rootObjectSpecifier(
+  _ descriptor: NSAppleEventDescriptor
+) -> NSAppleEventDescriptor? {
+  var current = descriptor
+  while current.forKeyword(AEKeyword(keyAEDesiredClass))?.typeCodeValue
+    == OSType(typeProperty),
+    let container = current.forKeyword(AEKeyword(keyAEContainer)),
+    container.descriptorType == DescType(typeObjectSpecifier)
+  {
+    current = container
+  }
+  return current
+}
+
+private func signedIntegerDescriptor(_ value: Int16) -> NSAppleEventDescriptor {
+  NSAppleEventDescriptor(int32: Int32(value)).coerce(
+    toDescriptorType: DescType(typeSInt16)
+  )!
+}
+
+private func rawIntegerDescriptor(
+  type: DescType,
+  byteCount: Int
+) -> NSAppleEventDescriptor {
+  NSAppleEventDescriptor(
+    descriptorType: type,
+    data: Data(repeating: 0, count: byteCount)
+  )!
 }
 
 private func expectObjectSpecifier(

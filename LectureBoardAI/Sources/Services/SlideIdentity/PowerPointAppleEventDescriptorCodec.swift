@@ -164,6 +164,45 @@ final class PowerPointAppleEventDescriptorCodec {
     return descriptor
   }
 
+  /// Builds one of the two supported pre-start paths from the active-presentation reply.
+  ///
+  /// PowerPoint may return its root active-presentation property as a presentation-class alias
+  /// (`pptP/prop/AAPr/null`) which it accepts as a reply value but does not resolve when that raw
+  /// value is sent back as a container. Only that exact alias is replaced with the canonical
+  /// application-root property (`prop/prop/AAPr/null`). All other valid presentation references
+  /// remain byte-for-byte the retained root, and this normalization is never available for a
+  /// returned slide-show object.
+  func preStartPresentationPropertySpecifier(
+    _ properties: [PowerPointAppleEventProperty],
+    of activePresentation: PowerPointAppleEventRuntimeObjectSpecifier
+  ) -> NSAppleEventDescriptor? {
+    guard
+      properties == [.slideShowSettings]
+        || properties == [.slideShowSettings, .slideShowType],
+      Self.isValidRuntimeObjectSpecifier(
+        activePresentation.descriptor,
+        expectedClass: .presentation,
+        depth: 1
+      )
+    else { return nil }
+
+    let retained = activePresentation.descriptor
+    let root: NSAppleEventDescriptor
+    if Self.isExactRootActivePresentationAlias(retained) {
+      guard let canonical = rootPropertySpecifier(.activePresentation) else { return nil }
+      root = canonical
+    } else {
+      root = retained
+    }
+
+    var descriptor = root
+    for property in properties {
+      guard let next = propertySpecifier(property, of: descriptor) else { return nil }
+      descriptor = next
+    }
+    return descriptor
+  }
+
   func elementSpecifier(
     _ objectClass: PowerPointAppleEventObjectClass,
     at index: Int32,
@@ -475,15 +514,27 @@ final class PowerPointAppleEventDescriptorCodec {
     guard let reply else { return .failure(.missingReply) }
     guard
       reply.descriptorType == DescType(typeAppleEvent),
-      reply.eventClass == AEEventClass(kAECoreSuite),
+      reply.eventClass == AEEventClass(kCoreEventClass),
       reply.eventID == AEEventID(kAEAnswer)
     else { return .failure(.malformedReply) }
     if let error = reply.paramDescriptor(forKeyword: AEKeyword(keyErrorNumber)) {
-      guard error.descriptorType == DescType(typeSInt32) else {
+      let status: Int32
+      switch error.descriptorType {
+      case DescType(typeSInt16):
+        guard error.data.count == MemoryLayout<Int16>.size else {
+          return .failure(.malformedReply)
+        }
+        status = error.int32Value
+      case DescType(typeSInt32):
+        guard error.data.count == MemoryLayout<Int32>.size else {
+          return .failure(.malformedReply)
+        }
+        status = error.int32Value
+      default:
         return .failure(.malformedReply)
       }
-      if error.int32Value != noErr {
-        return .failure(.appleEventError(Self.boundedError(error.int32Value)))
+      if status != noErr {
+        return .failure(.appleEventError(Self.boundedError(status)))
       }
     }
     return .value(reply)
@@ -509,6 +560,32 @@ final class PowerPointAppleEventDescriptorCodec {
   private static func isContainer(_ descriptor: NSAppleEventDescriptor) -> Bool {
     descriptor.descriptorType == DescType(typeNull)
       || descriptor.descriptorType == DescType(typeObjectSpecifier)
+  }
+
+  private static func isExactRootActivePresentationAlias(
+    _ descriptor: NSAppleEventDescriptor
+  ) -> Bool {
+    guard
+      descriptor.descriptorType == DescType(typeObjectSpecifier),
+      descriptor.isRecordDescriptor,
+      descriptor.numberOfItems == requiredObjectSpecifierFieldCount,
+      let desiredClass = descriptor.forKeyword(AEKeyword(keyAEDesiredClass)),
+      desiredClass.descriptorType == DescType(typeType),
+      desiredClass.data.count == MemoryLayout<OSType>.size,
+      desiredClass.typeCodeValue == PowerPointAppleEventObjectClass.presentation.rawValue,
+      let keyForm = descriptor.forKeyword(AEKeyword(keyAEKeyForm)),
+      keyForm.descriptorType == DescType(typeEnumerated),
+      keyForm.data.count == MemoryLayout<OSType>.size,
+      keyForm.enumCodeValue == OSType(formPropertyID),
+      let keyData = descriptor.forKeyword(AEKeyword(keyAEKeyData)),
+      keyData.descriptorType == DescType(typeType),
+      keyData.data.count == MemoryLayout<OSType>.size,
+      keyData.typeCodeValue == PowerPointAppleEventProperty.activePresentation.rawValue,
+      let container = descriptor.forKeyword(AEKeyword(keyAEContainer)),
+      container.descriptorType == DescType(typeNull),
+      container.data.isEmpty
+    else { return false }
+    return true
   }
 
   private static func isValidRuntimeObjectSpecifier(

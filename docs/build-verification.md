@@ -1359,3 +1359,196 @@ parameterized runs. Bash syntax, `git diff --check`, and the complete
 targeted tooling result only; a new committed exact-commit evidence transaction has not yet passed,
 and no Release archive, live owner acceptance, publication, or public re-download result follows
 from it.
+
+### Resumed private mock-lecture build on 2026-09-06
+
+After the requested application restart, HEAD was clean at
+`7603a002fcecf68ca0153a73d7b3fabb8d3c59f8`. The preceding exact-commit evidence attempt had
+been interrupted while freezing its result bundle; it must not be counted as a completed
+evidence transaction. No public Release was created.
+
+The resumed `make doctor` completed with zero failures and zero warnings, including a currently
+authenticated GitHub CLI. `make local-setup` passed 235 Core tests in 18 suites and generated the
+Xcode project. This session did not repeat the complete 26-stage gate or native test suite.
+
+A separate private mock-lecture app was built from that clean commit using `xcodebuild`, the
+Release configuration, arm64, ad hoc signing, `CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO`,
+`ENABLE_HARDENED_RUNTIME=YES`, and `ENABLE_DEBUG_DYLIB=NO`. The source commit is embedded in
+the app; release tag and tag object are deliberately `UNBOUND`. The build succeeded, and the
+copy saved in the private verification folder passed strict complete-bundle signature validation.
+Its executable SHA-256 is
+`633575fa858a4f93c44e5eeb37b020a6da2e9f6606e010cfbc6397f303cb15ee`, with CDHash
+`63621559a8098564fc617c12999b32a0205cdabf` and signature flags `0x10002(adhoc,runtime)`.
+It is not Developer ID signed or notarized and is not a final distribution artifact.
+
+Normal LaunchServices launch produced one app window. A screenshot restricted to that app
+verified Japanese UI labels, stopped capture, and disabled capture-start controls while Screen
+Recording was unavailable. The standard permission button was pressed exactly once at about
+18:17 JST. No permission grant, capture, microphone, managed identity, or visible board result
+is inferred from that request. PowerPoint had one saved presentation and no slide show; its
+name did not match the known project test documents, so it was left unchanged pending the
+owner's response about temporarily closing it. No private slide content was read.
+
+A focused production-function probe compared the retained 17:25 native result bundle with a
+fresh copy. Both matched its previously measured canonical digest
+`4a5bda08b19c70e56237bf37dd4d70eae4e457bb5d5ad5a24bdde2ff8e96444a`; the production pair
+check, stability-token checks, and identity-bound scratch cleanup returned success. Two initial
+diagnostic harness attempts failed to load the extracted functions and did not exercise the
+production comparison; only the corrected harness produced `PAIR_MATCHED`. This does not
+reproduce or resolve the earlier isolated transaction's `pairDigestMismatch`: the observed
+query-induced database mutation alone is not proof of that failure's cause. No validation
+boundary was weakened and no additional product fix is claimed.
+
+Next: finish the single permission transition without repeated requests, perform the current-app
+synthetic managed lecture test, then the owner's mock lecture. Only after resolving real workflow
+failures should the final exact-commit gate, archive, explicit publication approval, and public
+download verification run. Build/setup logs, the limited probe, and the app-only screenshot are
+retained privately; lecture content does not belong in the repository.
+
+### Locked-session continuation on 2026-09-06
+
+During the continuation ending at approximately 18:35 JST, the fixed private trial executable
+retained SHA-256 `633575fa858a4f93c44e5eeb37b020a6da2e9f6606e010cfbc6397f303cb15ee`.
+The app was no longer running at the first check; the reason was not established. Launching
+that same app again produced its normal window, still showing Screen Recording unavailable
+and disabled managed-start controls. No new permission request was sent.
+
+The standard Screen Recording settings page was opened without changing any switch or TCC
+record. A later local session diagnostic reported `screenLocked=1`, `loginDone=1`, and an
+inactive Settings app. Thus the inactive-window screenshots and existing LectureBoard entry
+do not establish permission for the current executable or a working interactive session. The
+locked-session observation also does not establish the cause of the earlier permission failure.
+No attempt was made to unlock the Mac, reset permissions, or weaken the capture boundary.
+
+PowerPoint still had one saved presentation and zero slide shows. It was not closed or modified;
+no slide content, microphone audio, or lecture transcript was collected. There was no rebuild,
+new automated test run, product fix, managed lecture, or visible-board verification in this
+continuation. The owner was asked to unlock the Mac before the next single-app permission
+check and synthetic managed-workflow test. The same fixed app and settings page remain open
+for that handoff, with capture and transcription stopped.
+
+### Awake-session permission handoff on 2026-09-06
+
+At the next continuation, the local session was unlocked. At the owner's request,
+`caffeinate -diu -t 3600` was started for this verification session only. `pmset -g assertions`
+confirmed that its process held `PreventUserIdleSystemSleep`, `PreventUserIdleDisplaySleep`,
+and `UserIsActive` assertions. This is a temporary, one-hour upper bound, not a change to
+password, manual-lock, screen-saver, or permanent energy settings, and not a guarantee against
+manual locking or lid closure. End the assertion when verification finishes or is abandoned.
+
+The same fixed app was launched without another permission request. In the unlocked session,
+the Settings entry for LectureBoard AI was enabled, while the app still displayed Screen
+Recording unavailable. Source inspection confirmed that `PermissionService` reads
+`CGPreflightScreenCaptureAccess()` rather than retaining its own authorization cache; this does
+not prove which executable the existing Settings entry authorizes.
+
+The standard add-application button in the Screen Recording settings page was invoked to select
+the exact fixed app path. Before any application chooser or registration change, macOS
+presented a Privacy & Security authentication sheet requiring Touch ID or a password. This
+user-mediated boundary was not automated or bypassed, and no credentials were requested in
+chat. The owner was asked to authenticate on the Mac. No TCC record was reset, removed, or
+edited directly, and no other application's permission was changed.
+
+A separate synthetic PPTX copy for the upcoming managed trial was prepared in the private
+trial folder. Byte comparison with the preserved synthetic source and ZIP integrity checks
+passed. PowerPoint's existing presentation remains untouched. At approximately 18:44 JST,
+authentication and exact-app registration remained pending; there was no frame capture,
+microphone recording, managed slide show, visible board output, product rebuild, or new
+unit-test result in this continuation.
+
+At the final bounded check, Settings had closed and the fixed app remained open, still displaying
+Screen Recording unavailable. Authentication completion and registration were not observed and
+must not be inferred from Settings closing. The temporary caffeinate assertions were still active.
+
+### Exact-app relaunch check at approximately 19:13 JST on 2026-09-06
+
+After the owner selected an application and used the standard permission-change restart dialog,
+the single running LectureBoard process resolved to the Debug test host under
+`DerivedData/AppTests/Build/Products/Debug`, not the fixed private trial app. This is an observed
+launch-target mismatch; it does not establish the cause of every earlier permission failure.
+Only that exact, stopped-capture app process was terminated gracefully. The preserved trial app
+was then opened by its exact path, and its running bundle path, unchanged executable hash, and
+strict signature were checked. Its window still showed Screen Recording unavailable and disabled
+capture-start controls. Correcting the launch target therefore did not establish authorization.
+
+The owner may close Settings without changing any other switch or adding another entry. No
+additional permission request, permission reset, rebuild, or automated test run was performed.
+Managed capture, microphone input, visible automatic board output, and owner acceptance remain
+unverified. The next diagnostic must distinguish the registered executable from the running
+fixed app without repeating permission requests or substituting an older authorized build.
+
+### Launch registration, permission-display regression, and first managed trial on 2026-09-06
+
+The default application URL for the bundle identifier resolved to the Debug AppTests build even
+while the fixed private trial app was running. Its 26 LaunchServices registrations were restricted
+to this project's build/verification apps. Unregistering the other 25 URLs and re-registering the
+fixed trial URL made the default resolve to that exact fixed app. Only launch registrations were
+changed: all app bundles and historical evidence were preserved, and no TCC entry was reset or
+edited. Re-registering the fixed app alone had not changed the default. After the registration
+repair, normal launch still displayed Screen Recording unavailable, so this is not a permission
+fix. Building or running another same-identifier test host can register it again.
+
+A separate UI defect was corrected: returning to an active scene now invalidates the AppModel's
+display so the view rereads current permission state, including after an explicit permission
+request. Authorization remains a direct computed OS preflight at refresh/start boundaries; no
+cached grant, automatic permission request, automatic scan, or automatic capture was introduced.
+The regression checks denied-to-granted-to-denied transitions, view-model notifications, and zero
+permission requests during rechecks. The targeted native run passed 41 tests in 3 suites; the
+complete run passed 456 tests in 40 suites at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_19-35-06-+0900.xcresult`.
+A query against a disposable copy confirmed 456 authoritative tests, 518 device runs, 14
+parameterized tests/76 runs, and zero failures, skips, or expected failures. Targeted Swift-format
+lint passed. This test checkpoint precedes the Apple Event codec changes below.
+
+Direct execution of the unchanged fixed private app, in contrast to its normal launch, displayed
+authorized Screen Recording and microphone preflights and successfully discovered PowerPoint.
+This is launch-context-specific evidence, not standalone application permission persistence or
+microphone recording. The saved owner-selected original was closed without saving; its contents
+were not loaded into the model. Opening a new synthetic copy through AppleScript encountered a
+file-access dialog and failed with `-9074`. That request was cancelled. Opening the exact synthetic
+copy through the standard macOS open-file path succeeded. Only its in-memory slideshow settings
+were changed to windowed mode, with one presentation and no pre-existing slide show.
+
+The fixed app selected that synthetic window and received one explicit managed-start action.
+It immediately reported the generic managed-start failure. A subsequent PowerPoint metadata
+check found one presentation and zero slide shows. No capture, confirmed canvas, microphone
+recording, visible board, or export success follows from this attempt.
+
+A read-only diagnostic compiled with the production Apple Event codec reproduced a concrete
+protocol defect: real count replies were `aevt/ansr`, with four-byte integer direct parameters,
+but the codec required `core/ansr`. The SDK's `AppleEvents.h` defines `kCoreEventClass` as `aevt`
+and `kAEAnswer` as `ansr`. Correcting the reply class made the same probe read presentation count
+1, slideshow count 0, and the active-presentation object. Request events remain `core`; wrong
+reply classes remain rejected. The old synthetic reply fixtures also contained the wrong class.
+
+A second read-only observation remains distinct: PowerPoint returned the active presentation as
+a root property alias (`want=pptP`, `form=prop`, `seld=AAPr`, null container). Resending that alias,
+or querying properties through it, produced `errAENoSuchObject`, while the canonical application
+property chain read windowed mode successfully. The error number used a two-byte `shor` payload.
+These observations do not authorize substituting another slideshow object or weakening exact
+window/identity binding. The narrow pre-start alias and error-width corrections require separate
+regression and live verification before a new managed-start success can be claimed.
+
+### Corrected Apple Event pre-start path at 20:12 JST on 2026-09-06
+
+The production codec now accepts the SDK-defined `aevt/ansr` reply envelope, retains strict
+descriptor validation, and accepts signed error numbers only at the exact two-byte or four-byte
+width. Foundation performs integer conversion; raw error text is not retained. Only the two
+pre-start slideshow-settings paths normalize the exact root active-presentation property alias.
+Other valid presentation references are retained unchanged, and the actual object returned by
+`run slide show` is never replaced by this normalization. Tests cover these constraints and the
+outgoing pre-start descriptors.
+
+The read-only real-PowerPoint probe returned windowed mode through the corrected production
+pre-start method. The uncorrected retained-alias queries still failed as negative controls. This
+is configuration-read evidence, not successful managed start or capture. An initial test build
+failed because two deliberately constructed descriptor fixtures needed optional unwrapping;
+those fixture compile errors were corrected before the successful complete native test run.
+
+The run at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_20-12-42-+0900.xcresult`
+passed 459 tests in 40 suites. A disposable result-bundle copy independently reported 459 total
+and passed tests, 521 device runs, 14 parameterized tests/76 runs, and zero failures, skips, or
+expected failures. The first summary query lacked filesystem permission and produced no result;
+the separately authorized copy query supplied these counts. This is working-tree automated
+evidence, not the final exact-commit publication gate or a released artifact.

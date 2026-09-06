@@ -52,6 +52,14 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
     #expect(receipt.bundleIdentifier == bundleIdentifier)
     #expect(receipt.slideShowObjectToken == "opaque-object-one")
     #expect(sender.runSlideShowSendCount == 1)
+    #expect(sender.preStartRootDesiredClasses == [OSType(typeProperty), OSType(typeProperty)])
+    #expect(sender.preStartRootKeyForms == [OSType(formPropertyID), OSType(formPropertyID)])
+    #expect(
+      sender.preStartRootKeyData == [
+        PowerPointAppleEventCode.activePresentation,
+        PowerPointAppleEventCode.activePresentation,
+      ]
+    )
     #expect(
       sender.lastSendOptionsRawValue
         == PowerPointAppleEventDescriptorCodec.sendOptions.rawValue
@@ -1264,6 +1272,9 @@ private final class FakeManagedAppleEventSender:
   private var _exactObjectLeafCodes: [OSType] = []
   private var _exactObjectRootIndices: [Int32] = []
   private var _exitRootObjectIndices: [Int32] = []
+  private var _preStartRootDesiredClasses: [OSType] = []
+  private var _preStartRootKeyForms: [OSType] = []
+  private var _preStartRootKeyData: [OSType] = []
 
   init(
     presentationCount: Int32 = 1,
@@ -1301,6 +1312,11 @@ private final class FakeManagedAppleEventSender:
   var exactObjectLeafCodes: [OSType] { lock.withLock { _exactObjectLeafCodes } }
   var exactObjectRootIndices: [Int32] { lock.withLock { _exactObjectRootIndices } }
   var exitRootObjectIndices: [Int32] { lock.withLock { _exitRootObjectIndices } }
+  var preStartRootDesiredClasses: [OSType] {
+    lock.withLock { _preStartRootDesiredClasses }
+  }
+  var preStartRootKeyForms: [OSType] { lock.withLock { _preStartRootKeyForms } }
+  var preStartRootKeyData: [OSType] { lock.withLock { _preStartRootKeyData } }
   var lastSendOptionsRawValue: UInt? {
     lock.withLock { _lastSendOptionsRawValue }
   }
@@ -1329,6 +1345,9 @@ private final class FakeManagedAppleEventSender:
         recordSend(event, options: options)
         _runSlideShowSendCount += 1
         slideShowWindowCount = 1
+        if let direct = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject)) {
+          recordPreStartRoot(direct)
+        }
       }
       runSendGate?.markStartedAndWaitForReply()
       switch runReplyMode {
@@ -1388,6 +1407,7 @@ private final class FakeManagedAppleEventSender:
       {
         let leafCode = managedClientPropertyLeafCode(direct)
         if leafCode == PowerPointAppleEventProperty.slideShowType.rawValue {
+          recordPreStartRoot(direct)
           if showTypeMalformed {
             return managedClientReply(direct: NSAppleEventDescriptor(string: "malformed"))
           }
@@ -1428,10 +1448,7 @@ private final class FakeManagedAppleEventSender:
           }
         }
         return managedClientReply(
-          direct: managedClientObjectSpecifier(
-            objectClass: .presentation,
-            index: 1
-          )
+          direct: managedClientActivePresentationAliasSpecifier()
         )
       }
 
@@ -1483,6 +1500,19 @@ private final class FakeManagedAppleEventSender:
     }
 
   }
+
+  private func recordPreStartRoot(_ descriptor: NSAppleEventDescriptor) {
+    guard let root = managedClientRootObjectSpecifier(descriptor) else { return }
+    _preStartRootDesiredClasses.append(
+      root.forKeyword(AEKeyword(keyAEDesiredClass))?.typeCodeValue ?? 0
+    )
+    _preStartRootKeyForms.append(
+      root.forKeyword(AEKeyword(keyAEKeyForm))?.enumCodeValue ?? 0
+    )
+    _preStartRootKeyData.append(
+      root.forKeyword(AEKeyword(keyAEKeyData))?.typeCodeValue ?? 0
+    )
+  }
 }
 
 private func managedClientPropertyLeafCode(
@@ -1520,11 +1550,25 @@ private func managedClientRootObjectClass(
   return PowerPointAppleEventObjectClass(rawValue: rawValue)
 }
 
+private func managedClientRootObjectSpecifier(
+  _ descriptor: NSAppleEventDescriptor
+) -> NSAppleEventDescriptor? {
+  var current = descriptor
+  while current.forKeyword(AEKeyword(keyAEDesiredClass))?.typeCodeValue
+    == OSType(typeProperty),
+    let container = current.forKeyword(AEKeyword(keyAEContainer)),
+    container.descriptorType == DescType(typeObjectSpecifier)
+  {
+    current = container
+  }
+  return current
+}
+
 private func managedClientReply(
   direct: NSAppleEventDescriptor?
 ) -> NSAppleEventDescriptor {
   let reply = NSAppleEventDescriptor(
-    eventClass: AEEventClass(kAECoreSuite),
+    eventClass: AEEventClass(kCoreEventClass),
     eventID: AEEventID(kAEAnswer),
     targetDescriptor: nil,
     returnID: AEReturnID(kAutoGenerateReturnID),
@@ -1551,6 +1595,27 @@ private func managedClientObjectSpecifier(
   )
   record.setDescriptor(
     NSAppleEventDescriptor(int32: index),
+    forKeyword: AEKeyword(keyAEKeyData)
+  )
+  record.setDescriptor(
+    NSAppleEventDescriptor.null(),
+    forKeyword: AEKeyword(keyAEContainer)
+  )
+  return record.coerce(toDescriptorType: DescType(typeObjectSpecifier))
+}
+
+private func managedClientActivePresentationAliasSpecifier() -> NSAppleEventDescriptor? {
+  let record = NSAppleEventDescriptor.record()
+  record.setDescriptor(
+    NSAppleEventDescriptor(typeCode: PowerPointAppleEventObjectClass.presentation.rawValue),
+    forKeyword: AEKeyword(keyAEDesiredClass)
+  )
+  record.setDescriptor(
+    NSAppleEventDescriptor(enumCode: OSType(formPropertyID)),
+    forKeyword: AEKeyword(keyAEKeyForm)
+  )
+  record.setDescriptor(
+    NSAppleEventDescriptor(typeCode: PowerPointAppleEventProperty.activePresentation.rawValue),
     forKeyword: AEKeyword(keyAEKeyData)
   )
   record.setDescriptor(
