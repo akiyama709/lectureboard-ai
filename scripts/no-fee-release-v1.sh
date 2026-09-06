@@ -578,13 +578,13 @@ if not isinstance(g["logSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",g["log
 blob=g["scriptBlobOid"]
 if not isinstance(blob,str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}",blob) or blob in {"0"*40,"0"*64} or len(blob)!=len(c): raise SystemExit(1)
 core=d["coreTests"]
-if not exact(core,{"result","tests","suites","failed","skipped"}) or core["result"]!="Passed" or any(not integer(core[key]) for key in ("tests","suites","failed","skipped")) or (core["tests"],core["suites"],core["failed"],core["skipped"])!=(204,18,0,0): raise SystemExit(1)
+if not exact(core,{"result","tests","suites","failed","skipped"}) or core["result"]!="Passed" or any(not integer(core[key]) for key in ("tests","suites","failed","skipped")) or (core["tests"],core["suites"],core["failed"],core["skipped"])!=(235,18,0,0): raise SystemExit(1)
 native=d["nativeAppTests"]
 native_keys={"result","authoritativeTests","deviceRuns","parameterizedTests","parameterizedRuns","failed","skipped","expectedFailures","resultBundleName","resultBundleTreeSha256"}
 if not exact(native,native_keys) or native["result"]!="Passed" or any(not integer(native[key]) for key in native_keys-{"result","resultBundleName","resultBundleTreeSha256"}) or native["authoritativeTests"]<1 or native["deviceRuns"]<native["authoritativeTests"] or native["parameterizedRuns"]<native["parameterizedTests"]: raise SystemExit(1)
 if native["failed"]!=0 or native["skipped"]!=0 or native["expectedFailures"]!=0: raise SystemExit(1)
 if native["deviceRuns"]!=native["authoritativeTests"]+native["parameterizedRuns"]-native["parameterizedTests"]: raise SystemExit(1)
-if (native["authoritativeTests"],native["deviceRuns"],native["parameterizedTests"],native["parameterizedRuns"])!=(417,479,14,76): raise SystemExit(1)
+if (native["authoritativeTests"],native["deviceRuns"],native["parameterizedTests"],native["parameterizedRuns"])!=(455,517,14,76): raise SystemExit(1)
 name=native["resultBundleName"]
 if not isinstance(name,str) or os.path.basename(name)!=name or not re.fullmatch(r"Test-LectureBoardAI-[0-9._+-]+\.xcresult",name): raise SystemExit(1)
 if not isinstance(native["resultBundleTreeSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",native["resultBundleTreeSha256"]) or native["resultBundleTreeSha256"]=="0"*64: raise SystemExit(1)
@@ -673,7 +673,7 @@ if len(data)>16*1024*1024 or "Prepublication checks passed. Manual institutional
 stages=[int(value) for value in re.findall(r"(?m)^\[([0-9]+)/26\] ",data)]
 if stages!=list(range(1,27)):
  raise SystemExit(1)
-matches=re.findall(r"(?m)^[^\n]*Test run with 204 tests in 18 suites passed[^\n]*$",data)
+matches=re.findall(r"(?m)^[^\n]*Test run with 235 tests in 18 suites passed[^\n]*$",data)
 if len(matches)!=1:
  raise SystemExit(1)
 commit=evidence.get("sourceCommit")
@@ -747,7 +747,7 @@ evidence={
  "sourceCommit":commit,
  "generatedAt":generated,
  "prepublicationGate":{"command":"./scripts/prepublish-check.sh","result":"Passed","passedStages":26,"totalStages":26,"logSha256":log_digest,"scriptBlobOid":script_blob},
- "coreTests":{"result":"Passed","tests":204,"suites":18,"failed":0,"skipped":0},
+ "coreTests":{"result":"Passed","tests":235,"suites":18,"failed":0,"skipped":0},
  "nativeAppTests":{
   "result":summary.get("result"),"authoritativeTests":summary.get("totalTestCount"),
   "deviceRuns":device.get("passedTests"),"parameterizedTests":parameterized_tests,
@@ -953,35 +953,6 @@ run_result_bundle_queries() {
       --path "$result_bundle" --format json >"$build_path" \
     && /usr/bin/xcrun xcresulttool get log --type action \
       --path "$result_bundle" --compact >"$action_path"
-}
-
-materialize_result_bundle_for_queries() {
-  local result_bundle="$1" source_root="$2" query_root source_identity current_identity status=0
-  local query_parent_identity query_root_identity
-  [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
-    || return 1
-  [[ "$source_root" == /* && -d "$source_root" && ! -L "$source_root" ]] \
-    || return 1
-  source_identity="$(directory_identity "$result_bundle")" || return 1
-  result_bundle_stability_token "$result_bundle" >/dev/null || return 1
-  query_root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-result-materialize.XXXXXX)" \
-    || return 1
-  query_parent_identity="$(directory_identity /private/tmp)" || return 1
-  query_root_identity="$(directory_identity "$query_root")" || return 1
-  if ! run_result_bundle_queries "$result_bundle" \
-    "$query_root/summary.json" "$query_root/build.json" "$query_root/action.json"; then
-    status=1
-  elif [[ ! -f "$query_root/summary.json" || -L "$query_root/summary.json" \
-    || ! -f "$query_root/build.json" || -L "$query_root/build.json" \
-    || ! -f "$query_root/action.json" || -L "$query_root/action.json" ]]; then
-    status=1
-  elif ! current_identity="$(directory_identity "$result_bundle")" \
-    || [[ "$current_identity" != "$source_identity" ]]; then
-    status=1
-  fi
-  delete_directory_with_identity /private/tmp "$query_parent_identity" \
-    "$query_root" "$query_root_identity" || status=1
-  [[ "$status" == 0 ]]
 }
 
 extract_result_bundle_query_outputs() {
@@ -1394,8 +1365,6 @@ if len(after)!=1: raise SystemExit(1)
 print(after[0])
 PY
   } )" || die 'exactly one new authoritative native result bundle was not produced'
-  materialize_result_bundle_for_queries "$after_result" "$isolated_source" \
-    || die 'authoritative result bundle could not materialize its query indexes safely'
   copied_result="$evidence_stage/${after_result##*/}"
   freeze_result_bundle_when_stable "$after_result" "$copied_result" "$isolated_source" \
     || die 'authoritative result bundle did not become stable and freeze consistently'

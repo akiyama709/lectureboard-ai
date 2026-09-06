@@ -31,6 +31,9 @@ digest by hashing the byte-exact manifest emitted by the committed
 `scripts/release-artifact-tools.sh tree-manifest` command. Retain the frozen `.xcresult` and
 `prepublication-gate.log` as private evidence; neither is a GitHub Release asset. The manifest is a
 deterministic intermediate representation and need not be retained separately.
+The newly produced result bundle is frozen before any `xcresulttool` query. Summary, build, and
+action-log queries run only against a disposable copy of the frozen bundle, because Xcode may
+lazily add a query database to the bundle being queried.
 
 ## Operator commands
 

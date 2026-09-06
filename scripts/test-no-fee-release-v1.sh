@@ -43,7 +43,7 @@ require_text 'production commands reject exported Bash functions'
 require_text '/usr/bin/xcrun xcresulttool get test-results summary'
 require_text '/usr/bin/xcrun xcresulttool get log --type action'
 require_text 'freeze_result_bundle_when_stable "$after_result" "$copied_result" "$isolated_source"'
-require_text 'materialize_result_bundle_for_queries "$after_result" "$isolated_source"'
+reject_text 'materialize_result_bundle_for_queries "$after_result" "$isolated_source"'
 require_text 'extract_result_bundle_query_outputs "$result_bundle" "$source_root" "$result_digest"'
 require_text 'required_stable_observations=6 quiet_nanoseconds=5000000000'
 require_text 'maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000'
@@ -191,7 +191,6 @@ portable_archive_functions="$root/portable-archive-functions.sh"
   sed -n '/^result_bundle_stability_token() {$/,/^}$/p' "$tool"
   sed -n '/^copy_result_bundle_for_freeze() {$/,/^}$/p' "$tool"
   sed -n '/^run_result_bundle_queries() {$/,/^}$/p' "$tool"
-  sed -n '/^materialize_result_bundle_for_queries() {$/,/^}$/p' "$tool"
   sed -n '/^extract_result_bundle_query_outputs() {$/,/^}$/p' "$tool"
   sed -n '/^freeze_result_bundle_when_stable() {$/,/^}$/p' "$tool"
   sed -n '/^directory_identity() {$/,/^}$/p' "$tool"
@@ -737,39 +736,32 @@ fi
 [[ ! -e "$changing_frozen_bundle" && ! -L "$changing_frozen_bundle" ]] \
   || { /usr/bin/printf '%s\n' 'A rejected changing result left a frozen candidate behind.' >&2; exit 1; }
 
-materialized_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-15-21-+0900.xcresult"
-materialized_frozen_bundle="$root/materialized-frozen.xcresult"
-/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$materialized_result_bundle"
+query_source_bundle="$root/Test-LectureBoardAI-2026.09.06_09-15-21-+0900.xcresult"
+query_frozen_bundle="$root/query-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$query_source_bundle"
+result_bundle_stability_pause() { :; }
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
+}
+freeze_result_bundle_when_stable \
+  "$query_source_bundle" "$query_frozen_bundle" "$source_root" \
+  || { /usr/bin/printf '%s\n' 'The raw result bundle could not be frozen before querying.' >&2; exit 1; }
+query_digest_before="$(result_bundle_tree_digest "$query_frozen_bundle" "$source_root")"
 run_result_bundle_queries() {
   /usr/bin/printf '%s\n' '{"fixture":"summary"}' >"$2"
   /usr/bin/printf '%s\n' '{"fixture":"build"}' >"$3"
   /usr/bin/printf '%s\n' '{"fixture":"action"}' >"$4"
   /usr/bin/printf '%s\n' 'lazy query index materialized' >>"$1/Data/database.sqlite3"
 }
-materialize_result_bundle_for_queries "$materialized_result_bundle" "$source_root" \
-  || { /usr/bin/printf '%s\n' 'A lazy result-query index could not be materialized.' >&2; exit 1; }
-[[ -f "$materialized_result_bundle/Data/database.sqlite3" ]] \
-  || { /usr/bin/printf '%s\n' 'The lazy query-index fixture did not mutate its input bundle.' >&2; exit 1; }
-result_bundle_stability_pause() { :; }
-copy_result_bundle_for_freeze() {
-  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
-}
-freeze_result_bundle_when_stable \
-  "$materialized_result_bundle" "$materialized_frozen_bundle" "$source_root" \
-  || { /usr/bin/printf '%s\n' 'The materialized result bundle could not be frozen.' >&2; exit 1; }
-[[ -f "$materialized_frozen_bundle/Data/database.sqlite3" ]] \
-  || { /usr/bin/printf '%s\n' 'The frozen result omitted the materialized query index.' >&2; exit 1; }
-materialized_digest_before_query="$(result_bundle_tree_digest \
-  "$materialized_frozen_bundle" "$source_root")"
-extract_result_bundle_query_outputs "$materialized_frozen_bundle" "$source_root" \
-  "$materialized_digest_before_query" "$root/disposable-summary.json" \
+extract_result_bundle_query_outputs "$query_frozen_bundle" "$source_root" \
+  "$query_digest_before" "$root/disposable-summary.json" \
   "$root/disposable-build.json" "$root/disposable-action.json" \
   || { /usr/bin/printf '%s\n' 'Disposable result queries were rejected.' >&2; exit 1; }
-[[ "$(result_bundle_tree_digest "$materialized_frozen_bundle" "$source_root")" \
-    == "$materialized_digest_before_query" \
-  && "$(/usr/bin/awk 'END { print NR + 0 }' "$materialized_frozen_bundle/Data/database.sqlite3")" \
-    == 1 ]] \
-  || { /usr/bin/printf '%s\n' 'A disposable query mutated the authoritative frozen bundle.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$query_frozen_bundle" "$source_root")" \
+    == "$query_digest_before" \
+  && ! -e "$query_source_bundle/Data/database.sqlite3" \
+  && ! -e "$query_frozen_bundle/Data/database.sqlite3" ]] \
+  || { /usr/bin/printf '%s\n' 'A disposable query mutated the source or authoritative frozen bundle.' >&2; exit 1; }
 for query_output in "$root/disposable-summary.json" "$root/disposable-build.json" \
   "$root/disposable-action.json"; do
   [[ -f "$query_output" && ! -L "$query_output" ]] \
@@ -787,7 +779,7 @@ for stage_number in $(/usr/bin/seq 1 26); do
   /usr/bin/printf '[%s/26] fixture stage\n' "$stage_number" >>"$gate_log"
   if [[ "$stage_number" == 2 ]]; then
     /usr/bin/printf '%s\n' \
-      '✔ Test run with 204 tests in 18 suites passed after 0.001 seconds.' >>"$gate_log"
+      '✔ Test run with 235 tests in 18 suites passed after 0.001 seconds.' >>"$gate_log"
   fi
 done
 /usr/bin/printf '%s\n' \
@@ -798,7 +790,7 @@ done
 gate_log_digest="$(sha256 "$gate_log")"
 valid_test_evidence="$root/$release_test_evidence_name"
 /usr/bin/printf '%s\n' \
-  "{\"schema\":\"lectureboard.release-test-evidence.v1\",\"sourceCommit\":\"$commit\",\"generatedAt\":\"2026-09-06T00:00:00Z\",\"prepublicationGate\":{\"command\":\"./scripts/prepublish-check.sh\",\"result\":\"Passed\",\"passedStages\":26,\"totalStages\":26,\"logSha256\":\"$gate_log_digest\",\"scriptBlobOid\":\"dddddddddddddddddddddddddddddddddddddddd\"},\"coreTests\":{\"result\":\"Passed\",\"tests\":204,\"suites\":18,\"failed\":0,\"skipped\":0},\"nativeAppTests\":{\"result\":\"Passed\",\"authoritativeTests\":417,\"deviceRuns\":479,\"parameterizedTests\":14,\"parameterizedRuns\":76,\"failed\":0,\"skipped\":0,\"expectedFailures\":0,\"resultBundleName\":\"${result_bundle##*/}\",\"resultBundleTreeSha256\":\"$result_bundle_digest\"},\"environment\":{\"architecture\":\"arm64\",\"macOS\":\"26.6.2\",\"macOSBuild\":\"25G83\",\"xcode\":\"26.6\",\"xcodeBuild\":\"17F113\"},\"claimBoundary\":\"Automated source-candidate evidence only; no live PowerPoint, user acceptance, installation, publication, or public-redownload result is implied.\"}" \
+  "{\"schema\":\"lectureboard.release-test-evidence.v1\",\"sourceCommit\":\"$commit\",\"generatedAt\":\"2026-09-06T00:00:00Z\",\"prepublicationGate\":{\"command\":\"./scripts/prepublish-check.sh\",\"result\":\"Passed\",\"passedStages\":26,\"totalStages\":26,\"logSha256\":\"$gate_log_digest\",\"scriptBlobOid\":\"dddddddddddddddddddddddddddddddddddddddd\"},\"coreTests\":{\"result\":\"Passed\",\"tests\":235,\"suites\":18,\"failed\":0,\"skipped\":0},\"nativeAppTests\":{\"result\":\"Passed\",\"authoritativeTests\":455,\"deviceRuns\":517,\"parameterizedTests\":14,\"parameterizedRuns\":76,\"failed\":0,\"skipped\":0,\"expectedFailures\":0,\"resultBundleName\":\"${result_bundle##*/}\",\"resultBundleTreeSha256\":\"$result_bundle_digest\"},\"environment\":{\"architecture\":\"arm64\",\"macOS\":\"26.6.2\",\"macOSBuild\":\"25G83\",\"xcode\":\"26.6\",\"xcodeBuild\":\"17F113\"},\"claimBoundary\":\"Automated source-candidate evidence only; no live PowerPoint, user acceptance, installation, publication, or public-redownload result is implied.\"}" \
   >"$valid_test_evidence"
 release_test_evidence_is_valid "$valid_test_evidence" "$commit" \
   || { /usr/bin/printf '%s\n' 'Valid release test evidence was rejected.' >&2; exit 1; }
@@ -810,7 +802,7 @@ for pinned_mutation in authoritative-tests environment generated-at; do
   /bin/mkdir "$pinned_root"
   case "$pinned_mutation" in
     authoritative-tests)
-      /usr/bin/sed 's/"authoritativeTests":417/"authoritativeTests":418/' \
+      /usr/bin/sed 's/"authoritativeTests":455/"authoritativeTests":456/' \
         "$valid_test_evidence" >"$pinned_root/$release_test_evidence_name"
       ;;
     environment)
@@ -1051,7 +1043,7 @@ if release_test_evidence_is_valid \
   exit 1
 fi
 /bin/mkdir "$root/inconsistent-runs"
-/usr/bin/sed 's/"deviceRuns":479/"deviceRuns":480/' \
+/usr/bin/sed 's/"deviceRuns":517/"deviceRuns":518/' \
   "$valid_test_evidence" >"$root/inconsistent-runs/$release_test_evidence_name"
 if release_test_evidence_is_valid \
   "$root/inconsistent-runs/$release_test_evidence_name" "$commit"; then
@@ -1119,7 +1111,7 @@ fi
 
 summary_fixture="$root/result-summary.json"
 /usr/bin/printf '%s\n' \
-  '{"title":"Test - LectureBoardAI","startTime":1788652700.0,"finishTime":1788652790.0,"devicesAndConfigurations":[{"device":{"architecture":"arm64","osBuildNumber":"25G83","osVersion":"26.6.2","platform":"macOS"},"expectedFailures":0,"failedTests":0,"passedTests":479,"skippedTests":0}],"expectedFailures":0,"failedTests":0,"passedTests":417,"result":"Passed","skippedTests":0,"statistics":[{"subtitle":"76 test runs","title":"14 tests ran with dynamic parameters"}],"totalTestCount":417}' \
+  '{"title":"Test - LectureBoardAI","startTime":1788652700.0,"finishTime":1788652790.0,"devicesAndConfigurations":[{"device":{"architecture":"arm64","osBuildNumber":"25G83","osVersion":"26.6.2","platform":"macOS"},"expectedFailures":0,"failedTests":0,"passedTests":517,"skippedTests":0}],"expectedFailures":0,"failedTests":0,"passedTests":455,"result":"Passed","skippedTests":0,"statistics":[{"subtitle":"76 test runs","title":"14 tests ran with dynamic parameters"}],"totalTestCount":455}' \
   >"$summary_fixture"
 build_fixture="$root/result-build.json"
 /usr/bin/printf '%s\n' \
@@ -1133,7 +1125,7 @@ native_result_summary_is_valid \
   "$valid_test_evidence" "$summary_fixture" "$build_fixture" "$action_fixture" "$commit" \
   26.6.2 25G83 26.6 17F113 \
   || { /usr/bin/printf '%s\n' 'Matching xcresult summary was rejected.' >&2; exit 1; }
-/usr/bin/sed 's/"passedTests":417/"passedTests":416/' \
+/usr/bin/sed 's/"passedTests":455/"passedTests":454/' \
   "$summary_fixture" >"$root/wrong-result-summary.json"
 if native_result_summary_is_valid \
   "$valid_test_evidence" "$root/wrong-result-summary.json" "$build_fixture" \

@@ -1213,17 +1213,16 @@ that an `xcresulttool` query can mutate its input bundle after the test action a
 They make that lifecycle behavior a plausible explanation for the stopped freeze, but they do not
 prove which comparison failed in the deleted transaction or exclude another delayed update.
 
-The evidence path now deliberately runs the result queries once against the newly produced bundle
-to materialize lazy query indexes before freezing. It then requires six matching whole-tree
-stability observations spanning at least five seconds. That stability token is advisory; the
-acceptance boundary remains the canonical tree digest. For each copy attempt, the pre-copy source
-digest and the post-copy canonical digests of both source and candidate must all match, with
-directory-identity and stability-token checks around those operations. The token rechecks the full
-sorted entry set and every captured entry identity after all file-content hashing, so a finite
-change to an earlier child while a later child is being read is rejected. A failed pair comparison
-may discard one candidate and retry once; a second failed copy attempt stops fail closed. Later
-`xcresulttool` validation queries run only against disposable copies and must leave the
-authoritative frozen bundle's canonical digest unchanged.
+The first remediation at that checkpoint deliberately ran the result queries once against the
+newly produced bundle to materialize lazy query indexes before freezing. It then required six
+matching whole-tree stability observations spanning at least five seconds. That stability token
+was advisory; the acceptance boundary remained the canonical tree digest. For each copy attempt,
+the pre-copy source digest and the post-copy canonical digests of both source and candidate had to
+match, with directory-identity and stability-token checks around those operations. A failed pair
+comparison discarded one candidate and retried once; a second failed copy attempt stopped fail
+closed. The later exact-commit attempt documented below showed that querying the source before the
+freeze still left an unsafe Xcode lazy-materialization window, so that remediation has been
+superseded.
 
 The private evidence directory must contain exactly three top-level entries: the content-free
 public JSON, `prepublication-gate.log`, and one correctly named `.xcresult`. The JSON's complete
@@ -1326,3 +1325,37 @@ This is a complete automated gate for the still-uncommitted working tree, not th
 exact-commit `evidence` transaction or distribution App. It adds no live microphone, managed
 PowerPoint, user-canvas, visible-overlay, natural-lecture, export, PPTX-integrity, Gatekeeper,
 owner-acceptance, GitHub Release, or public re-download evidence.
+
+### Exact-commit evidence retry and query-isolation correction on 2026-09-06
+
+Commit `b9e3ac2302cc42b136ca023f512fd4d08e45e535` was used for a clean isolated `evidence`
+transaction beginning at approximately 17:05 JST. All 26 prepublication stages passed, but the
+transaction then stopped fail closed while freezing the newly generated `.xcresult`. Both allowed
+copy attempts ended in `pairDigestMismatch`; the next attempt boundary reported
+`copyAttemptsExhausted`. The requested evidence directory was not published, so this run is not an
+exact-commit evidence success and is not release evidence.
+
+A controlled reproduction used the newly generated local result
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_17-25-13-+0900.xcresult`, whose 455
+tests in 40 suites passed. Before any `xcresulttool` query, its canonical tree digest was
+`f58185772949a66a2b5cf8464336992c9a1d467a80f69cd660dbf25c261d404b`. After the same three
+summary, build, and action-log queries used by the evidence tool, its digest was
+`4a5bda08b19c70e56237bf37dd4d70eae4e457bb5d5ad5a24bdde2ff8e96444a`; the manifest's only
+addition was the root-level `database.sqlite3`. Byte-and-metadata comparisons of an unqueried
+result and its copy matched both within `/private/tmp` and across `/private/tmp` and the external
+verification directory. These observations identify the source query's lazy database creation as
+the reproduced mutation and do not attribute the failure to PowerPoint, ScreenCaptureKit, or live
+lecture behavior.
+
+The evidence implementation now freezes the raw result before running any `xcresulttool` query.
+All validation queries run against a disposable copy made from that frozen result, and the source
+and authoritative frozen result must retain the same canonical digest and remain free of the
+fixture's query database. The regression fixture deliberately makes the query operation create a
+database in its input and verifies that the mutation remains confined to the disposable copy. The
+release-evidence count contract was also synchronized with the current gate: 235 Core tests in 18
+suites and 455 authoritative native tests, 517 device runs, 14 parameterized tests, and 76
+parameterized runs. Bash syntax, `git diff --check`, and the complete
+`./scripts/test-no-fee-release-v1.sh` boundary suite passed after these corrections. This is a
+targeted tooling result only; a new committed exact-commit evidence transaction has not yet passed,
+and no Release archive, live owner acceptance, publication, or public re-download result follows
+from it.
