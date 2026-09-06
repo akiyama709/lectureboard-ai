@@ -38,7 +38,7 @@
 3. 新しく生成されたwindow表示のslide showが選択資料へ結び付いていることを確認する．
 4. frozen preview上で実際のslide canvasだけを選択・確定し，PowerPointのcontrol又は余白を含めない．
 5. 少なくとも3枚を通常の講義速度で進め，slide ID／indexの変化，visual analysis及びoverlayの追従を観察する．
-6. 日本語又は英語のうち資料の主言語で約30秒，通常の模擬講義として自然に話し，final transcriptと文脈に根拠のある板書を確認する．命令用の定型句は用いない．少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する．
+6. 日本語又は英語のうち資料の主言語で約30秒，通常の模擬講義として自然に話す．命令用の定型句は用いない．一つの重要な宣言文を発話してから，その安定した内容に基づく板書がfinal transcriptより前にPowerPoint上へ現れるかを目視し，発話終了から可視化までの秒数を記録する．final transcript確定後に同じ板書が重複せず，文脈に根拠のある状態を保つことも確認する．少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する．
 7. mouse又はtrackpadで短い手書き線を1本描き，AI overlayが入力を妨げず，人間入力が優先されることを確認する．
 8. text，box，arrow又は簡単なdiagramが表示された場合，既存内容を覆わず，根拠のない内容を追加せず，読める間は安定していることを確認する．
 9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．
@@ -54,6 +54,7 @@
 - [ ] crash，停止不能，反復する権限要求又は残存する補助windowがない．
 - [ ] slide移動後のidentity，analysis及びoverlayが現在のslideへ追従する．
 - [ ] board内容はslide又はそのsessionの発話に根拠があり，利用者が読める間は不意に変化しない．
+- [ ] 少なくとも1件の根拠ある板書がfinal transcript確定前に見え，発話終了から可視化までの時間を記録した．
 - [ ] 命令用定型句なしの自然な模擬講義から，少なくとも1件の根拠ある自動板書をPowerPoint上で目視した．
 - [ ] overlayはslide canvasへ整列し，既存内容とmouse入力を妨げない．
 - [ ] JSON／SVG exportは表示可能なpublic board sceneだけを含む．
@@ -80,6 +81,8 @@ slide枚数：
 managed開始：未実施／合格／不合格
 canvas・overlay：未実施／合格／不合格
 文字起こし・grounding：未実施／合格／不合格
+発話終了からpre-final板書可視化まで（秒）：
+final確定後の重複：未実施／なし／あり
 mouse priority：未実施／合格／不合格
 JSON・SVG export：未実施／合格／不合格
 停止・cleanup：未実施／合格／不合格

@@ -1915,3 +1915,117 @@ Shared weekly usage was 22 percent consumed when checked after this work, versus
 the previous check; this account-wide difference must not be attributed exclusively to this
 task. The raw credits balance remained 2500; no currency conversion or zero-cost guarantee is
 inferred. No purchase, reset, additional agent or paid API was used.
+
+### 2026-09-06–07 Speech callback executor crash and source fix
+
+The unchanged frozen owner app was normally reopened and transcription start was invoked once
+through exact-app Accessibility controls. It remained in `starting` for 37 observed seconds and
+then terminated at second 38. No transcript text was read, retained, or uploaded. The retained
+crash report `LectureBoard AI-2026-09-06-235422.ips`, SHA-256
+`08291982fff854fa24fcd0dc96abc099950aa12c8984a9706318a02ff63d46c6`, records
+`EXC_BREAKPOINT`, `_dispatch_assert_queue_fail`, and Swift executor checking on
+`com.apple.root.default-qos`. Its first app frame is the authorization callback in
+`AppleSpeechRecognizerProvider.requestAuthorization(for:)`. This is distinct from the earlier
+missing-usage-description TCC termination and establishes a source-level actor-isolation crash;
+it is not a screen-recording or microphone-toggle failure.
+
+Commit `bb05ac8ecb8b28701b1c27decaae566714fde688` constructs the Speech authorization callback in
+a nonisolated helper and returns an explicitly `@Sendable` closure. It applies the same ingress
+boundary to the audio-engine tap and marks the recognition-task result handler `@Sendable`, so
+framework callbacks do not inherit the provider's `MainActor` context before entering its
+existing guarded mailbox. Two regression tests invoke the authorization and audio callbacks on a
+background queue. The prior UI single-flight guards remain in place.
+
+The complete native App test run passed 478 authoritative tests in 41 suites at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_00-03-08-+0900.xcresult`.
+A disposable-copy `xcresulttool` query independently reported 540 device runs, 14 parameterized
+tests/76 runs, zero failures, zero skips, and zero expected failures. The retained console log
+SHA-256 is `b646b702f39c4dee048d7215154dcd91ba2d34e6116949937e65fe453b336033`.
+Strict Swift-format lint and `git diff --check` passed. The synchronized no-fee release-tool
+boundary suite also passed; its retained log SHA-256 is
+`97aaea043c01e4ed5c26c1337847896c788df28d7745367f904cdc557822c0cf`.
+
+These automated results verify the callback isolation change and its regressions only. A new
+fixed app has not yet completed a real Speech authorization, live partial result, managed
+PowerPoint start, visible automatic board output, owner mock lecture, exact-commit release gate,
+installation test, or public release. The crashed frozen app must not be retried as evidence for
+the source fix.
+
+### 2026-09-07 stable-partial speech checkpoint and locked live boundary
+
+The callback-fixed commit `bb05ac8ecb8b28701b1c27decaae566714fde688` was built as a new arm64
+Release trial app with Hardened Runtime, ad hoc signing, no debug dylib, version 1.0.0, the exact
+embedded commit, and UNBOUND tag fields. Its executable SHA-256 was
+`9c44ec3dc115ef4713b8569f2f5424641a071237a91ee7413d998d44c362590f`, its ad hoc CDHash was
+`0df2c8b5daf4333eec1e270b4f3ea920d6d93703`, and strict deep signature verification passed.
+The copy was retained without replacing the failed owner app at
+`Mock-Lecture-bb05ac8/LectureBoard AI.app`. A normal LaunchServices trial was prepared, but the
+exact-input helper detected `CGSSessionScreenIsLocked=1` before sending any input. The exact app
+process was then terminated and independently found absent. No Speech request, PowerPoint input,
+permission change, TCC reset, or screen-recording re-registration occurred. This is a safe locked
+boundary, not live verification of the callback fix.
+
+Commit `679cdfc2e83a957e0dd3808d4961f0958493a29a` adds a provider-cycle segment identity and a
+fail-closed stable-partial committer. One complete declarative unit may enter the existing board
+decision path before the Speech final callback only after it is retained by two consecutive
+partial revisions of the same provider cycle, has reliable finite timing/confidence/emphasis,
+contains a sentence boundary, and has 12 through 240 non-whitespace characters. Questions,
+incomplete or short text, changed segment identities, low confidence, out-of-order timing, and
+later revisions after one promotion remain uncommitted. Promotion marks the bounded unit final
+only for the existing contextual engine; that engine still independently applies slide/canvas
+freshness, current analysis, semantic identity, visual grounding, importance, classification,
+public-scene stability, and overlay eligibility. A newest partial result alone is never public.
+
+Four new Core tests cover growing English hypotheses, incomplete/question/short/mismatched
+hypotheses, unreliable or out-of-order evidence, one-promotion-only behavior, and final/reset
+boundaries. Native integration tests cover stable partial-to-public-scene flow before final and
+one segment identity within a recognition cycle. Core passed 246 tests in 19 suites. The complete
+native run passed 480 authoritative tests in 41 suites at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_00-33-33-+0900.xcresult`; an
+independent disposable-copy query reported 542 device runs, 14 parameterized tests/76 runs, and
+zero failures, skips, or expected failures. The Core and App console-log SHA-256 values are
+`d733b16d36d82c6c517ee894e571d28003c1d1e4f9ca2ea297c5c4f259c3acf0` and
+`9d5d9979603b3147846d675cbe43b07c1c49009b0db7f937117333aecf20fa82`.
+
+The first synchronized no-fee boundary run exposed an obsolete negative-fixture substitution:
+it still searched for the former 18-suite literal, so the intended Core Boolean mutation was not
+made and the test correctly refused to call that unchanged fixture a rejection. The fixture was
+updated to the exact 19-suite evidence shape without weakening the production validator. The
+entire boundary suite then passed; its console-log SHA-256 is
+`868aaa775d6da91dc5b8cc97824faae92f3990b829981b6da06b6febd548eca7`.
+
+For the fixed source commit, `make doctor` reported zero failures and zero warnings, and
+`make local-setup` passed including all 246 Core tests. The complete 26-stage `make verify` gate
+then passed. Its native result is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_00-39-21-+0900.xcresult`; an
+independent disposable-copy summary reports 480 authoritative tests, 542 device runs, zero
+failures, zero skips, and zero expected failures. The full gate log SHA-256 is
+`e515c39c8323d8f57705ee99bea89a19f556fefe381ab798692eb7082078cdd5`. The gate also covered
+Swift-format lint, native and runtime arm64 builds, signature checks, permission/version/release
+contracts, release-tool negative fixtures, tracked-output exclusion, common-secret detection, and
+lecture-data-extension exclusion.
+
+The same source commit was built separately as the current owner trial at
+`Mock-Lecture-679cdfc/LectureBoard AI.app`. It is arm64 Release, version 1.0.0, ad hoc signed with
+Hardened Runtime, contains only the automation and audio-input entitlements, embeds the exact
+source commit and UNBOUND tag fields, and contains no debug dylib. The copied executable is
+byte-identical to the build, has SHA-256
+`e5e3724d7a71dcc66bcf510bdfe4b798f149b5ba7b5b76b1372c0395e15962eb` and ad hoc CDHash
+`66efe7417d2cd38911d9fadbab269bd7bf8efc2e`; strict deep signature verification passed. The build
+log SHA-256 is `d3f27d700f8caede98d9a9ed3690b3c0559b990599a6703bac4e0c7a0bb73140`.
+
+This checkpoint is automated source and construction evidence only. The current owner trial app
+has not been launched because the macOS session remained locked. Real microphone authorization,
+live partial punctuation and cadence, measured partial-to-visible latency, managed or observer
+PowerPoint binding, a user-confirmed canvas, visible automatic board content, human-input
+priority, live export, owner acceptance, installation through Open Anyway, final tagged assets,
+GitHub publication, and unauthenticated public re-download all remain unverified.
+
+After the checkpoint, the roadmap and owner-acceptance procedure were synchronized with the
+stable-partial boundary. The first release-definition regression run detected that an established
+human-visibility sentence had been paraphrased. The exact required sentence was restored without
+removing the new pre-final observation and latency fields. `check-readme-language-boundary.sh`,
+`check-release-definition.sh`, `test-check-release-definition.sh`,
+`test-check-publication-sources.sh`, the complete `test-no-fee-release-v1.sh` negative-boundary
+suite, and `git diff --check` then passed. These are documentation and release-contract checks;
+they add no live functionality evidence.

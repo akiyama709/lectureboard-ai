@@ -1,8 +1,18 @@
 # LectureBoard AI ローカル開発引継ぎ
 
-更新日：2026年9月6日
+更新日：2026年9月7日
 
-## 最新の再開点（2026年9月6日23時台）
+## 最新の再開点（2026年9月7日0時台）
+
+　最新source commitは`679cdfc2e83a957e0dd3808d4961f0958493a29a`である．Speech providerが一つの認識cycleへ一つのsegment IDを割り当て，同じcycleの2回の連続partialで安定した完結文だけを，既存のslide・canvas・analysis・identity・grounding・importance・public scene境界へ確定結果前に渡す経路を追加した．最新partial単独，未完文，疑問文，短文，低信頼，時刻逆転又はsegment不一致は公開しない．このsource経路は自動test済みであるが，実マイク及び可視板書では未検証である．
+
+　現行commitで`make doctor`は失敗・warning 0件，`make local-setup`はCore 246件・19 suiteを含めて合格した．全26段階の`make verify`も合格し，native resultは`Test-LectureBoardAI-2026.09.07_00-39-21-+0900.xcresult`である．独立集計はApp 480件・41 suite，device run 542件，失敗・skip・expected failure 0件を示す．これは自動検証であり，live Speech，PowerPoint結合又は目視結果ではない．
+
+　本人試用Appは`/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-679cdfc/LectureBoard AI.app`へ，旧版を置換せず保存した．arm64 Release，Hardened Runtime，ad hoc署名，version 1.0.0，embedded commit `679cdfc2…`，UNBOUND tagである．executable SHA-256は`e5e3724d7a71dcc66bcf510bdfe4b798f149b5ba7b5b76b1372c0395e15962eb`，CDHashは`66efe7417d2cd38911d9fadbab269bd7bf8efc2e`で，buildとのbyte一致及びstrict署名を確認した．macOS sessionがロック中だったため，このAppは起動していない．次はロック解除後，このexact pathを通常起動し，まず文字起こし開始を1回だけ行ってpartial受信とcrashしないことを確認する．画面収録の再登録やTCC resetは行わない．
+
+　直前の固定2666761 App再試行では，Speech権限callbackのMainActor継承による`EXC_BREAKPOINT`を確定した．commit `bb05ac8…`で権限・audio・認識結果callbackのactor入口を修正した．その修正Appの通常起動を準備した時点でロックを検出し，入力前に停止してexact processを終了した．したがって，権限又は画面収録の問題と推定して設定を繰り返さない．
+
+## 直前の再開点（2026年9月6日23時台）
 
 　省エネの段階1調査を実施した．固定2666761 Appの通常起動で文字起こしを1回開始し，8秒間「開始中」を観測後に停止した．TCCはLectureBoard AI自身を対象とするマイク許可要求を記録したが，許可付与・Speech要求・実認識は未確認である．sourceでは認識開始・停止のuser actionをsingle-flightにし，開始待ち・確定待ちの重複要求を抑止した．対象AppSlideIdentityIntegrationTestsの35件が23-40-58 xcresultで合格した．この修正は固定試用Appへまだ反映していない．次はマイク許可状態を本人が確認した後，固定Appの通常起動経路で認識開始を1回検証する．画面収録の再登録やTCC resetを繰り返さない．
 
