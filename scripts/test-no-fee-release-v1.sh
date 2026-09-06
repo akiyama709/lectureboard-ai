@@ -42,6 +42,25 @@ require_text 'release_gate_log_matches "$test_result" "$gate_log"'
 require_text 'production commands reject exported Bash functions'
 require_text '/usr/bin/xcrun xcresulttool get test-results summary'
 require_text '/usr/bin/xcrun xcresulttool get log --type action'
+require_text 'freeze_result_bundle_when_stable "$after_result" "$copied_result" "$isolated_source"'
+require_text 'materialize_result_bundle_for_queries "$after_result" "$isolated_source"'
+require_text 'extract_result_bundle_query_outputs "$result_bundle" "$source_root" "$result_digest"'
+require_text 'required_stable_observations=6 quiet_nanoseconds=5000000000'
+require_text 'maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000'
+require_text 'result_bundle_pair_matches_digest'
+require_text '"$first_token_after" == "$first_token_before"'
+require_text '"$second_token_after" == "$second_token_before"'
+require_text '"$post_pair_source_token" == "$post_digest_token"'
+require_text 'delete_directory_with_identity "$destination_parent_physical" "$parent_identity"'
+require_text 'A failed copier does not establish which inode'
+require_text "die 'source or frozen result bundle changed before exclusive handoff'"
+require_text 'private_evidence_directory_is_exact "$evidence_stage" "${after_result##*/}"'
+require_text 'regular_file_matches_sha256 "$evidence_file" "$generated_evidence_digest"'
+require_text 'published_evidence_stage="$evidence_stage"'
+require_text 'cleanup_known_evidence_handoff \'
+require_text 'validate_published_evidence_handoff \'
+require_text 'published_evidence_parent_fd=9'
+require_text 'published_evidence_stage_fd=8'
 require_text 'create_isolated_commit_source "$source_dir" "$commit" "$isolated_source"'
 require_text '"$source_dir" "$commit" "$isolated_repository"'
 require_text 'release-exclusive-rename.c'
@@ -74,6 +93,25 @@ require_text "die 'provenance tag object is absent'"
 require_text '"entitlements":{"keys":["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"],"canonicalJsonSha256":"2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0"}'
 require_text "die 'provenance entitlement binding is not exact'"
 require_text 'packages.0.checksums.0.algorithm'
+
+/usr/bin/python3 -I - "$tool" <<'PY'
+import sys
+data=open(sys.argv[1],encoding="utf-8").read()
+start=data.index("generate_release_evidence() {")
+end=data.index("\nrelease_test_evidence_tree_digest_matches() {",start)
+body=data[start:end]
+markers=[
+ 'private_evidence_directory_is_exact "$evidence_stage"',
+ 'regular_file_matches_sha256 "$evidence_file" "$generated_evidence_digest"',
+ 'published_evidence_stage="$evidence_stage"',
+ '"$temp/release-exclusive-rename" "$evidence_stage" "$output_dir"',
+ 'validate_published_evidence_handoff',
+ "published_evidence_parent=''",
+]
+positions=[body.index(marker) for marker in markers]
+positions[1]=body.rindex(markers[1])
+if positions!=sorted(positions): raise SystemExit(1)
+PY
 
 root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-no-fee-v1-test.XXXXXX)"
 trap '[[ -d "$root" ]] && /usr/bin/find "$root" -depth -delete' EXIT
@@ -111,6 +149,33 @@ portable_archive_functions="$root/portable-archive-functions.sh"
   sed -n '/^release_gate_log_matches() {$/,/^}$/p' "$tool"
   sed -n '/^release_gate_script_matches_commit() {$/,/^}$/p' "$tool"
   sed -n '/^result_bundle_tree_digest() {$/,/^}$/p' "$tool"
+  sed -n '/^result_bundle_tree_digest() {$/,/^}$/p' "$tool" \
+    | /usr/bin/sed '1s/^result_bundle_tree_digest/result_bundle_tree_digest_original/'
+  sed -n '/^result_bundle_pair_matches_digest() {$/,/^}$/p' "$tool"
+  sed -n '/^result_bundle_pair_matches_digest() {$/,/^}$/p' "$tool" \
+    | /usr/bin/sed '1s/^result_bundle_pair_matches_digest/result_bundle_pair_matches_digest_original/'
+  sed -n '/^result_bundle_stability_pause() {$/,/^}$/p' "$tool"
+  sed -n '/^result_bundle_set_monotonic_now() {$/,/^}$/p' "$tool"
+  sed -n '/^result_bundle_stability_token() {$/,/^}$/p' "$tool"
+  sed -n '/^copy_result_bundle_for_freeze() {$/,/^}$/p' "$tool"
+  sed -n '/^run_result_bundle_queries() {$/,/^}$/p' "$tool"
+  sed -n '/^materialize_result_bundle_for_queries() {$/,/^}$/p' "$tool"
+  sed -n '/^extract_result_bundle_query_outputs() {$/,/^}$/p' "$tool"
+  sed -n '/^freeze_result_bundle_when_stable() {$/,/^}$/p' "$tool"
+  sed -n '/^directory_identity() {$/,/^}$/p' "$tool"
+  sed -n '/^regular_file_matches_sha256() {$/,/^}$/p' "$tool"
+  sed -n '/^private_evidence_directory_is_exact() {$/,/^}$/p' "$tool"
+  sed -n '/^delete_directory_with_identity() {$/,/^}$/p' "$tool"
+  sed -n '/^directory_descriptor_matches_identity() {$/,/^}$/p' "$tool"
+  sed -n '/^delete_directory_from_descriptors_with_identity() {$/,/^}$/p' "$tool"
+  sed -n '/^cleanup_known_evidence_handoff() {$/,/^}$/p' "$tool"
+  sed -n '/^evidence_handoff_identities_are_valid() {$/,/^}$/p' "$tool"
+  sed -n '/^post_handoff_validation_pause() {$/,/^}$/p' "$tool"
+  sed -n '/^post_handoff_final_token_pause() {$/,/^}$/p' "$tool"
+  sed -n '/^published_evidence_content_is_valid() {$/,/^}$/p' "$tool"
+  sed -n '/^published_evidence_content_is_valid() {$/,/^}$/p' "$tool" \
+    | /usr/bin/sed '1s/^published_evidence_content_is_valid/published_evidence_content_is_valid_original/'
+  sed -n '/^validate_published_evidence_handoff() {$/,/^}$/p' "$tool"
   sed -n '/^release_test_evidence_tree_digest_matches() {$/,/^}$/p' "$tool"
   sed -n '/^release_sbom_is_valid() {$/,/^}$/p' "$tool"
   sed -n '/^release_provenance_is_valid() {$/,/^}$/p' "$tool"
@@ -138,6 +203,86 @@ git_read() {
     -c core.fsmonitor=false -c core.untrackedCache=false "$@"
 }
 source "$portable_archive_functions"
+
+cleanup_parent="$root/evidence-cleanup-parent"
+/bin/mkdir "$cleanup_parent"
+cleanup_parent_identity="$(directory_identity "$cleanup_parent")"
+
+cleanup_stage="$cleanup_parent/.lectureboard-v1-evidence.helper-failed"
+cleanup_output="$cleanup_parent/helper-failed-output"
+/bin/mkdir -p "$cleanup_stage/content"
+/usr/bin/printf '%s\n' 'known staged evidence' >"$cleanup_stage/content/payload"
+cleanup_stage_identity="$(directory_identity "$cleanup_stage")"
+cleanup_known_evidence_handoff "$cleanup_parent" "$cleanup_parent_identity" \
+  "$cleanup_stage" "$cleanup_output" "$cleanup_stage_identity" \
+  || { /usr/bin/printf '%s\n' 'A known pre-rename evidence stage was not cleaned.' >&2; exit 1; }
+[[ ! -e "$cleanup_stage" && ! -L "$cleanup_stage" ]] \
+  || { /usr/bin/printf '%s\n' 'Pre-rename cleanup left its known stage behind.' >&2; exit 1; }
+
+cleanup_stage="$cleanup_parent/.lectureboard-v1-evidence.renamed-then-failed"
+cleanup_output="$cleanup_parent/renamed-then-failed-output"
+/bin/mkdir -p "$cleanup_stage/content"
+/usr/bin/printf '%s\n' 'known renamed evidence' >"$cleanup_stage/content/payload"
+cleanup_stage_identity="$(directory_identity "$cleanup_stage")"
+/bin/mv "$cleanup_stage" "$cleanup_output"
+cleanup_known_evidence_handoff "$cleanup_parent" "$cleanup_parent_identity" \
+  "$cleanup_stage" "$cleanup_output" "$cleanup_stage_identity" \
+  || { /usr/bin/printf '%s\n' 'A known post-rename evidence output was not cleaned.' >&2; exit 1; }
+[[ ! -e "$cleanup_output" && ! -L "$cleanup_output" ]] \
+  || { /usr/bin/printf '%s\n' 'Post-rename failure cleanup left its known output behind.' >&2; exit 1; }
+
+cleanup_stage="$cleanup_parent/.lectureboard-v1-evidence.output-conflict"
+cleanup_output="$cleanup_parent/output-conflict"
+/bin/mkdir -p "$cleanup_stage/content" "$cleanup_output"
+/usr/bin/printf '%s\n' 'known stage' >"$cleanup_stage/content/payload"
+/usr/bin/printf '%s\n' 'unrelated conflicting output' >"$cleanup_output/do-not-delete"
+cleanup_stage_identity="$(directory_identity "$cleanup_stage")"
+cleanup_known_evidence_handoff "$cleanup_parent" "$cleanup_parent_identity" \
+  "$cleanup_stage" "$cleanup_output" "$cleanup_stage_identity" \
+  || { /usr/bin/printf '%s\n' 'Known-stage cleanup failed beside an output conflict.' >&2; exit 1; }
+[[ ! -e "$cleanup_stage" && -f "$cleanup_output/do-not-delete" ]] \
+  || { /usr/bin/printf '%s\n' 'A different-inode output conflict was removed.' >&2; exit 1; }
+
+swapped_cleanup_target="$cleanup_parent/swapped-cleanup-target"
+swapped_cleanup_saved="$cleanup_parent/swapped-cleanup-saved"
+/bin/mkdir "$swapped_cleanup_target"
+swapped_cleanup_identity="$(directory_identity "$swapped_cleanup_target")"
+/bin/mv "$swapped_cleanup_target" "$swapped_cleanup_saved"
+/bin/mkdir "$swapped_cleanup_target"
+/usr/bin/printf '%s\n' 'replacement victim' >"$swapped_cleanup_target/do-not-delete"
+if delete_directory_with_identity "$cleanup_parent" "$cleanup_parent_identity" \
+  "$swapped_cleanup_target" "$swapped_cleanup_identity"; then
+  /usr/bin/printf '%s\n' 'A path-swapped cleanup target was accepted.' >&2
+  exit 1
+fi
+[[ -f "$swapped_cleanup_target/do-not-delete" && -d "$swapped_cleanup_saved" ]] \
+  || { /usr/bin/printf '%s\n' 'Path-swap rejection deleted or lost an unrelated directory.' >&2; exit 1; }
+
+unlinked_cleanup_parent="$root/unlinked-cleanup-parent"
+unlinked_cleanup_stage="$unlinked_cleanup_parent/.lectureboard-v1-evidence.already-unlinked"
+unlinked_cleanup_output="$unlinked_cleanup_parent/already-unlinked-output"
+/bin/mkdir -p "$unlinked_cleanup_stage/content"
+/usr/bin/printf '%s\n' 'unrelated sibling' >"$unlinked_cleanup_parent/do-not-delete"
+unlinked_cleanup_parent_identity="$(directory_identity "$unlinked_cleanup_parent")"
+unlinked_cleanup_stage_identity="$(directory_identity "$unlinked_cleanup_stage")"
+exec 9<"$unlinked_cleanup_parent"
+exec 8<"$unlinked_cleanup_stage"
+/bin/mv "$unlinked_cleanup_stage" "$unlinked_cleanup_output"
+delete_directory_with_identity "$unlinked_cleanup_parent" \
+  "$unlinked_cleanup_parent_identity" "$unlinked_cleanup_output" \
+  "$unlinked_cleanup_stage_identity" \
+  || { /usr/bin/printf '%s\n' 'The retained target fixture could not be unlinked.' >&2; exit 1; }
+if cleanup_known_evidence_handoff "$unlinked_cleanup_parent" \
+  "$unlinked_cleanup_parent_identity" "$unlinked_cleanup_stage" \
+  "$unlinked_cleanup_output" "$unlinked_cleanup_stage_identity" 9 8; then
+  /usr/bin/printf '%s\n' \
+    'A retained target absent from its retained parent was accepted as positively identified.' >&2
+  exit 1
+fi
+exec 8<&-
+exec 9<&-
+[[ ! -e "$unlinked_cleanup_output" && -f "$unlinked_cleanup_parent/do-not-delete" ]] \
+  || { /usr/bin/printf '%s\n' 'Fail-closed absent-target cleanup altered unrelated content.' >&2; exit 1; }
 
 commit=0123456789012345678901234567890123456789
 oid "$commit" commit-fixture
@@ -214,6 +359,261 @@ source_root="$(cd -- "$(dirname -- "$tool")/.." && /bin/pwd -P)"
 result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-11-21-+0900.xcresult"
 /bin/mkdir -p "$result_bundle/Data"
 /usr/bin/printf '%s\n' 'authoritative result fixture' >"$result_bundle/Data/payload"
+
+mid_token_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-11-26-+0900.xcresult"
+/bin/mkdir -p "$mid_token_result_bundle/Data"
+/usr/bin/printf '%s\n' 'hashed first' >"$mid_token_result_bundle/Data/a-first"
+/usr/bin/printf '%s\n' 'hashed later' >"$mid_token_result_bundle/Data/z-later"
+result_bundle_stability_token "$mid_token_result_bundle" >/dev/null \
+  || { /usr/bin/printf '%s\n' 'Stable multi-entry token fixture was rejected.' >&2; exit 1; }
+LECTUREBOARD_RELEASE_TEST_MODE=1
+if result_bundle_stability_token "$mid_token_result_bundle" \
+  Data/a-first Data/z-later >/dev/null; then
+  /usr/bin/printf '%s\n' 'A previously hashed child changed mid-token was accepted.' >&2
+  exit 1
+fi
+unset LECTUREBOARD_RELEASE_TEST_MODE
+/usr/bin/grep -Fq 'mid-token-test-mutation' "$mid_token_result_bundle/Data/a-first" \
+  || { /usr/bin/printf '%s\n' 'The deterministic mid-token mutation seam did not execute.' >&2; exit 1; }
+
+post_digest_mutation_source="$root/Test-LectureBoardAI-2026.09.06_09-11-31-+0900.xcresult"
+post_digest_mutation_copy="$root/post-digest-mutation-copy.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$post_digest_mutation_source"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$post_digest_mutation_copy"
+post_digest_expected="$(result_bundle_tree_digest_original \
+  "$post_digest_mutation_source" "$source_root")"
+post_digest_token="$(result_bundle_stability_token "$post_digest_mutation_source")"
+post_digest_mutation_marker="$root/post-digest-mutation.marker"
+result_bundle_tree_digest() {
+  result_bundle_tree_digest_original "$@" || return 1
+  if [[ "$1" == "$post_digest_mutation_source" \
+    && ! -e "$post_digest_mutation_marker" ]]; then
+    /usr/bin/printf '%s\n' 'mutation immediately after digest output' \
+      >>"$post_digest_mutation_source/Data/payload"
+    /usr/bin/touch "$post_digest_mutation_marker"
+  fi
+}
+if result_bundle_pair_matches_digest "$post_digest_mutation_source" \
+  "$post_digest_mutation_copy" "$source_root" "$post_digest_expected" \
+  "$post_digest_token"; then
+  /usr/bin/printf '%s\n' 'A source mutation immediately after digest output was accepted.' >&2
+  exit 1
+fi
+[[ -f "$post_digest_mutation_marker" ]] \
+  || { /usr/bin/printf '%s\n' 'The post-digest mutation seam did not execute.' >&2; exit 1; }
+result_bundle_tree_digest() {
+  result_bundle_tree_digest_original "$@"
+}
+
+fake_monotonic_now=0
+result_bundle_set_monotonic_now() {
+  fake_monotonic_now=$((fake_monotonic_now + 1000000000))
+  monotonic_now="$fake_monotonic_now"
+}
+
+delayed_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-12-21-+0900.xcresult"
+delayed_frozen_bundle="$root/delayed-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$delayed_result_bundle"
+delayed_pause_count=0
+result_bundle_stability_pause() {
+  delayed_pause_count=$((delayed_pause_count + 1))
+  if [[ "$delayed_pause_count" == 1 ]]; then
+    /usr/bin/printf '%s\n' 'delayed xcresult service update' \
+      >>"$delayed_result_bundle/Data/payload"
+  fi
+}
+freeze_result_bundle_when_stable \
+  "$delayed_result_bundle" "$delayed_frozen_bundle" "$source_root" \
+  || { /usr/bin/printf '%s\n' 'A delayed but settling xcresult could not be frozen.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$delayed_result_bundle" "$source_root")" \
+  == "$(result_bundle_tree_digest "$delayed_frozen_bundle" "$source_root")" ]] \
+  || { /usr/bin/printf '%s\n' 'The delayed xcresult freeze did not retain its settled bytes.' >&2; exit 1; }
+/usr/bin/grep -Fq 'delayed xcresult service update' "$delayed_frozen_bundle/Data/payload" \
+  || { /usr/bin/printf '%s\n' 'The delayed xcresult update was omitted from the frozen copy.' >&2; exit 1; }
+
+copy_race_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-21-+0900.xcresult"
+copy_race_frozen_bundle="$root/copy-race-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$copy_race_result_bundle"
+copy_race_count=0
+result_bundle_stability_pause() { :; }
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2" || return 1
+  copy_race_count=$((copy_race_count + 1))
+  if [[ "$copy_race_count" == 1 ]]; then
+    /usr/bin/printf '%s\n' 'source mutation during first freeze copy' \
+      >>"$copy_race_result_bundle/Data/payload"
+  fi
+}
+freeze_result_bundle_when_stable \
+  "$copy_race_result_bundle" "$copy_race_frozen_bundle" "$source_root" \
+  || { /usr/bin/printf '%s\n' 'A settling copy-time xcresult update could not be retried safely.' >&2; exit 1; }
+[[ "$copy_race_count" == 2 ]] \
+  || { /usr/bin/printf '%s\n' 'A copy-time xcresult mutation was not rejected exactly once.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$copy_race_result_bundle" "$source_root")" \
+  == "$(result_bundle_tree_digest "$copy_race_frozen_bundle" "$source_root")" ]] \
+  || { /usr/bin/printf '%s\n' 'The copy-time retry accepted inconsistent result bytes.' >&2; exit 1; }
+/usr/bin/grep -Fq 'source mutation during first freeze copy' \
+  "$copy_race_frozen_bundle/Data/payload" \
+  || { /usr/bin/printf '%s\n' 'The copy-time mutation was absent from the final frozen result.' >&2; exit 1; }
+
+candidate_race_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-51-+0900.xcresult"
+candidate_race_frozen_bundle="$root/candidate-race-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$candidate_race_result_bundle"
+candidate_race_count=0
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2" || return 1
+  candidate_race_count=$((candidate_race_count + 1))
+  if [[ "$candidate_race_count" == 1 ]]; then
+    /usr/bin/printf '%s\n' 'candidate mutation during first freeze copy' >>"$2/Data/payload"
+  fi
+}
+freeze_result_bundle_when_stable \
+  "$candidate_race_result_bundle" "$candidate_race_frozen_bundle" "$source_root" \
+  || { /usr/bin/printf '%s\n' 'A mutated freeze candidate could not be discarded and retried.' >&2; exit 1; }
+[[ "$candidate_race_count" == 2 ]] \
+  || { /usr/bin/printf '%s\n' 'A mutated freeze candidate was not rejected exactly once.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$candidate_race_result_bundle" "$source_root")" \
+  == "$(result_bundle_tree_digest "$candidate_race_frozen_bundle" "$source_root")" ]] \
+  || { /usr/bin/printf '%s\n' 'The candidate retry accepted inconsistent result bytes.' >&2; exit 1; }
+if /usr/bin/grep -Fq 'candidate mutation during first freeze copy' \
+  "$candidate_race_frozen_bundle/Data/payload"; then
+  /usr/bin/printf '%s\n' 'The rejected candidate mutation survived retry cleanup.' >&2
+  exit 1
+fi
+
+cleanup_swap_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-56-+0900.xcresult"
+cleanup_swap_frozen_bundle="$root/cleanup-swap-frozen.xcresult"
+cleanup_swap_saved_bundle="$root/cleanup-swap-saved.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$cleanup_swap_result_bundle"
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
+}
+result_bundle_pair_matches_digest() {
+  if [[ "$2" == "$cleanup_swap_frozen_bundle" ]]; then
+    /bin/mv "$cleanup_swap_frozen_bundle" "$cleanup_swap_saved_bundle"
+    /bin/mkdir -p "$cleanup_swap_frozen_bundle/Data"
+    /usr/bin/printf '%s\n' 'replacement victim' \
+      >"$cleanup_swap_frozen_bundle/Data/do-not-delete"
+    return 1
+  fi
+  result_bundle_pair_matches_digest_original "$@"
+}
+if freeze_result_bundle_when_stable "$cleanup_swap_result_bundle" \
+  "$cleanup_swap_frozen_bundle" "$source_root"; then
+  /usr/bin/printf '%s\n' 'A path-swapped retry candidate was accepted.' >&2
+  exit 1
+fi
+[[ -f "$cleanup_swap_frozen_bundle/Data/do-not-delete" \
+  && -d "$cleanup_swap_saved_bundle" ]] \
+  || { /usr/bin/printf '%s\n' 'Retry cleanup deleted a path-swapped victim.' >&2; exit 1; }
+result_bundle_pair_matches_digest() {
+  result_bundle_pair_matches_digest_original "$@"
+}
+
+swapped_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-14-01-+0900.xcresult"
+swapped_result_original="$root/swapped-result-original.xcresult"
+swapped_result_frozen="$root/swapped-result-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$swapped_result_bundle"
+swapped_result_pause_count=0
+result_bundle_stability_pause() {
+  swapped_result_pause_count=$((swapped_result_pause_count + 1))
+  if [[ "$swapped_result_pause_count" == 1 ]]; then
+    /bin/mv "$swapped_result_bundle" "$swapped_result_original"
+    /usr/bin/ditto --rsrc --extattr --acl "$swapped_result_original" "$swapped_result_bundle"
+  fi
+}
+if freeze_result_bundle_when_stable \
+  "$swapped_result_bundle" "$swapped_result_frozen" "$source_root"; then
+  /usr/bin/printf '%s\n' 'A replaced result-bundle root identity was accepted.' >&2
+  exit 1
+fi
+[[ ! -e "$swapped_result_frozen" && ! -L "$swapped_result_frozen" ]] \
+  || { /usr/bin/printf '%s\n' 'A root-identity rejection left a frozen candidate.' >&2; exit 1; }
+
+parent_swap_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-14-11-+0900.xcresult"
+parent_swap_root="$root/parent-swap-root"
+parent_swap_original="$root/parent-swap-original"
+parent_swap_frozen="$parent_swap_root/frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$parent_swap_result_bundle"
+/bin/mkdir "$parent_swap_root"
+parent_swap_pause_count=0
+result_bundle_stability_pause() {
+  parent_swap_pause_count=$((parent_swap_pause_count + 1))
+  if [[ "$parent_swap_pause_count" == 1 ]]; then
+    /bin/mv "$parent_swap_root" "$parent_swap_original"
+    /bin/mkdir "$parent_swap_root"
+  fi
+}
+if freeze_result_bundle_when_stable \
+  "$parent_swap_result_bundle" "$parent_swap_frozen" "$source_root"; then
+  /usr/bin/printf '%s\n' 'A replaced freeze-parent identity was accepted.' >&2
+  exit 1
+fi
+[[ ! -e "$parent_swap_frozen" && ! -L "$parent_swap_frozen" ]] \
+  || { /usr/bin/printf '%s\n' 'A parent-identity rejection left a frozen candidate.' >&2; exit 1; }
+
+changing_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-14-21-+0900.xcresult"
+changing_frozen_bundle="$root/changing-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$changing_result_bundle"
+changing_pause_count=0
+result_bundle_stability_pause() {
+  changing_pause_count=$((changing_pause_count + 1))
+  /usr/bin/printf '%s\n' "$changing_pause_count" \
+    >>"$changing_result_bundle/Data/payload"
+}
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
+}
+if freeze_result_bundle_when_stable \
+  "$changing_result_bundle" "$changing_frozen_bundle" "$source_root"; then
+  /usr/bin/printf '%s\n' 'A continuously changing result bundle was accepted.' >&2
+  exit 1
+fi
+[[ ! -e "$changing_frozen_bundle" && ! -L "$changing_frozen_bundle" ]] \
+  || { /usr/bin/printf '%s\n' 'A rejected changing result left a frozen candidate behind.' >&2; exit 1; }
+
+materialized_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-15-21-+0900.xcresult"
+materialized_frozen_bundle="$root/materialized-frozen.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$materialized_result_bundle"
+run_result_bundle_queries() {
+  /usr/bin/printf '%s\n' '{"fixture":"summary"}' >"$2"
+  /usr/bin/printf '%s\n' '{"fixture":"build"}' >"$3"
+  /usr/bin/printf '%s\n' '{"fixture":"action"}' >"$4"
+  /usr/bin/printf '%s\n' 'lazy query index materialized' >>"$1/Data/database.sqlite3"
+}
+materialize_result_bundle_for_queries "$materialized_result_bundle" "$source_root" \
+  || { /usr/bin/printf '%s\n' 'A lazy result-query index could not be materialized.' >&2; exit 1; }
+[[ -f "$materialized_result_bundle/Data/database.sqlite3" ]] \
+  || { /usr/bin/printf '%s\n' 'The lazy query-index fixture did not mutate its input bundle.' >&2; exit 1; }
+result_bundle_stability_pause() { :; }
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
+}
+freeze_result_bundle_when_stable \
+  "$materialized_result_bundle" "$materialized_frozen_bundle" "$source_root" \
+  || { /usr/bin/printf '%s\n' 'The materialized result bundle could not be frozen.' >&2; exit 1; }
+[[ -f "$materialized_frozen_bundle/Data/database.sqlite3" ]] \
+  || { /usr/bin/printf '%s\n' 'The frozen result omitted the materialized query index.' >&2; exit 1; }
+materialized_digest_before_query="$(result_bundle_tree_digest \
+  "$materialized_frozen_bundle" "$source_root")"
+extract_result_bundle_query_outputs "$materialized_frozen_bundle" "$source_root" \
+  "$materialized_digest_before_query" "$root/disposable-summary.json" \
+  "$root/disposable-build.json" "$root/disposable-action.json" \
+  || { /usr/bin/printf '%s\n' 'Disposable result queries were rejected.' >&2; exit 1; }
+[[ "$(result_bundle_tree_digest "$materialized_frozen_bundle" "$source_root")" \
+    == "$materialized_digest_before_query" \
+  && "$(/usr/bin/awk 'END { print NR + 0 }' "$materialized_frozen_bundle/Data/database.sqlite3")" \
+    == 1 ]] \
+  || { /usr/bin/printf '%s\n' 'A disposable query mutated the authoritative frozen bundle.' >&2; exit 1; }
+for query_output in "$root/disposable-summary.json" "$root/disposable-build.json" \
+  "$root/disposable-action.json"; do
+  [[ -f "$query_output" && ! -L "$query_output" ]] \
+    || { /usr/bin/printf '%s\n' 'A disposable query output is missing.' >&2; exit 1; }
+done
+result_bundle_stability_pause() { /bin/sleep 1; }
+result_bundle_set_monotonic_now() {
+  monotonic_now="$(/usr/bin/python3 -I -c 'import time; print(time.monotonic_ns())')"
+}
 result_bundle_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")"
 gate_log="$root/prepublication-gate.log"
 /usr/bin/printf 'LectureBoard evidence transaction source commit: %s\n' \
@@ -237,6 +637,199 @@ valid_test_evidence="$root/$release_test_evidence_name"
   >"$valid_test_evidence"
 release_test_evidence_is_valid "$valid_test_evidence" "$commit" \
   || { /usr/bin/printf '%s\n' 'Valid release test evidence was rejected.' >&2; exit 1; }
+validated_evidence_digest="$(sha256 "$valid_test_evidence")"
+regular_file_matches_sha256 "$valid_test_evidence" "$validated_evidence_digest" \
+  || { /usr/bin/printf '%s\n' 'A byte-identical pinned evidence file was rejected.' >&2; exit 1; }
+for pinned_mutation in authoritative-tests environment generated-at; do
+  pinned_root="$root/pinned-$pinned_mutation"
+  /bin/mkdir "$pinned_root"
+  case "$pinned_mutation" in
+    authoritative-tests)
+      /usr/bin/sed 's/"authoritativeTests":417/"authoritativeTests":418/' \
+        "$valid_test_evidence" >"$pinned_root/$release_test_evidence_name"
+      ;;
+    environment)
+      /usr/bin/sed 's/"xcode":"26.6"/"xcode":"26.7"/' \
+        "$valid_test_evidence" >"$pinned_root/$release_test_evidence_name"
+      ;;
+    generated-at)
+      /usr/bin/sed 's/2026-09-06T00:00:00Z/2026-09-06T00:00:01Z/' \
+        "$valid_test_evidence" >"$pinned_root/$release_test_evidence_name"
+      ;;
+  esac
+  if regular_file_matches_sha256 "$pinned_root/$release_test_evidence_name" \
+    "$validated_evidence_digest"; then
+    /usr/bin/printf '%s\n' \
+      "A post-validation $pinned_mutation evidence mutation retained the byte pin." >&2
+    exit 1
+  fi
+done
+
+exact_private_evidence="$root/exact-private-evidence"
+/bin/mkdir "$exact_private_evidence"
+/bin/cp "$valid_test_evidence" \
+  "$exact_private_evidence/$release_test_evidence_name"
+/bin/cp "$gate_log" "$exact_private_evidence/prepublication-gate.log"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" \
+  "$exact_private_evidence/${result_bundle##*/}"
+private_evidence_directory_is_exact "$exact_private_evidence" "${result_bundle##*/}" \
+  || { /usr/bin/printf '%s\n' 'An exact three-entry private evidence directory was rejected.' >&2; exit 1; }
+/usr/bin/printf '%s\n' 'unexpected top-level bytes' >"$exact_private_evidence/extra.txt"
+if private_evidence_directory_is_exact "$exact_private_evidence" "${result_bundle##*/}"; then
+  /usr/bin/printf '%s\n' 'An extra private-evidence regular file was accepted.' >&2
+  exit 1
+fi
+/bin/unlink "$exact_private_evidence/extra.txt"
+/bin/ln -s "$gate_log" "$exact_private_evidence/extra-link"
+if private_evidence_directory_is_exact "$exact_private_evidence" "${result_bundle##*/}"; then
+  /usr/bin/printf '%s\n' 'An extra private-evidence symlink was accepted.' >&2
+  exit 1
+fi
+/bin/unlink "$exact_private_evidence/extra-link"
+second_private_result="$exact_private_evidence/Test-LectureBoardAI-2026.09.06_09-99-99-+0900.xcresult"
+/bin/mkdir "$second_private_result"
+if private_evidence_directory_is_exact "$exact_private_evidence" "${result_bundle##*/}"; then
+  /usr/bin/printf '%s\n' 'A second private-evidence result bundle was accepted.' >&2
+  exit 1
+fi
+/bin/rmdir "$second_private_result"
+private_evidence_directory_is_exact "$exact_private_evidence" "${result_bundle##*/}" \
+  || { /usr/bin/printf '%s\n' 'Exact private evidence was not restored after rejection fixtures.' >&2; exit 1; }
+
+setup_post_handoff_fixture() {
+  local fixture_name="$1"
+  post_handoff_parent="$root/post-handoff-$fixture_name"
+  post_handoff_stage="$post_handoff_parent/.lectureboard-v1-evidence.post-validation"
+  post_handoff_output="$post_handoff_parent/published-evidence"
+  post_handoff_result_name="Test-LectureBoardAI-2026.09.06_10-00-00-+0900.xcresult"
+  /bin/mkdir -p "$post_handoff_stage/$post_handoff_result_name/Data"
+  /usr/bin/printf '%s\n' '{"fixture":"post-handoff"}' \
+    >"$post_handoff_stage/$release_test_evidence_name"
+  /usr/bin/printf '%s\n' 'gate fixture' \
+    >"$post_handoff_stage/prepublication-gate.log"
+  /usr/bin/printf '%s\n' 'result fixture' \
+    >"$post_handoff_stage/$post_handoff_result_name/Data/payload"
+  /usr/bin/printf '%s\n' 'unrelated sibling' >"$post_handoff_parent/do-not-delete"
+  post_handoff_evidence_digest="$(sha256 \
+    "$post_handoff_stage/$release_test_evidence_name")"
+  post_handoff_parent_identity="$(directory_identity "$post_handoff_parent")"
+  post_handoff_stage_identity="$(directory_identity "$post_handoff_stage")"
+  exec 9<"$post_handoff_parent"
+  exec 8<"$post_handoff_stage"
+  directory_descriptor_matches_identity 9 "$post_handoff_parent_identity" || return 1
+  directory_descriptor_matches_identity 8 "$post_handoff_stage_identity" || return 1
+  /bin/mv "$post_handoff_stage" "$post_handoff_output"
+}
+cleanup_post_handoff_fixture() {
+  local cleanup_status=0
+  cleanup_known_evidence_handoff \
+    "$post_handoff_parent" "$post_handoff_parent_identity" \
+    "$post_handoff_stage" "$post_handoff_output" "$post_handoff_stage_identity" 9 8 \
+    || cleanup_status=$?
+  exec 8<&-
+  exec 9<&-
+  [[ "$cleanup_status" == 0 ]]
+}
+published_evidence_content_is_valid() { :; }
+
+setup_post_handoff_fixture output-inode-swap \
+  || { /usr/bin/printf '%s\n' 'Output-swap handoff fixture setup failed.' >&2; exit 1; }
+post_handoff_pause_marker="$root/output-inode-swap.pause"
+post_handoff_validation_pause() {
+  /usr/bin/touch "$post_handoff_pause_marker"
+  /bin/mv "$post_handoff_output" "$post_handoff_stage"
+  /bin/mkdir "$post_handoff_output"
+  /usr/bin/printf '%s\n' 'replacement output' >"$post_handoff_output/do-not-delete"
+}
+if validate_published_evidence_handoff \
+  "$post_handoff_parent" "$post_handoff_parent_identity" \
+  "$post_handoff_stage" "$post_handoff_output" "$post_handoff_stage_identity" 9 8 \
+  "$post_handoff_result_name" "$post_handoff_evidence_digest" "$source_root" "$commit"; then
+  /usr/bin/printf '%s\n' 'A post-validation output-inode swap was accepted.' >&2
+  exit 1
+fi
+[[ -f "$post_handoff_pause_marker" ]] \
+  || { /usr/bin/printf '%s\n' 'Output-inode injection did not reach the validation seam.' >&2; exit 1; }
+cleanup_post_handoff_fixture \
+  || { /usr/bin/printf '%s\n' 'Known output inode was not cleaned after its swap.' >&2; exit 1; }
+[[ ! -e "$post_handoff_stage" && -f "$post_handoff_output/do-not-delete" \
+  && -f "$post_handoff_parent/do-not-delete" ]] \
+  || { /usr/bin/printf '%s\n' 'Output-swap cleanup deleted replacement or unrelated content.' >&2; exit 1; }
+
+setup_post_handoff_fixture parent-inode-swap \
+  || { /usr/bin/printf '%s\n' 'Parent-swap handoff fixture setup failed.' >&2; exit 1; }
+post_handoff_saved_parent="$root/post-handoff-parent-inode-swap.saved"
+post_handoff_pause_marker="$root/parent-inode-swap.pause"
+post_handoff_validation_pause() {
+  /usr/bin/touch "$post_handoff_pause_marker"
+  /bin/mv "$post_handoff_parent" "$post_handoff_saved_parent"
+  /bin/mkdir -p "$post_handoff_output"
+  /usr/bin/printf '%s\n' 'replacement parent output' >"$post_handoff_output/do-not-delete"
+}
+if validate_published_evidence_handoff \
+  "$post_handoff_parent" "$post_handoff_parent_identity" \
+  "$post_handoff_stage" "$post_handoff_output" "$post_handoff_stage_identity" 9 8 \
+  "$post_handoff_result_name" "$post_handoff_evidence_digest" "$source_root" "$commit"; then
+  /usr/bin/printf '%s\n' 'A post-validation parent-inode swap was accepted.' >&2
+  exit 1
+fi
+[[ -f "$post_handoff_pause_marker" ]] \
+  || { /usr/bin/printf '%s\n' 'Parent-inode injection did not reach the validation seam.' >&2; exit 1; }
+cleanup_post_handoff_fixture \
+  || { /usr/bin/printf '%s\n' 'Known output inode was not cleaned through its retained parent.' >&2; exit 1; }
+[[ ! -e "$post_handoff_saved_parent/${post_handoff_output##*/}" \
+  && -f "$post_handoff_saved_parent/do-not-delete" \
+  && -f "$post_handoff_output/do-not-delete" ]] \
+  || { /usr/bin/printf '%s\n' 'Parent-swap cleanup deleted replacement or unrelated content.' >&2; exit 1; }
+
+setup_post_handoff_fixture extra-top-level-entry \
+  || { /usr/bin/printf '%s\n' 'Extra-entry handoff fixture setup failed.' >&2; exit 1; }
+post_handoff_pause_marker="$root/extra-top-level-entry.pause"
+post_handoff_validation_pause() {
+  /usr/bin/touch "$post_handoff_pause_marker"
+  /usr/bin/printf '%s\n' 'late extra entry' >"$post_handoff_output/extra.txt"
+}
+if validate_published_evidence_handoff \
+  "$post_handoff_parent" "$post_handoff_parent_identity" \
+  "$post_handoff_stage" "$post_handoff_output" "$post_handoff_stage_identity" 9 8 \
+  "$post_handoff_result_name" "$post_handoff_evidence_digest" "$source_root" "$commit"; then
+  /usr/bin/printf '%s\n' 'A post-validation extra top-level entry was accepted.' >&2
+  exit 1
+fi
+[[ -f "$post_handoff_pause_marker" ]] \
+  || { /usr/bin/printf '%s\n' 'Extra-entry injection did not reach the validation seam.' >&2; exit 1; }
+cleanup_post_handoff_fixture \
+  || { /usr/bin/printf '%s\n' 'Known evidence inode was not cleaned after late mutation.' >&2; exit 1; }
+[[ ! -e "$post_handoff_output" && -f "$post_handoff_parent/do-not-delete" ]] \
+  || { /usr/bin/printf '%s\n' 'Extra-entry cleanup deleted unrelated sibling content.' >&2; exit 1; }
+
+post_handoff_validation_pause() { :; }
+setup_post_handoff_fixture final-token-gate-mutation \
+  || { /usr/bin/printf '%s\n' 'Final-token handoff fixture setup failed.' >&2; exit 1; }
+post_handoff_pause_marker="$root/final-token-gate-mutation.pause"
+post_handoff_final_token_pause() {
+  /usr/bin/touch "$post_handoff_pause_marker"
+  /usr/bin/printf '%s\n' 'mutation in the final validation window' \
+    >>"$post_handoff_output/prepublication-gate.log"
+}
+if validate_published_evidence_handoff \
+  "$post_handoff_parent" "$post_handoff_parent_identity" \
+  "$post_handoff_stage" "$post_handoff_output" "$post_handoff_stage_identity" 9 8 \
+  "$post_handoff_result_name" "$post_handoff_evidence_digest" "$source_root" "$commit"; then
+  /usr/bin/printf '%s\n' 'A gate-log mutation immediately before the final token was accepted.' >&2
+  exit 1
+fi
+[[ -f "$post_handoff_pause_marker" ]] \
+  || { /usr/bin/printf '%s\n' 'Final-token mutation did not reach its injection seam.' >&2; exit 1; }
+cleanup_post_handoff_fixture \
+  || { /usr/bin/printf '%s\n' 'Known evidence inode was not cleaned after final-window mutation.' >&2; exit 1; }
+[[ ! -e "$post_handoff_output" && -f "$post_handoff_parent/do-not-delete" ]] \
+  || { /usr/bin/printf '%s\n' 'Final-window cleanup deleted unrelated sibling content.' >&2; exit 1; }
+
+post_handoff_final_token_pause() { :; }
+published_evidence_content_is_valid() {
+  published_evidence_content_is_valid_original "$@"
+}
 for malformed_blob in \
   0000000000000000000000000000000000000000 \
   0000000000000000000000000000000000000000000000000000000000000000 \

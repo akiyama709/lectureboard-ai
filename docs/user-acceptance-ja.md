@@ -41,9 +41,10 @@
 6. 日本語又は英語のうち資料の主言語で約30秒話し，final transcriptと文脈に根拠のある板書を確認する．
 7. mouse又はtrackpadで短い手書き線を1本描き，AI overlayが入力を妨げず，人間入力が優先されることを確認する．
 8. text，box，arrow又は簡単なdiagramが表示された場合，既存内容を覆わず，根拠のない内容を追加せず，読める間は安定していることを確認する．
-9. lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．
-10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ることを確認する．
-11. 受入用複製物を保存せずに閉じ，元PPTX及び複製物のbyte sizeとSHA-256を実施前の値と比較する．
+9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．
+10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．
+11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．
+12. 受入用複製物を保存せずに閉じ，元PPTX及び複製物のbyte sizeとSHA-256を実施前の値と比較する．
 
 ## 合格条件
 

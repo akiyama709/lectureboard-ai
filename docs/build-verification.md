@@ -1187,3 +1187,81 @@ macOS 26.6.2. This run verifies the still-uncommitted working candidate only. It
 exact-commit `evidence` transaction, hardened ad hoc-signed Release archive, owner-selected PPTX
 acceptance, Gatekeeper result, GitHub Actions result, public Release, or unauthenticated public
 re-download verification required for completion.
+
+### Failed exact-commit evidence freeze and result-bundle hardening on 2026-09-06
+
+The release hardening above was committed as exact source commit
+`0cb9c92847723191248dff26a530f023dc1a91fd`. An isolated `evidence` invocation cloned that exact
+commit, and its console output showed all 26 prepublication-gate stages completing before the
+evidence-freezing phase stopped fail closed with `result bundle changed while it was being frozen`.
+Failure cleanup removed the temporary checkout and staging output, and the requested persistent
+evidence directory did not exist afterward. The observed gate portion therefore completed for the
+exact isolated checkout, but this run did not retain a formal gate log, an authoritative frozen
+`.xcresult`, public test JSON, a Release archive, or any publication result.
+
+The source and copied result bundles from the stopped transaction were removed by cleanup, and the
+previous implementation did not log the three digest values that it compared. It is therefore not
+possible to establish retrospectively whether the source changed across the copy, the copied
+bundle differed from the earlier source digest, or both. An independent reproduction nevertheless
+established a relevant Xcode 26 lifecycle behavior: running
+`xcresulttool get test-results summary` against a copied `.xcresult` that initially lacked its
+query index added one root-level, 479,232-byte `database.sqlite3`; that file was the reproduction's
+only manifest addition. Separately, the local 11:50 result bundle's `Data` directory was last
+modified and its `Info.plist` was written at approximately 11:50:59, whereas its root-level
+`database.sqlite3` was created at 11:54:34 and modified at 11:54:35. These observations establish
+that an `xcresulttool` query can mutate its input bundle after the test action appears complete.
+They make that lifecycle behavior a plausible explanation for the stopped freeze, but they do not
+prove which comparison failed in the deleted transaction or exclude another delayed update.
+
+The evidence path now deliberately runs the result queries once against the newly produced bundle
+to materialize lazy query indexes before freezing. It then requires six matching whole-tree
+stability observations spanning at least five seconds. That stability token is advisory; the
+acceptance boundary remains the canonical tree digest. For each copy attempt, the pre-copy source
+digest and the post-copy canonical digests of both source and candidate must all match, with
+directory-identity and stability-token checks around those operations. The token rechecks the full
+sorted entry set and every captured entry identity after all file-content hashing, so a finite
+change to an earlier child while a later child is being read is rejected. A failed pair comparison
+may discard one candidate and retry once; a second failed copy attempt stops fail closed. Later
+`xcresulttool` validation queries run only against disposable copies and must leave the
+authoritative frozen bundle's canonical digest unchanged.
+
+The private evidence directory must contain exactly three top-level entries: the content-free
+public JSON, `prepublication-gate.log`, and one correctly named `.xcresult`. The JSON's complete
+bytes are SHA-256-pinned through validation and the exclusive handoff. Cleanup intent is armed
+before the rename helper runs, and cleanup of either the staging name or the handed-off output is
+bound to captured parent and target device/inode identities and retained directory descriptors.
+Post-handoff validation checks those identities at entry and completion, brackets content
+validation with a whole-directory token, and repeats the exact-three-entry and JSON-byte checks
+immediately before the cleanup intent is disarmed.
+
+Targeted fixtures exercise a finite delayed update followed by stabilization, source mutation
+during the first copy followed by a clean second copy, mutation of the copied candidate, continuing
+mutation with no accepted candidate, mutation immediately after canonical digest output,
+result-bundle-root and destination-parent replacement, and a self-mutating query confined to a
+disposable copy. Additional fixtures reject representative post-validation JSON byte changes,
+extra private-evidence files, symlinks, and a second `.xcresult`; source-order sentinels require the
+JSON checks and cleanup intent on both sides of the exclusive handoff. Cleanup fixtures cover the
+known staging and post-rename identities, an unrelated destination conflict, and path replacement
+without deleting the replacement. Three execution fixtures additionally inject an output-inode
+swap, a parent-inode swap, and a late extra top-level entry during post-handoff validation; each
+must fail closed, clean only the retained known evidence inode, and preserve replacement and
+unrelated content. A deterministic mid-token fixture changes an already hashed child while a later
+child is being hashed, and a final-window fixture changes the gate log immediately before the last
+whole-directory token; both are rejected. A separate APFS fixture confirms that cleanup fails
+closed when its retained target is no longer a direct child of the retained parent, without
+altering an unrelated sibling. `./scripts/test-no-fee-release-v1.sh`,
+`./scripts/test-release-shell-security.sh`, `./scripts/test-release-exclusive-rename.sh`,
+`./scripts/check-release-definition.sh`, `./scripts/test-check-release-definition.sh`,
+`./scripts/check-version-consistency.sh`, Bash syntax checks, and `git diff --check` passed after
+these changes. These are targeted tooling results only. The hardened code remained uncommitted at
+this checkpoint, and no new exact-commit `evidence` transaction or Release package had yet passed.
+
+The owner-acceptance procedure was also corrected to match the existing application boundary.
+`AppModel.canExportLectureSession` requires at least one retained public scene, no capture-stop
+operation in flight, and capture status `stopped` or `error`; export is unavailable while capture
+is `starting` or `capturing`. The previous procedure incorrectly placed export before capture
+stop. The documented sequence now stops transcription, stops capture and confirms managed
+slide-show cleanup, and only then exports JSON and SVG. The release-definition fixture swaps the
+capture-stop and export steps and requires that invalid order to be rejected. This is a
+documentation and policy correction with regression coverage; it is not evidence that a live
+export or owner-selected PPTX acceptance has run.

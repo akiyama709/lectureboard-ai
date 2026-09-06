@@ -50,6 +50,36 @@ reject_text() {
   fi
 }
 
+require_ordered_text() {
+  local path="$1"
+  shift
+  local expected
+  local observed_count
+  local observed_line
+  local previous_line=0
+
+  for expected in "$@"; do
+    observed_count="$(/usr/bin/grep -Fc -- "$expected" "$path")" || true
+    if [[ "$observed_count" != 1 ]]; then
+      printf 'Ordered release definition must occur exactly once in %s: %s (found %s)\n' \
+        "$path" "$expected" "$observed_count" >&2
+      exit 1
+    fi
+    observed_line="$(/usr/bin/awk -v expected="$expected" '
+      index($0, expected) {
+        print NR
+        exit
+      }
+    ' "$path")"
+    if [[ ! "$observed_line" =~ ^[0-9]+$ || "$observed_line" -le "$previous_line" ]]; then
+      printf 'Required release definitions are out of order in %s: %s\n' \
+        "$path" "$expected" >&2
+      exit 1
+    fi
+    previous_line="$observed_line"
+  done
+}
+
 require_bash_syntax() {
   local path="$1"
   if ! /bin/bash -p -n "$path"; then
@@ -572,6 +602,10 @@ require_text docs/user-acceptance-ja.md '元のPPTXを上書きしない'
 require_text docs/user-acceptance-ja.md '画面収録が許可済みなら，「画面収録を許可」を再度押さない'
 require_text docs/user-acceptance-ja.md '元PPTX及び受入用複製物のbyte sizeとSHA-256が実施前後で一致する'
 require_text docs/user-acceptance-ja.md 'この受入は，公開の承認とは別である'
+require_ordered_text docs/user-acceptance-ja.md \
+  '9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．' \
+  '10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．' \
+  '11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．'
 require_text docs/user-guide.md 'Status: procedural draft'
 require_text docs/user-guide.md 'Never disable Gatekeeper globally and never remove quarantine metadata'
 require_text docs/user-guide.md 'fails closed instead of using a network fallback'

@@ -440,6 +440,31 @@ if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
 fi
 mv "$fixture_root/docs/user-acceptance-ja.backup" "$fixture_root/docs/user-acceptance-ja.md"
 
+cp "$fixture_root/docs/user-acceptance-ja.md" \
+  "$fixture_root/docs/user-acceptance-ja.backup"
+/usr/bin/python3 -I - "$fixture_root/docs/user-acceptance-ja.md" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+stop = "10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．"
+export = "11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．"
+lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+if sum(line.rstrip("\r\n") == stop for line in lines) != 1:
+    raise SystemExit(2)
+if sum(line.rstrip("\r\n") == export for line in lines) != 1:
+    raise SystemExit(2)
+stop_index = next(index for index, line in enumerate(lines) if line.rstrip("\r\n") == stop)
+export_index = next(index for index, line in enumerate(lines) if line.rstrip("\r\n") == export)
+lines[stop_index], lines[export_index] = lines[export_index], lines[stop_index]
+path.write_text("".join(lines), encoding="utf-8")
+PY
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted session export before capture stop and managed cleanup.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/user-acceptance-ja.backup" "$fixture_root/docs/user-acceptance-ja.md"
+
 mv "$fixture_root/docs/user-guide.md" "$fixture_root/docs/user-guide.backup"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted a missing user guide.\n' >&2

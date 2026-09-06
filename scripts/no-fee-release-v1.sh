@@ -59,6 +59,338 @@ directory_identity() {
   [[ "$identity" =~ ^[0-9]+\ [0-9]+$ ]] || return 1
   /usr/bin/printf '%s\n' "$identity"
 }
+regular_file_matches_sha256() {
+  local path="$1" expected_digest="$2"
+  [[ "$path" == /* && "$path" != / && "$expected_digest" =~ ^[0-9a-f]{64}$ ]] \
+    || return 1
+  /usr/bin/python3 -I - "$path" "$expected_digest" <<'PY'
+import hashlib,os,stat,sys
+path,expected=sys.argv[1:]
+def identity(value):
+ return (value.st_dev,value.st_ino,value.st_mode,value.st_uid,value.st_gid,value.st_size,
+         value.st_mtime_ns,value.st_ctime_ns,getattr(value,"st_flags",0))
+try:
+ path_before=os.lstat(path)
+ if not stat.S_ISREG(path_before.st_mode) or stat.S_ISLNK(path_before.st_mode):
+  raise ValueError("not a regular file")
+ descriptor=os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
+ try:
+  descriptor_before=os.fstat(descriptor)
+  if identity(descriptor_before)!=identity(path_before):
+   raise ValueError("file identity changed before hashing")
+  digest=hashlib.sha256()
+  while True:
+   chunk=os.read(descriptor,1024*1024)
+   if not chunk: break
+   digest.update(chunk)
+  descriptor_after=os.fstat(descriptor)
+ finally:
+  os.close(descriptor)
+ path_after=os.lstat(path)
+except (OSError,ValueError):
+ raise SystemExit(1)
+if (identity(descriptor_before)!=identity(descriptor_after)
+    or identity(path_before)!=identity(path_after)
+    or digest.hexdigest()!=expected):
+ raise SystemExit(1)
+PY
+}
+private_evidence_directory_is_exact() {
+  local directory="$1" result_bundle_name="$2"
+  [[ "$directory" == /* && "$directory" != / ]] || return 1
+  /usr/bin/python3 -I - "$directory" "$result_bundle_name" \
+    "$release_test_evidence_name" <<'PY'
+import os,re,stat,sys
+directory,result_name,evidence_name=sys.argv[1:]
+if (not re.fullmatch(r"Test-LectureBoardAI-[0-9._+-]+\.xcresult",result_name)
+    or os.path.basename(result_name)!=result_name):
+ raise SystemExit(1)
+try:
+ root=os.lstat(directory)
+ if not stat.S_ISDIR(root.st_mode) or stat.S_ISLNK(root.st_mode): raise ValueError()
+ entries=os.listdir(directory)
+ expected={evidence_name,"prepublication-gate.log",result_name}
+ if len(entries)!=3 or set(entries)!=expected: raise ValueError()
+ for name in entries:
+  value=os.lstat(os.path.join(directory,name))
+  if stat.S_ISLNK(value.st_mode): raise ValueError()
+  if name==result_name:
+   if not stat.S_ISDIR(value.st_mode): raise ValueError()
+  elif not stat.S_ISREG(value.st_mode):
+   raise ValueError()
+except (OSError,ValueError):
+ raise SystemExit(1)
+PY
+}
+delete_directory_with_identity() {
+  local parent="$1" expected_parent_identity="$2" target="$3" expected_target_identity="$4"
+  local parent_device parent_inode target_device target_inode
+  [[ "$parent" == /* && "$parent" != / && "$target" == /* && "$target" != / \
+    && "$(/usr/bin/dirname -- "$target")" == "$parent" \
+    && "$expected_parent_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$expected_target_identity" =~ ^[0-9]+\ [0-9]+$ ]] || return 1
+  parent_device="${expected_parent_identity% *}"
+  parent_inode="${expected_parent_identity#* }"
+  target_device="${expected_target_identity% *}"
+  target_inode="${expected_target_identity#* }"
+  /usr/bin/python3 -I - "$parent" "${target##*/}" \
+    "$parent_device" "$parent_inode" "$target_device" "$target_inode" <<'PY'
+import os,stat,sys
+parent,name,pdev,pino,tdev,tino=sys.argv[1:]
+expected_parent=(int(pdev),int(pino)); expected_target=(int(tdev),int(tino))
+if not name or name in {".",".."} or "/" in name: raise SystemExit(1)
+flags=os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW
+def object_id(value): return (value.st_dev,value.st_ino)
+def open_directory(name,dir_fd=None):
+ descriptor=os.open(name,flags,dir_fd=dir_fd)
+ value=os.fstat(descriptor)
+ if not stat.S_ISDIR(value.st_mode):
+  os.close(descriptor); raise OSError("not a directory")
+ return descriptor,value
+def clear_directory(descriptor):
+ for child in sorted(os.listdir(descriptor)):
+  before=os.stat(child,dir_fd=descriptor,follow_symlinks=False)
+  if stat.S_ISDIR(before.st_mode) and not stat.S_ISLNK(before.st_mode):
+   child_fd,opened=open_directory(child,descriptor)
+   try:
+    if object_id(opened)!=object_id(before): raise OSError("child identity changed")
+    clear_directory(child_fd)
+    after_fd=os.fstat(child_fd)
+    after_name=os.stat(child,dir_fd=descriptor,follow_symlinks=False)
+    if (object_id(after_fd)!=object_id(opened)
+        or object_id(after_name)!=object_id(opened)): raise OSError("child replaced")
+   finally:
+    os.close(child_fd)
+   os.rmdir(child,dir_fd=descriptor)
+  else:
+   os.unlink(child,dir_fd=descriptor)
+try:
+ parent_fd,parent_status=open_directory(parent)
+ try:
+  if object_id(parent_status)!=expected_parent: raise OSError("parent replaced")
+  named_status=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+  if not stat.S_ISDIR(named_status.st_mode) or object_id(named_status)!=expected_target:
+   raise OSError("target replaced")
+  target_fd,target_status=open_directory(name,parent_fd)
+  try:
+   if object_id(target_status)!=expected_target: raise OSError("target changed before open")
+   clear_directory(target_fd)
+   final_fd=os.fstat(target_fd)
+   final_name=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+   if object_id(final_fd)!=expected_target or object_id(final_name)!=expected_target:
+    raise OSError("target replaced before removal")
+  finally:
+   os.close(target_fd)
+  os.rmdir(name,dir_fd=parent_fd)
+ finally:
+  os.close(parent_fd)
+except OSError:
+ raise SystemExit(1)
+PY
+}
+directory_descriptor_matches_identity() {
+  local descriptor="$1" expected_identity="$2" expected_device expected_inode
+  [[ "$descriptor" =~ ^[3-9][0-9]*$ \
+    && "$expected_identity" =~ ^[0-9]+\ [0-9]+$ ]] || return 1
+  expected_device="${expected_identity% *}"
+  expected_inode="${expected_identity#* }"
+  /usr/bin/python3 -I - "$descriptor" "$expected_device" "$expected_inode" <<'PY'
+import os,stat,sys
+try:
+ value=os.fstat(int(sys.argv[1]))
+except (OSError,ValueError):
+ raise SystemExit(1)
+if not stat.S_ISDIR(value.st_mode) or (value.st_dev,value.st_ino)!=(int(sys.argv[2]),int(sys.argv[3])):
+ raise SystemExit(1)
+PY
+}
+delete_directory_from_descriptors_with_identity() {
+  local parent_descriptor="$1" target_descriptor="$2"
+  local expected_parent_identity="$3" expected_target_identity="$4"
+  local parent_device parent_inode target_device target_inode
+  [[ "$parent_descriptor" =~ ^[3-9][0-9]*$ \
+    && "$target_descriptor" =~ ^[3-9][0-9]*$ \
+    && "$expected_parent_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$expected_target_identity" =~ ^[0-9]+\ [0-9]+$ ]] || return 1
+  parent_device="${expected_parent_identity% *}"
+  parent_inode="${expected_parent_identity#* }"
+  target_device="${expected_target_identity% *}"
+  target_inode="${expected_target_identity#* }"
+  /usr/bin/python3 -I - "$parent_descriptor" "$target_descriptor" \
+    "$parent_device" "$parent_inode" "$target_device" "$target_inode" <<'PY'
+import os,stat,sys
+parent_fd,target_fd,pdev,pino,tdev,tino=map(int,sys.argv[1:])
+expected_parent=(pdev,pino); expected_target=(tdev,tino)
+flags=os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW
+def object_id(value): return (value.st_dev,value.st_ino)
+def open_directory(name,dir_fd):
+ descriptor=os.open(name,flags,dir_fd=dir_fd)
+ value=os.fstat(descriptor)
+ if not stat.S_ISDIR(value.st_mode):
+  os.close(descriptor); raise OSError("not a directory")
+ return descriptor,value
+def clear_directory(descriptor):
+ for child in sorted(os.listdir(descriptor)):
+  before=os.stat(child,dir_fd=descriptor,follow_symlinks=False)
+  if stat.S_ISDIR(before.st_mode) and not stat.S_ISLNK(before.st_mode):
+   child_fd,opened=open_directory(child,descriptor)
+   try:
+    if object_id(opened)!=object_id(before): raise OSError("child identity changed")
+    clear_directory(child_fd)
+    after_fd=os.fstat(child_fd)
+    after_name=os.stat(child,dir_fd=descriptor,follow_symlinks=False)
+    if object_id(after_fd)!=object_id(opened) or object_id(after_name)!=object_id(opened):
+     raise OSError("child replaced")
+   finally:
+    os.close(child_fd)
+   os.rmdir(child,dir_fd=descriptor)
+  else:
+   os.unlink(child,dir_fd=descriptor)
+try:
+ parent_status=os.fstat(parent_fd); target_status=os.fstat(target_fd)
+ if (not stat.S_ISDIR(parent_status.st_mode) or object_id(parent_status)!=expected_parent
+     or not stat.S_ISDIR(target_status.st_mode) or object_id(target_status)!=expected_target):
+  raise OSError("retained descriptor identity changed")
+ matches=[]
+ for name in os.listdir(parent_fd):
+  value=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+  if stat.S_ISDIR(value.st_mode) and object_id(value)==expected_target: matches.append(name)
+ if not matches:
+  raise OSError("retained directory is not a direct child of its retained parent")
+ if len(matches)!=1: raise OSError("ambiguous retained directory")
+ name=matches[0]
+ opened_fd,opened_status=open_directory(name,parent_fd)
+ try:
+  if object_id(opened_status)!=expected_target: raise OSError("retained directory replaced")
+  clear_directory(opened_fd)
+  final_fd=os.fstat(opened_fd)
+  final_name=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+  if object_id(final_fd)!=expected_target or object_id(final_name)!=expected_target:
+   raise OSError("retained directory replaced before removal")
+ finally:
+  os.close(opened_fd)
+ os.rmdir(name,dir_fd=parent_fd)
+except OSError:
+ raise SystemExit(1)
+PY
+}
+cleanup_known_evidence_handoff() {
+  local parent="$1" expected_parent_identity="$2" stage="$3" output="$4"
+  local expected_stage_identity="$5" parent_descriptor="${6:-}" stage_descriptor="${7:-}"
+  local candidate candidate_identity
+  [[ "$parent" == /* && "$parent" != / \
+    && "$expected_parent_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$expected_stage_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$stage" == /* && "$output" == /* && "$stage" != "$output" \
+    && "$(/usr/bin/dirname -- "$stage")" == "$parent" \
+    && "$(/usr/bin/dirname -- "$output")" == "$parent" \
+    && "${stage##*/}" == .lectureboard-v1-evidence.* ]] \
+    || return 1
+  if [[ -n "$parent_descriptor" || -n "$stage_descriptor" ]]; then
+    [[ -n "$parent_descriptor" && -n "$stage_descriptor" ]] || return 1
+    delete_directory_from_descriptors_with_identity \
+      "$parent_descriptor" "$stage_descriptor" \
+      "$expected_parent_identity" "$expected_stage_identity"
+    return
+  fi
+  [[ -d "$parent" && ! -L "$parent" \
+    && "$(directory_identity "$parent")" == "$expected_parent_identity" ]] || return 1
+  for candidate in "$stage" "$output"; do
+    [[ -e "$candidate" || -L "$candidate" ]] || continue
+    [[ -d "$candidate" && ! -L "$candidate" ]] || continue
+    candidate_identity="$(directory_identity "$candidate")" || continue
+    [[ "$candidate_identity" == "$expected_stage_identity" ]] || continue
+    delete_directory_with_identity "$parent" "$expected_parent_identity" \
+      "$candidate" "$expected_stage_identity" || return 1
+  done
+}
+evidence_handoff_identities_are_valid() {
+  local parent="$1" expected_parent_identity="$2" stage="$3" output="$4"
+  local expected_stage_identity="$5" parent_descriptor="$6" stage_descriptor="$7"
+  local parent_device parent_inode stage_device stage_inode
+  [[ "$parent" == /* && "$parent" != / && "$stage" == /* && "$output" == /* \
+    && "$stage" != "$output" && "$(/usr/bin/dirname -- "$stage")" == "$parent" \
+    && "$(/usr/bin/dirname -- "$output")" == "$parent" \
+    && "$expected_parent_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$expected_stage_identity" =~ ^[0-9]+\ [0-9]+$ \
+    && "$parent_descriptor" =~ ^[3-9][0-9]*$ \
+    && "$stage_descriptor" =~ ^[3-9][0-9]*$ ]] || return 1
+  parent_device="${expected_parent_identity% *}"; parent_inode="${expected_parent_identity#* }"
+  stage_device="${expected_stage_identity% *}"; stage_inode="${expected_stage_identity#* }"
+  /usr/bin/python3 -I - "$parent" "${stage##*/}" "${output##*/}" \
+    "$parent_descriptor" "$stage_descriptor" "$parent_device" "$parent_inode" \
+    "$stage_device" "$stage_inode" <<'PY'
+import os,stat,sys
+parent,stage_name,output_name,pfd,sfd,pdev,pino,sdev,sino=sys.argv[1:]
+pfd,sfd,pdev,pino,sdev,sino=map(int,(pfd,sfd,pdev,pino,sdev,sino))
+expected_parent=(pdev,pino); expected_stage=(sdev,sino)
+def object_id(value): return (value.st_dev,value.st_ino)
+try:
+ parent_fd=os.fstat(pfd); stage_fd=os.fstat(sfd); parent_path=os.lstat(parent)
+ output_path=os.lstat(os.path.join(parent,output_name))
+ output_at_fd=os.stat(output_name,dir_fd=pfd,follow_symlinks=False)
+ try:
+  os.stat(stage_name,dir_fd=pfd,follow_symlinks=False)
+ except FileNotFoundError:
+  pass
+ else:
+  raise OSError("stage name still exists")
+except OSError:
+ raise SystemExit(1)
+if (not stat.S_ISDIR(parent_fd.st_mode) or object_id(parent_fd)!=expected_parent
+    or not stat.S_ISDIR(parent_path.st_mode) or object_id(parent_path)!=expected_parent
+    or not stat.S_ISDIR(stage_fd.st_mode) or object_id(stage_fd)!=expected_stage
+    or not stat.S_ISDIR(output_path.st_mode) or object_id(output_path)!=expected_stage
+    or not stat.S_ISDIR(output_at_fd.st_mode) or object_id(output_at_fd)!=expected_stage):
+ raise SystemExit(1)
+PY
+}
+post_handoff_validation_pause() {
+  :
+}
+post_handoff_final_token_pause() {
+  :
+}
+published_evidence_content_is_valid() {
+  local evidence_path="$1" result_bundle="$2" source_root="$3" expected_commit="$4"
+  local gate_log="$5"
+  release_test_evidence_is_valid "$evidence_path" "$expected_commit" \
+    && release_test_evidence_tree_digest_matches \
+      "$evidence_path" "$result_bundle" "$source_root" \
+    && release_gate_log_matches "$evidence_path" "$gate_log" \
+    && release_gate_script_matches_commit "$evidence_path" "$source_root" "$expected_commit"
+}
+validate_published_evidence_handoff() {
+  local parent="$1" expected_parent_identity="$2" stage="$3" output="$4"
+  local expected_stage_identity="$5" parent_descriptor="$6" stage_descriptor="$7"
+  local result_bundle_name="$8" evidence_digest="$9" source_root="${10}" expected_commit="${11}"
+  local evidence_path="$output/$release_test_evidence_name"
+  local result_bundle="$output/$result_bundle_name" gate_log="$output/prepublication-gate.log"
+  local token_before token_after token_final
+  evidence_handoff_identities_are_valid "$parent" "$expected_parent_identity" \
+    "$stage" "$output" "$expected_stage_identity" "$parent_descriptor" "$stage_descriptor" \
+    || return 1
+  private_evidence_directory_is_exact "$output" "$result_bundle_name" || return 1
+  regular_file_matches_sha256 "$evidence_path" "$evidence_digest" || return 1
+  token_before="$(result_bundle_stability_token "$output")" || return 1
+  evidence_handoff_identities_are_valid "$parent" "$expected_parent_identity" \
+    "$stage" "$output" "$expected_stage_identity" "$parent_descriptor" "$stage_descriptor" \
+    || return 1
+  published_evidence_content_is_valid \
+    "$evidence_path" "$result_bundle" "$source_root" "$expected_commit" "$gate_log" \
+    || return 1
+  post_handoff_validation_pause || return 1
+  token_after="$(result_bundle_stability_token "$output")" || return 1
+  [[ "$token_after" == "$token_before" ]] || return 1
+  evidence_handoff_identities_are_valid "$parent" "$expected_parent_identity" \
+    "$stage" "$output" "$expected_stage_identity" "$parent_descriptor" "$stage_descriptor" \
+    || return 1
+  private_evidence_directory_is_exact "$output" "$result_bundle_name" || return 1
+  regular_file_matches_sha256 "$evidence_path" "$evidence_digest" || return 1
+  post_handoff_final_token_pause || return 1
+  token_final="$(result_bundle_stability_token "$output")" || return 1
+  [[ "$token_final" == "$token_before" ]]
+}
 hardened_runtime_flag_is_set() {
   local signature_details="$1" flags_hex flags_value
   flags_hex="$(
@@ -363,14 +695,18 @@ release_gate_script_matches_commit() {
 
 write_release_test_evidence() {
   local destination="$1" expected_commit="$2" gate_log="$3" result_bundle="$4" source_root="$5"
-  local result_digest summary_path macos_version macos_build xcode_version xcode_build
+  local expected_result_digest="$6"
+  local result_digest summary_path build_path action_path macos_version macos_build xcode_version xcode_build
   local generated_at gate_log_digest gate_script_blob_oid
-  result_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
-    || die 'result-bundle digest could not be generated'
+  [[ "$expected_result_digest" =~ ^[0-9a-f]{64}$ ]] \
+    || die 'result-bundle digest is malformed'
+  result_digest="$expected_result_digest"
   summary_path="$temp/native-summary.json"
-  /usr/bin/xcrun xcresulttool get test-results summary \
-    --path "$result_bundle" --format json >"$summary_path" \
-    || die 'native result summary could not be generated'
+  build_path="$temp/native-build.json"
+  action_path="$temp/native-action.json"
+  extract_result_bundle_query_outputs "$result_bundle" "$source_root" "$result_digest" \
+    "$summary_path" "$build_path" "$action_path" \
+    || die 'native result queries could not be generated without mutating the authoritative bundle'
   macos_version="$(/usr/bin/sw_vers -productVersion)" \
     || die 'macOS version could not be read'
   macos_build="$(/usr/bin/sw_vers -buildVersion)" \
@@ -425,12 +761,22 @@ with open(destination,"x",encoding="utf-8") as stream:
  json.dump(evidence,stream,ensure_ascii=True,sort_keys=True,separators=(",",":"))
  stream.write("\n")
 PY
+  generated_evidence_digest="$(sha256 "$destination")" \
+    || die 'generated release test-evidence digest could not be captured'
+  [[ "$generated_evidence_digest" =~ ^[0-9a-f]{64}$ ]] \
+    || die 'generated release test-evidence digest is malformed'
   release_test_evidence_is_valid "$destination" "$expected_commit" \
     || die 'generated release test evidence is invalid'
   release_gate_log_matches "$destination" "$gate_log" \
     || die 'generated release test evidence does not match its gate log'
   release_gate_script_matches_commit "$destination" "$source_root" "$expected_commit" \
     || die 'generated release test evidence does not match the committed gate script'
+  native_result_summary_is_valid "$destination" "$summary_path" "$build_path" \
+    "$action_path" "$expected_commit" "$macos_version" "$macos_build" \
+    "$xcode_version" "$xcode_build" \
+    || die 'generated release test evidence does not match the disposable result queries'
+  regular_file_matches_sha256 "$destination" "$generated_evidence_digest" \
+    || die 'generated release test evidence changed while it was being validated'
 }
 
 result_bundle_tree_digest() {
@@ -456,6 +802,378 @@ result_bundle_tree_digest() {
   /usr/bin/printf '%s\n' "$digest"
 }
 
+result_bundle_pair_matches_digest() {
+  local first="$1" second="$2" source_root="$3" expected_digest="$4"
+  local expected_first_token="${5:-}"
+  local digest_root first_path second_path first_pid second_pid
+  local first_status=0 second_status=0 first_digest='' second_digest=''
+  local first_identity second_identity first_token_before second_token_before
+  local first_token_after second_token_after digest_parent_identity digest_root_identity status=0
+  [[ "$expected_digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [[ -z "$expected_first_token" || "$expected_first_token" =~ ^[0-9a-f]{64}$ ]] \
+    || return 1
+  first_identity="$(directory_identity "$first")" || return 1
+  second_identity="$(directory_identity "$second")" || return 1
+  first_token_before="$(result_bundle_stability_token "$first")" || return 1
+  second_token_before="$(result_bundle_stability_token "$second")" || return 1
+  [[ -z "$expected_first_token" || "$first_token_before" == "$expected_first_token" ]] \
+    || return 1
+  [[ "$(directory_identity "$first")" == "$first_identity" \
+    && "$(directory_identity "$second")" == "$second_identity" ]] || return 1
+  digest_root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-result-pair.XXXXXX)" \
+    || return 1
+  digest_parent_identity="$(directory_identity /private/tmp)" || return 1
+  digest_root_identity="$(directory_identity "$digest_root")" || return 1
+  first_path="$digest_root/first.sha256"
+  second_path="$digest_root/second.sha256"
+  (result_bundle_tree_digest "$first" "$source_root" >"$first_path") &
+  first_pid=$!
+  (result_bundle_tree_digest "$second" "$source_root" >"$second_path") &
+  second_pid=$!
+  wait "$first_pid" || first_status=$?
+  wait "$second_pid" || second_status=$?
+  if [[ "$first_status" != 0 || "$second_status" != 0 \
+    || "$(/usr/bin/awk 'END { print NR + 0 }' "$first_path")" != 1 \
+    || "$(/usr/bin/awk 'END { print NR + 0 }' "$second_path")" != 1 ]]; then
+    status=1
+  else
+    IFS= read -r first_digest <"$first_path" || status=1
+    IFS= read -r second_digest <"$second_path" || status=1
+    [[ "$first_digest" == "$expected_digest" \
+      && "$second_digest" == "$expected_digest" ]] || status=1
+  fi
+  second_token_after="$(result_bundle_stability_token "$second")" || status=1
+  first_token_after="$(result_bundle_stability_token "$first")" || status=1
+  [[ "$(directory_identity "$first")" == "$first_identity" \
+    && "$(directory_identity "$second")" == "$second_identity" \
+    && "$first_token_after" == "$first_token_before" \
+    && "$second_token_after" == "$second_token_before" ]] || status=1
+  delete_directory_with_identity /private/tmp "$digest_parent_identity" \
+    "$digest_root" "$digest_root_identity" || status=1
+  [[ "$status" == 0 ]]
+}
+
+result_bundle_stability_pause() {
+  /bin/sleep 1
+}
+
+result_bundle_set_monotonic_now() {
+  monotonic_now="$(/usr/bin/python3 -I -c 'import time; print(time.monotonic_ns())')" \
+    || return 1
+  [[ "$monotonic_now" =~ ^[0-9]+$ ]]
+}
+
+result_bundle_stability_token() {
+  local result_bundle="$1" test_mutate_relative='' test_trigger_relative=''
+  if (( $# != 1 )); then
+    [[ $# == 3 && "${LECTUREBOARD_RELEASE_TEST_MODE:-}" == 1 ]] || return 1
+    test_mutate_relative="$2"
+    test_trigger_relative="$3"
+  fi
+  /usr/bin/python3 -I - "$result_bundle" "$test_mutate_relative" "$test_trigger_relative" <<'PY'
+import hashlib,os,stat,struct,sys
+root,mutate_relative,trigger_relative=sys.argv[1:]
+if not os.path.isabs(root) or not os.path.isdir(root) or os.path.islink(root): raise SystemExit(1)
+h=hashlib.sha256()
+def field(value):
+ data=value if isinstance(value,bytes) else str(value).encode('utf-8','surrogateescape')
+ h.update(struct.pack('>Q',len(data))); h.update(data)
+def identity(value):
+ return (value.st_dev,value.st_ino,value.st_mode,value.st_uid,value.st_gid,value.st_size,
+         value.st_mtime_ns,value.st_ctime_ns,getattr(value,'st_flags',0))
+root_before=os.lstat(root)
+if not stat.S_ISDIR(root_before.st_mode): raise SystemExit(1)
+relative_paths=['.']
+for current,dirs,files in os.walk(root,topdown=True,followlinks=False):
+ dirs.sort(); files.sort()
+ for name in dirs+files:
+  path=os.path.join(current,name); value=os.lstat(path)
+  if stat.S_ISLNK(value.st_mode) or not (stat.S_ISDIR(value.st_mode) or stat.S_ISREG(value.st_mode)):
+   raise SystemExit(1)
+  relative_paths.append(os.path.relpath(path,root))
+relative_paths=sorted(relative_paths)
+if bool(mutate_relative)!=bool(trigger_relative): raise SystemExit(1)
+if mutate_relative:
+ if (mutate_relative not in relative_paths or trigger_relative not in relative_paths
+     or relative_paths.index(mutate_relative)>=relative_paths.index(trigger_relative)):
+  raise SystemExit(1)
+identities={}
+test_mutated=False
+for relative in relative_paths:
+ path=root if relative=='.' else os.path.join(root,relative)
+ before=os.lstat(path); identities[relative]=identity(before)
+ field(relative); field(identity(before))
+ if stat.S_ISREG(before.st_mode):
+  content=hashlib.sha256()
+  with open(path,'rb') as stream:
+   first_chunk=True
+   for chunk in iter(lambda:stream.read(1024*1024),b''):
+    if mutate_relative and relative==trigger_relative and first_chunk:
+     mutate_path=os.path.join(root,mutate_relative)
+     mutate_status=os.lstat(mutate_path)
+     if not stat.S_ISREG(mutate_status.st_mode): raise SystemExit(1)
+     with open(mutate_path,'ab') as mutation: mutation.write(b'\nmid-token-test-mutation\n')
+     test_mutated=True
+    first_chunk=False
+    content.update(chunk)
+  field(content.digest())
+ after=os.lstat(path)
+ if identity(before)!=identity(after): raise SystemExit(1)
+if mutate_relative and not test_mutated: raise SystemExit(1)
+final_relative_paths=['.']
+for current,dirs,files in os.walk(root,topdown=True,followlinks=False):
+ dirs.sort(); files.sort()
+ for name in dirs+files:
+  path=os.path.join(current,name); value=os.lstat(path)
+  if stat.S_ISLNK(value.st_mode) or not (stat.S_ISDIR(value.st_mode) or stat.S_ISREG(value.st_mode)):
+   raise SystemExit(1)
+  final_relative_paths.append(os.path.relpath(path,root))
+final_relative_paths=sorted(final_relative_paths)
+if final_relative_paths!=relative_paths: raise SystemExit(1)
+for relative in final_relative_paths:
+ path=root if relative=='.' else os.path.join(root,relative)
+ if identity(os.lstat(path))!=identities[relative]: raise SystemExit(1)
+print(h.hexdigest())
+PY
+}
+
+copy_result_bundle_for_freeze() {
+  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2"
+}
+
+run_result_bundle_queries() {
+  local result_bundle="$1" summary_path="$2" build_path="$3" action_path="$4"
+  /usr/bin/xcrun xcresulttool get test-results summary \
+    --path "$result_bundle" --format json >"$summary_path" \
+    && /usr/bin/xcrun xcresulttool get build-results \
+      --path "$result_bundle" --format json >"$build_path" \
+    && /usr/bin/xcrun xcresulttool get log --type action \
+      --path "$result_bundle" --compact >"$action_path"
+}
+
+materialize_result_bundle_for_queries() {
+  local result_bundle="$1" source_root="$2" query_root source_identity current_identity status=0
+  local query_parent_identity query_root_identity
+  [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
+    || return 1
+  [[ "$source_root" == /* && -d "$source_root" && ! -L "$source_root" ]] \
+    || return 1
+  source_identity="$(directory_identity "$result_bundle")" || return 1
+  result_bundle_stability_token "$result_bundle" >/dev/null || return 1
+  query_root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-result-materialize.XXXXXX)" \
+    || return 1
+  query_parent_identity="$(directory_identity /private/tmp)" || return 1
+  query_root_identity="$(directory_identity "$query_root")" || return 1
+  if ! run_result_bundle_queries "$result_bundle" \
+    "$query_root/summary.json" "$query_root/build.json" "$query_root/action.json"; then
+    status=1
+  elif [[ ! -f "$query_root/summary.json" || -L "$query_root/summary.json" \
+    || ! -f "$query_root/build.json" || -L "$query_root/build.json" \
+    || ! -f "$query_root/action.json" || -L "$query_root/action.json" ]]; then
+    status=1
+  elif ! current_identity="$(directory_identity "$result_bundle")" \
+    || [[ "$current_identity" != "$source_identity" ]]; then
+    status=1
+  fi
+  delete_directory_with_identity /private/tmp "$query_parent_identity" \
+    "$query_root" "$query_root_identity" || status=1
+  [[ "$status" == 0 ]]
+}
+
+extract_result_bundle_query_outputs() {
+  local result_bundle="$1" source_root="$2" expected_digest="$3"
+  local summary_path="$4" build_path="$5" action_path="$6"
+  local query_root query_bundle source_identity query_identity current_identity source_token
+  local final_source_digest final_source_token query_parent_identity query_root_identity status=0
+  [[ "$expected_digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
+    || return 1
+  [[ "$summary_path" == /* && "$build_path" == /* && "$action_path" == /* \
+    && ! -e "$summary_path" && ! -L "$summary_path" \
+    && ! -e "$build_path" && ! -L "$build_path" \
+    && ! -e "$action_path" && ! -L "$action_path" ]] || return 1
+  source_identity="$(directory_identity "$result_bundle")" || return 1
+  source_token="$(result_bundle_stability_token "$result_bundle")" || return 1
+  query_root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-result-query.XXXXXX)" \
+    || return 1
+  query_parent_identity="$(directory_identity /private/tmp)" || return 1
+  query_root_identity="$(directory_identity "$query_root")" || return 1
+  query_bundle="$query_root/${result_bundle##*/}"
+  if ! /usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$query_bundle"; then
+    status=1
+  elif ! current_identity="$(directory_identity "$result_bundle")" \
+    || [[ "$current_identity" != "$source_identity" ]] \
+    || ! query_identity="$(directory_identity "$query_bundle")"; then
+    status=1
+  elif ! result_bundle_pair_matches_digest \
+    "$result_bundle" "$query_bundle" "$source_root" "$expected_digest" "$source_token"; then
+    status=1
+  fi
+  if [[ "$status" == 0 ]] && ! run_result_bundle_queries "$query_bundle" \
+    "$summary_path" "$build_path" "$action_path"; then
+    status=1
+  elif [[ "$status" == 0 ]] && { ! regular "$summary_path" result-summary \
+    || ! regular "$build_path" result-build \
+    || ! regular "$action_path" result-action \
+    || [[ "$(directory_identity "$query_bundle")" != "$query_identity" ]] \
+    || [[ "$(directory_identity "$result_bundle")" != "$source_identity" ]] \
+    || ! final_source_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
+    || ! final_source_token="$(result_bundle_stability_token "$result_bundle")" \
+    || [[ "$final_source_digest" != "$expected_digest" \
+      || "$final_source_token" != "$source_token" ]]; }; then
+    status=1
+  fi
+  delete_directory_with_identity /private/tmp "$query_parent_identity" \
+    "$query_root" "$query_root_identity" || status=1
+  [[ "$status" == 0 ]]
+}
+
+freeze_result_bundle_when_stable() {
+  local result_bundle="$1" destination="$2" source_root="$3"
+  local destination_parent destination_parent_physical destination_leaf
+  local source_identity parent_identity current_identity current_parent_identity destination_identity
+  local current_token='' previous_token='' post_digest_token=''
+  local destination_token='' post_pair_source_token='' post_pair_destination_token=''
+  local current_digest=''
+  local stable_observations=0 observation=0 copy_attempts=0 monotonic_now=0
+  local pair_matches=0
+  local stable_since=0 deadline=0
+  local required_stable_observations=6 quiet_nanoseconds=5000000000
+  local maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000
+  [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
+    || return 1
+  frozen_result_bundle_digest=''
+  [[ "$destination" == /* && "$destination" != / && ! -e "$destination" \
+    && ! -L "$destination" ]] || return 1
+  destination_parent="$(/usr/bin/dirname -- "$destination")" || return 1
+  destination_leaf="${destination##*/}"
+  [[ -n "$destination_leaf" && -d "$destination_parent" \
+    && ! -L "$destination_parent" ]] || return 1
+  destination_parent_physical="$(cd -- "$destination_parent" && /bin/pwd -P)" \
+    || return 1
+  [[ "$destination" == "$destination_parent_physical/$destination_leaf" ]] \
+    || return 1
+  source_identity="$(directory_identity "$result_bundle")" || return 1
+  parent_identity="$(directory_identity "$destination_parent_physical")" || return 1
+  result_bundle_set_monotonic_now || return 1
+  (( monotonic_now <= 9223371436854775807 )) || return 1
+  deadline=$((monotonic_now + deadline_nanoseconds))
+
+  # xcodebuild can return before its xcresult service has completed the last
+  # bundle writes.  Require a five-second quiet window using an inexpensive
+  # whole-tree token, then retain the canonical copy-before/source-after/copy
+  # digest equality as the TOCTOU gate.  The token is never release evidence.
+  # A mutation during the copy discards that copy and restarts stabilization;
+  # root or destination-parent replacement always fails closed.
+  while (( observation < maximum_observations )); do
+    observation=$((observation + 1))
+    result_bundle_set_monotonic_now || return 1
+    (( monotonic_now <= deadline )) || return 1
+    current_identity="$(directory_identity "$result_bundle")" || return 1
+    current_parent_identity="$(directory_identity "$destination_parent_physical")" \
+      || return 1
+    [[ "$current_identity" == "$source_identity" \
+      && "$current_parent_identity" == "$parent_identity" ]] || return 1
+    if current_token="$(result_bundle_stability_token "$result_bundle")" \
+      && [[ "$(directory_identity "$result_bundle")" == "$source_identity" \
+        && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" ]]; then
+      result_bundle_set_monotonic_now || return 1
+      (( monotonic_now <= deadline )) || return 1
+      if [[ -n "$previous_token" && "$current_token" == "$previous_token" ]]; then
+        stable_observations=$((stable_observations + 1))
+      else
+        previous_token="$current_token"
+        stable_observations=1
+        stable_since="$monotonic_now"
+      fi
+    else
+      previous_token=''
+      stable_observations=0
+      stable_since=0
+    fi
+
+    if (( stable_observations >= required_stable_observations \
+      && monotonic_now - stable_since >= quiet_nanoseconds )); then
+      [[ ! -e "$destination" && ! -L "$destination" ]] || return 1
+      current_identity="$(directory_identity "$result_bundle")" || return 1
+      current_parent_identity="$(directory_identity "$destination_parent_physical")" \
+        || return 1
+      [[ "$current_identity" == "$source_identity" \
+        && "$current_parent_identity" == "$parent_identity" ]] || return 1
+      current_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
+        || { previous_token=''; stable_observations=0; stable_since=0; continue; }
+      post_digest_token="$(result_bundle_stability_token "$result_bundle")" \
+        || { previous_token=''; stable_observations=0; stable_since=0; continue; }
+      [[ "$(directory_identity "$result_bundle")" == "$source_identity" \
+        && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" ]] \
+        || return 1
+      result_bundle_set_monotonic_now || return 1
+      (( monotonic_now <= deadline )) || return 1
+      if [[ "$post_digest_token" != "$current_token" ]]; then
+        previous_token="$post_digest_token"
+        stable_observations=1
+        result_bundle_set_monotonic_now || return 1
+        stable_since="$monotonic_now"
+        continue
+      fi
+      copy_attempts=$((copy_attempts + 1))
+      (( copy_attempts <= maximum_copy_attempts )) || return 1
+      if ! copy_result_bundle_for_freeze "$result_bundle" "$destination"; then
+        # A failed copier does not establish which inode, if any, now occupies
+        # the destination name.  Leave it inside the known staging directory;
+        # its parent transaction can remove that directory by captured inode.
+        return 1
+      fi
+      destination_identity="$(directory_identity "$destination")" || return 1
+      destination_token="$(result_bundle_stability_token "$destination")" || return 1
+      current_identity="$(directory_identity "$result_bundle")" || return 1
+      current_parent_identity="$(directory_identity "$destination_parent_physical")" \
+        || return 1
+      pair_matches=0
+      if [[ "$current_identity" == "$source_identity" \
+          && "$current_parent_identity" == "$parent_identity" \
+          && "$(directory_identity "$result_bundle")" == "$source_identity" \
+          && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" \
+          && "$(directory_identity "$destination")" == "$destination_identity" \
+          && "$current_digest" =~ ^[0-9a-f]{64}$ ]] \
+        && result_bundle_pair_matches_digest \
+          "$result_bundle" "$destination" "$source_root" "$current_digest" \
+          "$post_digest_token"; then
+        pair_matches=1
+      fi
+      post_pair_source_token="$(result_bundle_stability_token "$result_bundle")" \
+        || return 1
+      post_pair_destination_token="$(result_bundle_stability_token "$destination")" \
+        || pair_matches=0
+      [[ "$post_pair_source_token" == "$post_digest_token" \
+        && "$post_pair_destination_token" == "$destination_token" ]] \
+        || pair_matches=0
+      result_bundle_set_monotonic_now || return 1
+      if [[ "$pair_matches" == 1 ]] && (( monotonic_now <= deadline )); then
+        frozen_result_bundle_digest="$current_digest"
+        return 0
+      fi
+      [[ "$current_identity" == "$source_identity" \
+        && "$current_parent_identity" == "$parent_identity" ]] || return 1
+      [[ -d "$destination" && ! -L "$destination" \
+        && "$(directory_identity "$destination")" == "$destination_identity" \
+        && "$(directory_identity "$destination_parent_physical")" == "$parent_identity" ]] \
+        || return 1
+      delete_directory_with_identity "$destination_parent_physical" "$parent_identity" \
+        "$destination" "$destination_identity" || return 1
+      [[ ! -e "$destination" && ! -L "$destination" ]] || return 1
+      previous_token=''
+      stable_observations=0
+      stable_since=0
+    fi
+    if (( observation < maximum_observations )); then
+      result_bundle_stability_pause || return 1
+    fi
+  done
+  [[ ! -e "$destination" && ! -L "$destination" ]] || return 1
+  return 1
+}
+
 create_isolated_commit_source() {
   local repository="$1" expected_commit="$2" destination="$3"
   [[ "$destination" == /* && ! -e "$destination" && ! -L "$destination" ]] \
@@ -476,7 +1194,8 @@ create_isolated_commit_source() {
 
 generate_release_evidence() {
   local output_parent output_leaf before_results after_result gate_log gate_status
-  local source_digest_before source_digest_after copied_digest copied_result evidence_file isolated_source
+  local copied_result evidence_file isolated_source expected_result_digest
+  local frozen_result_bundle_digest='' generated_evidence_digest='' pre_handoff_source_token
   local parent_identity stage_identity parent_device parent_inode stage_device stage_inode
   abs_dir "$source_dir" source-dir
   abs_dir "$output_dir" output-dir
@@ -554,34 +1273,84 @@ if len(after)!=1: raise SystemExit(1)
 print(after[0])
 PY
   } )" || die 'exactly one new authoritative native result bundle was not produced'
-  source_digest_before="$(result_bundle_tree_digest "$after_result" "$isolated_source")" \
-    || die 'new result-bundle digest could not be generated'
+  materialize_result_bundle_for_queries "$after_result" "$isolated_source" \
+    || die 'authoritative result bundle could not materialize its query indexes safely'
   copied_result="$evidence_stage/${after_result##*/}"
-  /usr/bin/ditto --rsrc --extattr --acl "$after_result" "$copied_result" \
-    || die 'authoritative result bundle could not be frozen'
-  source_digest_after="$(result_bundle_tree_digest "$after_result" "$isolated_source")" \
-    || die 'post-copy source result-bundle digest could not be generated'
-  copied_digest="$(result_bundle_tree_digest "$copied_result" "$isolated_source")" \
-    || die 'frozen result-bundle digest could not be generated'
-  [[ "$source_digest_before" == "$source_digest_after" \
-    && "$source_digest_before" == "$copied_digest" ]] \
-    || die 'result bundle changed while it was being frozen'
+  freeze_result_bundle_when_stable "$after_result" "$copied_result" "$isolated_source" \
+    || die 'authoritative result bundle did not become stable and freeze consistently'
   /bin/cp -X "$gate_log" "$evidence_stage/prepublication-gate.log" \
     || die 'prepublication gate log could not be frozen'
   evidence_file="$evidence_stage/$release_test_evidence_name"
   write_release_test_evidence "$evidence_file" "$commit" \
-    "$evidence_stage/prepublication-gate.log" "$copied_result" "$isolated_source"
-  release_test_evidence_matches_result_bundle \
-    "$evidence_file" "$copied_result" "$isolated_source" \
-    || die 'generated evidence does not match the frozen result bundle'
+    "$evidence_stage/prepublication-gate.log" "$copied_result" "$isolated_source" \
+    "$frozen_result_bundle_digest"
+  regular_file_matches_sha256 "$evidence_file" "$generated_evidence_digest" \
+    || die 'generated evidence changed after validation'
+  expected_result_digest="$(/usr/bin/plutil -extract nativeAppTests.resultBundleTreeSha256 \
+    raw -o - "$evidence_file" 2>/dev/null)" \
+    || die 'generated evidence result-bundle digest is unavailable'
+  [[ "$expected_result_digest" == "$frozen_result_bundle_digest" ]] \
+    || die 'generated evidence does not bind the frozen result-bundle digest'
   /usr/bin/clang -std=c17 -Wall -Wextra -Werror -O2 \
     "$isolated_source/scripts/release-exclusive-rename.c" \
     -o "$temp/release-exclusive-rename" \
     || die 'exclusive evidence handoff helper could not be compiled'
+  private_evidence_directory_is_exact "$evidence_stage" "${after_result##*/}" \
+    || die 'private evidence directory does not contain exactly the required three entries'
+  regular_file_matches_sha256 "$evidence_file" "$generated_evidence_digest" \
+    || die 'evidence JSON changed before exclusive handoff'
+  release_test_evidence_is_valid "$evidence_file" "$commit" \
+    || die 'evidence JSON became invalid before exclusive handoff'
+  release_gate_log_matches "$evidence_file" "$evidence_stage/prepublication-gate.log" \
+    || die 'evidence changed before exclusive handoff'
+  release_gate_script_matches_commit "$evidence_file" "$isolated_source" "$commit" \
+    || die 'evidence gate-script binding changed before exclusive handoff'
+  pre_handoff_source_token="$(result_bundle_stability_token "$after_result")" \
+    || die 'source result-bundle stability could not be verified before exclusive handoff'
+  result_bundle_pair_matches_digest "$after_result" "$copied_result" \
+    "$isolated_source" "$expected_result_digest" "$pre_handoff_source_token" \
+    || die 'source or frozen result bundle changed before exclusive handoff'
+  published_evidence_parent="$evidence_parent_physical"
+  published_evidence_parent_identity="$parent_identity"
+  published_evidence_stage="$evidence_stage"
+  published_evidence_dir="$output_dir"
+  published_evidence_identity="$stage_identity"
+  published_evidence_parent_fd=''
+  published_evidence_stage_fd=''
+  if ! exec 9<"$published_evidence_parent"; then
+    die 'evidence output-parent descriptor could not be retained for handoff'
+  fi
+  if ! exec 8<"$published_evidence_stage"; then
+    exec 9<&-
+    die 'evidence staging descriptor could not be retained for handoff'
+  fi
+  published_evidence_parent_fd=9
+  published_evidence_stage_fd=8
+  directory_descriptor_matches_identity \
+    "$published_evidence_parent_fd" "$published_evidence_parent_identity" \
+    || die 'retained evidence output-parent descriptor has the wrong identity'
+  directory_descriptor_matches_identity \
+    "$published_evidence_stage_fd" "$published_evidence_identity" \
+    || die 'retained evidence staging descriptor has the wrong identity'
   "$temp/release-exclusive-rename" "$evidence_stage" "$output_dir" \
     "$parent_device" "$parent_inode" "$stage_device" "$stage_inode" \
     || die 'completed evidence directory could not be published exclusively'
   evidence_stage=''
+  validate_published_evidence_handoff \
+    "$published_evidence_parent" "$published_evidence_parent_identity" \
+    "$published_evidence_stage" "$published_evidence_dir" "$published_evidence_identity" \
+    "$published_evidence_parent_fd" "$published_evidence_stage_fd" \
+    "${after_result##*/}" "$generated_evidence_digest" "$isolated_source" "$commit" \
+    || die 'published evidence changed or failed validation during handoff'
+  exec 8<&-
+  exec 9<&-
+  published_evidence_parent_fd=''
+  published_evidence_stage_fd=''
+  published_evidence_parent=''
+  published_evidence_parent_identity=''
+  published_evidence_stage=''
+  published_evidence_dir=''
+  published_evidence_identity=''
   /usr/bin/printf 'release evidence generated: %s\n' \
     "$output_dir/$release_test_evidence_name"
   /usr/bin/printf 'authoritative result bundle: %s\n' \
@@ -604,37 +1373,20 @@ release_test_evidence_tree_digest_matches() {
 
 release_test_evidence_matches_result_bundle() {
   local evidence_path="$1" result_bundle="$2" source_root="$3"
-  local summary_root summary_path build_path action_path frozen_bundle expected_digest expected_commit
-  local original_digest source_after_digest frozen_digest final_source_digest final_frozen_digest
+  local summary_root summary_path build_path action_path expected_digest expected_commit
   local macos_version macos_build xcode_version xcode_build status=0
   [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] || return 1
   expected_digest="$(/usr/bin/plutil -extract nativeAppTests.resultBundleTreeSha256 raw -o - "$evidence_path" 2>/dev/null)" \
     || return 1
-  original_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
-    || return 1
-  [[ "$original_digest" == "$expected_digest" ]] || return 1
   summary_root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-result-bundle-summary.XXXXXX)" \
     || return 1
-  frozen_bundle="$summary_root/${result_bundle##*/}"
   summary_path="$summary_root/result-bundle-summary.json"
   build_path="$summary_root/result-bundle-build.json"
   action_path="$summary_root/result-bundle-action.json"
   expected_commit="$(/usr/bin/plutil -extract sourceCommit raw -o - "$evidence_path" 2>/dev/null)" \
     || return 1
-  if ! /usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$frozen_bundle"; then
-    status=1
-  elif ! source_after_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
-    || ! frozen_digest="$(result_bundle_tree_digest "$frozen_bundle" "$source_root")" \
-    || [[ "$source_after_digest" != "$expected_digest" || "$frozen_digest" != "$expected_digest" ]]; then
-    status=1
-  elif ! /usr/bin/xcrun xcresulttool get test-results summary \
-    --path "$frozen_bundle" --format json >"$summary_path"; then
-    status=1
-  elif ! /usr/bin/xcrun xcresulttool get build-results \
-    --path "$frozen_bundle" --format json >"$build_path"; then
-    status=1
-  elif ! /usr/bin/xcrun xcresulttool get log --type action \
-    --path "$frozen_bundle" --compact >"$action_path"; then
+  if ! extract_result_bundle_query_outputs "$result_bundle" "$source_root" "$expected_digest" \
+    "$summary_path" "$build_path" "$action_path"; then
     status=1
   elif ! macos_version="$(/usr/bin/sw_vers -productVersion)" \
     || ! macos_build="$(/usr/bin/sw_vers -buildVersion)" \
@@ -644,10 +1396,6 @@ release_test_evidence_matches_result_bundle() {
   elif ! native_result_summary_is_valid "$evidence_path" "$summary_path" "$build_path" \
     "$action_path" "$expected_commit" "$macos_version" "$macos_build" \
     "$xcode_version" "$xcode_build"; then
-    status=1
-  elif ! final_source_digest="$(result_bundle_tree_digest "$result_bundle" "$source_root")" \
-    || ! final_frozen_digest="$(result_bundle_tree_digest "$frozen_bundle" "$source_root")" \
-    || [[ "$final_source_digest" != "$expected_digest" || "$final_frozen_digest" != "$expected_digest" ]]; then
     status=1
   fi
   /usr/bin/find "$summary_root" -depth -delete || status=1
@@ -1573,20 +2321,35 @@ PY
 cleanup_release_temporaries() {
   local candidate
   for candidate in "${temp:-}" "${handoff_root:-}" "${verification_root:-}" \
-    "${comparison_root:-}" "${public_acquisition:-}"; do
+    "${comparison_root:-}" "${public_acquisition:-}" "${query_root:-}" \
+    "${digest_root:-}"; do
     [[ -z "$candidate" || ! -d "$candidate" ]] && continue
     case "$candidate" in
-      /private/tmp/lectureboard-v1-build.*|/private/tmp/lectureboard-v1-handoff.*|/private/tmp/lectureboard-v1-evidence-run.*|/private/tmp/lectureboard-v1-verify.*|/private/tmp/lectureboard-v1-public-compare.*|/private/tmp/lectureboard-v1-public-acquisition.*)
+      /private/tmp/lectureboard-v1-build.*|/private/tmp/lectureboard-v1-handoff.*|/private/tmp/lectureboard-v1-evidence-run.*|/private/tmp/lectureboard-v1-verify.*|/private/tmp/lectureboard-v1-public-compare.*|/private/tmp/lectureboard-v1-public-acquisition.*|/private/tmp/lectureboard-result-materialize.*|/private/tmp/lectureboard-result-query.*|/private/tmp/lectureboard-result-pair.*)
         /usr/bin/find "$candidate" -depth -delete
         ;;
       *) /usr/bin/printf '%s\n' 'refusing to clean unexpected release temporary path' >&2 ;;
     esac
   done
-  if [[ -n "${evidence_stage:-}" && -n "${evidence_parent_physical:-}" \
-    && -d "$evidence_stage" && ! -L "$evidence_stage" \
+  if [[ -z "${published_evidence_identity:-}" \
+    && -n "${evidence_stage:-}" && -n "${evidence_parent_physical:-}" \
     && "$(/usr/bin/dirname -- "$evidence_stage")" == "$evidence_parent_physical" \
     && "${evidence_stage##*/}" == .lectureboard-v1-evidence.* ]]; then
-    /usr/bin/find "$evidence_stage" -depth -delete
+    if [[ -z "${parent_identity:-}" || -z "${stage_identity:-}" ]] \
+      || ! delete_directory_with_identity "$evidence_parent_physical" \
+        "$parent_identity" "$evidence_stage" "$stage_identity"; then
+      /usr/bin/printf '%s\n' \
+        'warning: refusing to clean evidence staging without its exact known identity' >&2
+    fi
+  fi
+  if [[ -n "${published_evidence_identity:-}" ]] \
+    && ! cleanup_known_evidence_handoff \
+      "${published_evidence_parent:-}" "${published_evidence_parent_identity:-}" \
+      "${published_evidence_stage:-}" "${published_evidence_dir:-}" \
+      "$published_evidence_identity" "${published_evidence_parent_fd:-}" \
+      "${published_evidence_stage_fd:-}"; then
+    /usr/bin/printf '%s\n' \
+      'warning: refusing to clean evidence handoff without its exact known identity' >&2
   fi
   if [[ -n "${release_stage:-}" && -n "${release_parent_physical:-}" \
     && -d "$release_stage" && ! -L "$release_stage" \
