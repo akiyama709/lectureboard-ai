@@ -503,7 +503,7 @@ require_text README.md 'two aggregate visual revision events in separate ink and
 require_text README.md 'Successful live `boundedFreshSample` confirmation through the shared exact-post-baseline-coarse or pending-dense one-shot path'
 require_text README.md '現段階は公開前の開発中です'
 require_text README.md '現行release artifactによるmanaged PowerPoint遷移，microphone，canvas精度，可視alignment，板書の有用性及びexportの一連の実機動作はまだ未検証です'
-require_text README.md 'managed production identity providerは実装済みですが，実PowerPointでの動作は未検証です'
+require_text README.md 'managed production identity providerは実装済みであり，合成資料の固定診断Appではexact結合と2回の意味的切替を確認しましたが，production配布App及び本人資料は未検証です．'
 require_text README.md '現行continuous経路では別個の消去phase revisionを確認しましたが'
 require_text docs/architecture.md 'The earlier schema-9 live erase candidates did not receive the third qualifying observation'
 require_text docs/architecture.md 'DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_23-50-45-+0900.xcresult'
