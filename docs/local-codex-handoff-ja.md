@@ -2,7 +2,17 @@
 
 更新日：2026年9月7日
 
-## 最新の再開点（2026年9月7日0時台）
+## 最新の再開点（2026年9月7日2時台）
+
+　最新のコード修正commitは`fa62c73eada6d94daf094ac92c8032135fdd1e72`である．PowerPointの正確な返却objectとgeometryで結合済みの補助surfaceについて，黒帯又はnear-full-frameのアンチエイリアスに限り，黒白endpointの厳密pairに加えて98%以上の同方向変化を受理するようにした．中間的なendpoint coverageは従来どおり厳密pairを要求する．最初の広すぎる案は既存の否定test 2件を失敗させたため採用せず，狭い条件へ修正した．正方向と逆方向を含む新規回帰testを追加した．
+
+　このexact commitはCore 250件・19 suite，App 480件・41 suite及び全26段階の`make verify`に合格した．native resultは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_02-55-42-+0900.xcresult`で，device run 542件，失敗・skip・expected failure 0件である．保存済みgate logのSHA-256は`52f26e2a1b2bad41b39197fb3ad54788d1ad6de061b4b54a3df94b5936b8ae38`である．最初の隔離環境実行はXcode cacheへの書込み拒否でstage 3に停止しており，成功とは数えない．通常のlocal Xcode権限で再実行した結果だけを合格証拠とする．
+
+　commit `38d1482…`を基準に同じ最終policy修正と限定printを加えた固定診断Appは，生成した非privateのPowerPoint資料1件，windowed slide show，display 1台の条件で，managed開始，Stage A／B，challenge property復元，exact capture／semantic identity結合，calibration UIによるslide面の明示確定，日本語slide ID 257及び英語slide ID 258への意味的切替，切替後のVision解析，managed停止及び正常終了を完了した．canvas drag／確定とslide advanceは，利用者が本件に許可した限定local automationで合成資料だけへ実行した．これは手動の本人確認又は本人資料の検証ではない．role logのSHA-256は`df003b9dfed7aec6027de4bf45c45b9730c2028366270736ccacb602c2439f6e`である．証拠fileの詳細は`docs/build-verification.md`末尾にある．
+
+　次は，`fa62c73…`のproduction sourceから新しいowner trial Appを，旧版を置換せず作成して署名・commit・hashを検査する．秋山さんが起きた後，そのexact Appと本人選択の作業用PPTXで，実マイクのpartial認識，発話中の可視自動板書，遅延，overlay alignment，mouse優先，export及び原本不変を短い模擬講義として確認する．これらは現時点では未検証である．本人受入前にGitHub Releaseを公開せず，画面収録の登録変更又はTCC resetも繰り返さない．
+
+## 直前の再開点（2026年9月7日0時台）
 
 　最新source commitは`679cdfc2e83a957e0dd3808d4961f0958493a29a`である．Speech providerが一つの認識cycleへ一つのsegment IDを割り当て，同じcycleの2回の連続partialで安定した完結文だけを，既存のslide・canvas・analysis・identity・grounding・importance・public scene境界へ確定結果前に渡す経路を追加した．最新partial単独，未完文，疑問文，短文，低信頼，時刻逆転又はsegment不一致は公開しない．このsource経路は自動test済みであるが，実マイク及び可視板書では未検証である．
 
@@ -159,8 +169,8 @@ make test-runtime-launch-smoke
 
 　次の作業は，次の順で進める．固定schema 8，schema 9，schema 10及びschema 11 App，report，helper sidecar及び画像はbuild，置換，移動又は改名せず，それぞれのbuild固有証拠として保持する．新規reportはsystem temporary directory内の一意なpathへ書き，内容を検証してからexternal verification directoryへcopyし，`cmp`とSHA-256で保存結果を確認する．
 
-1. 固定した現行Appを再build又は置換せず，対応範囲であるPowerPoint資料1件，windowed slide show，display 1台の条件で，managed object／window／slide binding及び正常cleanupをlive検証する．
-2. 利用者確認式canvas，current visual analysis，production overlayの目視alignment及びclick-through mouse priorityを同じ対応範囲で確認する．diagnostic full-frame及びmetadata-only `mapped`を成功証拠へ読み替えない．
+1. 合成資料を用いた固定診断Appでは，PowerPoint資料1件，windowed slide show，display 1台の条件で，managed object／window／slide binding，日本語・英語slide切替及び正常cleanupまで確認した．次は同じ範囲を新しいexact production owner trial Appと本人の作業用copyで確認する．
+2. 合成資料のcalibration UIではslide面だけのdrag・明示確定とcurrent visual analysisを確認した．次は本人によるcanvas確認，production overlayの目視alignment及びclick-through mouse priorityを確認する．診断Appの結果を可視自動板書の成功証拠へ読み替えない．
 3. 日本語と英語を別sessionで，microphoneからfinal transcript，current `SlideContext`，context engine，confirmed board scene及びvisible board renderingまで確認する．
 4. 公開board sceneだけを含むsession JSON／SVG exportをlive検証し，元`.pptx`が不変であることをhash及びZIP整合性で確認する．
 5. 正常停止，取消し，許可拒否，window終了及びcapture中断のcleanup／recoveryを同じ対応範囲で反復確認する．
@@ -174,7 +184,7 @@ make test-runtime-launch-smoke
 
 　選択したPowerPoint windowの連続取得からoverlayのfail-closedな座標変換までの決定論的基盤に加え，schema 10のbounded capture-terminal診断，schema 11のcontent revision interval，post-baseline coarse／dense候補に限定したbounded one-shot sample経路，8秒単位の端末内音声認識継続，保守的grounding及び誤解を避ける実行時診断を実装した．現行working treeはCore 235件・18 suite，App 455件・40 suite及び全26段階gateに合格する．decoder-hardening後の固定Appは，static exact-window capture，6件のdynamic visual revision及びsingle-stroke／eraseを完了した．operator-captured helper sidecarとの組合せは，8秒間隔の6入力windowへのattributionを支持するが，runtime reportへ暗号的に結合されておらず，release-grade provenanceではない．dynamic sourceはcoarse 5件及びcontinuous dense idle repeat 1件，stroke runもcontinuous dense 2件であり，`boundedFreshSample`をliveには通っていない．手書き後の赤線と消去後のbyte-identical復元はpixel証拠であり，意味的又は入力ごとのink／erase分類，既存ink検出，semantic slide identity，利用者確認精度，目視alignment，AI rendering又はproduction挙動の証拠ではない．
 
-　exact-window-bound managed identity provider，条件付き文字起こし自動再開，公開scene限定JSON／SVG export及びno-fee release metadataは現行sourceへ実装済みであり，それぞれ対象testが合格している．2026年9月6日に現行Debug runtimeを固定pathから起動し，画面収録の標準許可導線を一度だけ実行した．システム設定では`LectureBoard AI.app`が有効であることを確認し，同じAppを終了・再起動したが，managed開始前にlocal sessionがlock状態となったため，PowerPoint再検出以降のlive検証は行っていない．ロック解除後は同じAppを再buildせず，前節1から順に対応範囲だけを検証する．全固定App及び証拠fileは移動・置換しない．
+　exact-window-bound managed identity provider，条件付き文字起こし自動再開，公開scene限定JSON／SVG export及びno-fee release metadataは現行sourceへ実装済みであり，それぞれ対象testが合格している．2026年9月7日の固定診断Appは，合成資料に限ってmanaged開始，exact object／window／slide binding，明示canvas確定，2回の意味的slide切替，切替後解析，managed停止及び正常終了を完了した．この結果に対応する最終policyはcommit `fa62c73…`へ固定し，全26段階gateに合格した．次はこのproduction sourceからowner trial Appを作成し，前節2以降の実マイク・可視板書・本人資料受入を行う．全固定App及び証拠fileは移動・置換しない．
 
 　AIやクラウドサービスを先に接続してはならない．まず，何を見て，どのスライドを対象とし，どこが空いており，どの発話を根拠としたかを観察・記録できる基盤を完成させる．
 

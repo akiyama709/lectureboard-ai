@@ -819,9 +819,9 @@ An independent final documentation audit then found one P2 wording defect: sever
 - Live capture-failure source classification in either schema 10 or the current schema 11 source; its bounded first-terminal-event routing, compatibility, normalization, privacy, reset, stale-operation, concurrency, and final-JSON paths currently have automated coverage only
 - Live PowerPoint exercise of the implemented bounded one-shot coarse or dense fresh-sample source; the frozen 2026-09-01 checkpoint recorded six revisions and the paired operator-captured sidecar supports six input-window attributions but is not cryptographically bound or release-grade, while its five coarse and one continuous-dense revision did not use `boundedFreshSample`
 - Generality of successful exact mach-interval attribution beyond the single frozen 2026-09-01 six-input, eight-second diagnostic; the earlier four-second stress checkpoint remains valid negative evidence, and representative cadence, animation, ink density, and long-duration conditions are uncalibrated
-- Live execution of the implemented managed PowerPoint slide-identity provider with exact retained Apple Event object and exact ScreenCaptureKit-window binding; deterministic tests cover the fail-closed binding, role challenge, restoration, cancellation, tombstones, and deferred cleanup, but historical image-difference builds do not verify current slide transitions
+- Production-distribution and representative-deck execution of the managed PowerPoint slide-identity provider; the later bounded generated-deck diagnostic described below completed exact retained-object/ScreenCaptureKit-window binding and two semantic transitions, while cancellation, interruption and owner-PPTX paths remain unverified
 - Automatic exact-window fresh-frame acquisition after a semantic identity boundary and live waiting, timeout, and recovery behavior with a production identity provider; the static schema-8 diagnostic delivered frames without a production identity, and the historical schema-7 zero-frame timeout does not verify this path
-- User-confirmed slide-canvas localization accuracy, exclusion of PowerPoint controls, slideshow and presenter modes, live resize invalidation, display-scale changes, ScreenCaptureKit surface padding and `contentRect` mapping, and actual idle-sample attachment behavior; the schema-8 full-frame confirmation was explicitly diagnostic rather than user-confirmed
+- Manual owner-confirmed slide-canvas localization accuracy, representative-deck PowerPoint-control exclusion, presenter mode, live resize invalidation, display-scale changes, ScreenCaptureKit surface padding and `contentRect` mapping, and actual idle-sample attachment behavior; the later generated-deck diagnostic explicitly confirmed an automation-selected inner slide face, but it is not owner or representative-deck evidence
 - PowerPoint window closure, reselection, PowerPoint restart, and display reconnection recovery
 - Representative Japanese, English, mixed-language, animated, and long-duration lecture decks
 - OCR text correctness, title selection, rectangle coordinates, occupied-region coordinates, and visible overlay alignment; the schema-8 report records only counts and a successful metadata-bound mapping result
@@ -836,7 +836,7 @@ These items must remain described as prototypes or unverified behavior until eac
 
 ## Local macOS handoff
 
-The repository includes `AGENTS.md`, `.codex/config.toml`, `make doctor`, `make local-setup`, native Core and app test targets, an ad hoc runtime build, a no-permission-request launch smoke test, and Japanese local-development and handoff documentation. Native compilation and the explicitly identified historical schema-8, schema-9, and schema-11 fixed-build runtime paths above are verified on this Mac only within their stated bounds. Fixed schema-9 diagnostics include narrow idle continuity, visual content updates, visible synthetic mouse strokes, and visual erase restoration. The frozen schema-11 interval app adds narrow static capture and interval-metadata evidence, but its four-second stress run failed exact per-input attribution. After negative-count decoder hardening, the 2026-09-01 schema-11 checkpoint passed 153 Core tests in 15 suites, 259 app tests in 30 suites, and the complete then-current 14-stage gate. A separately frozen decoder-hardened artifact also has build-specific authorized preflight, static capture, six recorded visual revisions with paired non-cryptographic helper support for input-window attribution, one visible red stroke, a separate erase-phase revision, final Vision completion, and byte-identical captured-scene restoration. These runs retain unavailable semantic identity and diagnostic-full-frame canvas provenance, and no live revision used the bounded one-shot source. Live managed slide identity, bounded-fresh live exercise, user canvas localization, visible overlay alignment, microphone behavior, semantic ink classification, LaunchServices capture authorization, the hardened no-fee archive, and `v1.0.0` completion remain listed separately. Developer ID signing and Apple notarization are intentionally not release requirements under ADR 0013.
+The repository includes `AGENTS.md`, `.codex/config.toml`, `make doctor`, `make local-setup`, native Core and app test targets, an ad hoc runtime build, a no-permission-request launch smoke test, and Japanese local-development and handoff documentation. Native compilation and the explicitly identified historical schema-8, schema-9, and schema-11 fixed-build runtime paths above are verified on this Mac only within their stated bounds. Fixed schema-9 diagnostics include narrow idle continuity, visual content updates, visible synthetic mouse strokes, and visual erase restoration. The frozen schema-11 interval app adds narrow static capture and interval-metadata evidence, but its four-second stress run failed exact per-input attribution. After negative-count decoder hardening, the 2026-09-01 schema-11 checkpoint passed 153 Core tests in 15 suites, 259 app tests in 30 suites, and the complete then-current 14-stage gate. A separately frozen decoder-hardened artifact also has build-specific authorized preflight, static capture, six recorded visual revisions with paired non-cryptographic helper support for input-window attribution, one visible red stroke, a separate erase-phase revision, final Vision completion, and byte-identical captured-scene restoration. Those historical runs retain unavailable semantic identity and diagnostic-full-frame canvas provenance, and no live revision used the bounded one-shot source. A later bounded generated-deck diagnostic completed managed slide identity, two semantic transitions and explicit synthetic-canvas confirmation as recorded below. Production-distribution and owner-deck managed behavior, bounded-fresh live exercise, manual owner canvas localization, visible overlay alignment, microphone behavior, semantic ink classification, LaunchServices capture authorization, the hardened no-fee archive, and `v1.0.0` completion remain listed separately. Developer ID signing and Apple notarization are intentionally not release requirements under ADR 0013.
 
 ## Managed workflow, session export, and no-fee preparation on 2026-09-05–06
 
@@ -2029,3 +2029,77 @@ removing the new pre-final observation and latency fields. `check-readme-languag
 `test-check-publication-sources.sh`, the complete `test-no-fee-release-v1.sh` negative-boundary
 suite, and `git diff --check` then passed. These are documentation and release-contract checks;
 they add no live functionality evidence.
+
+### 2026-09-07 bounded managed PowerPoint success and exact code-commit gate
+
+The remaining Stage B failure was reproduced with one generated, non-private PowerPoint deck in
+the supported single-document, windowed-slide-show, single-display configuration. The exact
+returned slide-show object and the primary ScreenCaptureKit candidate passed their paired black
+and white endpoint test. The geometry-matched auxiliary surface changed causally in the correct
+direction at every retained sample, but PowerPoint letterboxing and antialiasing shifted a small
+fraction of samples away from the exact endpoint thresholds. The former policy therefore rejected
+the auxiliary evidence as `otherWindowChanged` even though its reversible response and restored
+baseline were consistent with the retained object.
+
+An initial broad directional fallback made two existing inconsistent-evidence regressions fail.
+That implementation was not retained. Commit
+`fa62c73eada6d94daf094ac92c8032135fdd1e72` limits the fallback to geometry-bound evidence whose
+weaker endpoint coverage is either below 0.5, as in an asymmetric letterbox, or at least 0.9, as in
+a near-full-frame antialiased response. It still requires at least 50 percent changed samples and
+at least 98 percent forward-direction changes. Midrange ambiguous evidence continues to require
+the strict paired signature. New tests accept strong antialiased mirrors in both nonce orders and
+on both primary and auxiliary surfaces, and reject more than two percent reversed samples in the
+same cases.
+
+The targeted role-challenge suite passed 28 tests. The complete Core package passed 250 tests in
+19 suites. The complete native App result
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_02-55-42-+0900.xcresult` reports
+480 authoritative tests, 542 device runs, 14 parameterized tests and 76 parameterized runs, with
+zero failures, skips, or expected failures. A first exact-commit `make verify` invocation from the
+restricted execution sandbox stopped at stage 3 because Xcode could not write the user's Swift
+module and manifest caches; it is not an application or test failure and is not counted as a
+pass. The same clean exact commit was then run with normal local Xcode cache access and passed all
+26 stages. The retained gate log is
+`LectureBoard-fa62c73-make-verify.log`, SHA-256
+`52f26e2a1b2bad41b39197fb3ad54788d1ad6de061b4b54a3df94b5936b8ae38`, in the external
+`Diagnostics-20260907-38d1482` verification directory. No cloud API, paid service, reset, or
+additional model agent was used by these tests.
+
+Before the production policy was committed, a fixed diagnostic app based on source commit
+`38d14829459f59b334a9a00c7ae15db67ff5f857`, with the same final policy correction plus bounded
+diagnostic prints, completed the controlled synthetic live path. It created and retained one exact
+windowed PowerPoint slide show, passed Stage A and Stage B role evidence, restored the challenged
+properties, bound capture and semantic identity to the retained object, and reached a current
+post-boundary visual analysis. The role-evidence log
+`lectureboard-managed-38d-directional-fallback.log` has SHA-256
+`df003b9dfed7aec6027de4bf45c45b9730c2028366270736ccacb602c2439f6e`.
+
+Using authorized, narrowly scoped local pointer automation, the visible inner slide surface was
+dragged and explicitly confirmed through the app's calibration UI; black letterboxing and window
+chrome were excluded. This is an exercised explicit-confirmation path on the synthetic deck, not
+a manual owner confirmation and not representative-deck localization evidence. The app then
+reported current Vision analysis. Two guarded PowerPoint advances moved the exact retained object
+from slide ID 256 to 257 and then 258. The app recorded two semantic slide changes and two visual
+content updates, resumed post-boundary analysis after each change, and separately analyzed the
+Japanese and English synthetic slides. The exact managed stop returned PowerPoint to one editing
+presentation and zero slide shows, and the diagnostic app exited normally without a crash.
+
+The retained screenshots and SHA-256 values are:
+
+- `LectureBoard-Managed-Session-UI-20260907.png` —
+  `9aff1e28ce39e9c7c305d58fe71f06c3d53cf466fec81537e7e365d8bddadb76`
+- `LectureBoard-Canvas-Confirmed-Analysis-20260907.png` —
+  `5ba2fe740be083f7c3d6ecbc2e4b60412c0815a549f9b2c0f1a0df7a9b64e78d`
+- `LectureBoard-Slide2-Transition-Analysis-20260907.png` —
+  `465b61b4ec48dbaf3520cbab43cd9e780014b3fd94800313c98737fa2c1cdc61`
+- `LectureBoard-Slide3-English-Transition-Analysis-20260907.png` —
+  `3ba983e92472f2aa83ad1cab96548ba86fab74f36c890062be8aff206298e9c4`
+
+This live result verifies only the bounded diagnostic build and generated deck: managed start,
+role challenge and restoration, exact capture/identity binding, explicit canvas confirmation,
+Japanese/English semantic transitions, current visual analysis, managed stop, and cleanup. It does
+not verify the exact production commit as a distributed app, real microphone input, stable-partial
+timing, importance quality, visible automatic board content, overlay alignment or click-through,
+human-ink priority, JSON/SVG export, the owner's private PPTX or mock lecture, original-file
+immutability for that private deck, Gatekeeper installation, final release assets, GitHub
+publication, or public re-download.
