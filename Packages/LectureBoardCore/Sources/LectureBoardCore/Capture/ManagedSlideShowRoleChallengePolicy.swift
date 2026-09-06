@@ -20,22 +20,40 @@ public enum ManagedSlideShowRoleCurrentViewState: String, Equatable, Sendable {
   case whiteScreen
 }
 
+/// Runtime-only integral screen geometry reported independently by PowerPoint and ScreenCaptureKit.
+public struct ManagedSlideShowWindowGeometry: Equatable, Sendable {
+  public let left: Int
+  public let top: Int
+  public let width: Int
+  public let height: Int
+
+  public init(left: Int, top: Int, width: Int, height: Int) {
+    self.left = left
+    self.top = top
+    self.width = width
+    self.height = height
+  }
+}
+
 public struct ManagedSlideShowRoleSemanticState: Equatable, Sendable {
   public let slideID: Int
   public let slideIndex: Int
   public let currentViewState: ManagedSlideShowRoleCurrentViewState
   public let presentationSaved: Bool
+  public let windowGeometry: ManagedSlideShowWindowGeometry?
 
   public init(
     slideID: Int,
     slideIndex: Int,
     currentViewState: ManagedSlideShowRoleCurrentViewState,
-    presentationSaved: Bool
+    presentationSaved: Bool,
+    windowGeometry: ManagedSlideShowWindowGeometry? = nil
   ) {
     self.slideID = slideID
     self.slideIndex = slideIndex
     self.currentViewState = currentViewState
     self.presentationSaved = presentationSaved
+    self.windowGeometry = windowGeometry
   }
 }
 
@@ -94,19 +112,23 @@ public struct ManagedSlideShowRoleWindowEvidence: Equatable, Sendable {
   public let displayTime: UInt64?
   /// Same-stream delivery provenance. Only an off-screen record may omit this value.
   public let deliveryProvenance: ManagedSlideShowRoleWindowDeliveryProvenance?
+  /// Exact retained `SCWindow` snapshot geometry. Nil preserves the legacy strict role policy.
+  public let windowGeometry: ManagedSlideShowWindowGeometry?
 
   public init(
     identity: ManagedSlideShowWindowIdentity,
     fingerprint: FrameFingerprint?,
     isOnScreen: Bool,
     displayTime: UInt64?,
-    deliveryProvenance: ManagedSlideShowRoleWindowDeliveryProvenance?
+    deliveryProvenance: ManagedSlideShowRoleWindowDeliveryProvenance?,
+    windowGeometry: ManagedSlideShowWindowGeometry? = nil
   ) {
     self.identity = identity
     self.fingerprint = fingerprint
     self.isOnScreen = isOnScreen
     self.displayTime = displayTime
     self.deliveryProvenance = deliveryProvenance
+    self.windowGeometry = windowGeometry
   }
 }
 
@@ -268,6 +290,9 @@ public enum ManagedSlideShowRoleChallengeRejection: String, Error, Equatable, Se
   case phaseOutOfOrder
   case inventoryMalformed
   case inventoryChanged
+  case windowGeometryMalformed
+  case candidateGeometryMismatch
+  case windowGeometryChanged
   case otherWindowChanged
   case phaseEvidenceNotRepeatStable
   case semanticStateChanged
@@ -297,6 +322,7 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
   private var observations: [ManagedSlideShowRoleChallengeObservation] = []
   private var baselineInventory: [Int: ManagedSlideShowRoleWindowEvidence] = [:]
   private var initialSemanticState: ManagedSlideShowRoleSemanticState?
+  private var usesGeometryDisambiguation = false
   private var latchedRejection: ManagedSlideShowRoleChallengeRejection?
   private var completed = false
 
@@ -398,6 +424,9 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
     if observations.isEmpty {
       baselineInventory = inventory
       initialSemanticState = observation.semanticState
+      guard configureGeometryDisambiguation(observation, inventory: inventory) else {
+        return .rejected(latchedRejection ?? .windowGeometryMalformed)
+      }
       guard
         Self.validInitialState(
           observation,
@@ -416,10 +445,19 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
         Set(inventory.keys) == expectedKeys
           || (candidateMayBeAbsent && Set(inventory.keys) == retainedCandidateKeys)
       else { return reject(.inventoryChanged) }
-      for (windowID, baseline) in baselineInventory
-      where windowID != target.candidateWindowIdentity.windowID {
-        guard inventory[windowID].map({ Self.sameVisualEvidence($0, baseline) }) == true else {
-          return reject(.otherWindowChanged)
+      guard validateStableGeometry(observation, inventory: inventory) else {
+        return .rejected(latchedRejection ?? .windowGeometryChanged)
+      }
+      if usesGeometryDisambiguation, method == .pixelNonce {
+        guard validateGeometryDisambiguatedAuxiliaries(observation, inventory: inventory) else {
+          return .rejected(latchedRejection ?? .otherWindowChanged)
+        }
+      } else {
+        for (windowID, baseline) in baselineInventory
+        where windowID != target.candidateWindowIdentity.windowID {
+          guard inventory[windowID].map({ Self.sameVisualEvidence($0, baseline) }) == true else {
+            return reject(.otherWindowChanged)
+          }
         }
       }
     }
@@ -444,6 +482,108 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
     return observations.count.isMultiple(of: 2)
       ? .phaseAccepted(expectedPhase)
       : .observationAccepted
+  }
+
+  private mutating func configureGeometryDisambiguation(
+    _ observation: ManagedSlideShowRoleChallengeObservation,
+    inventory: [Int: ManagedSlideShowRoleWindowEvidence]
+  ) -> Bool {
+    let objectGeometry = observation.semanticState.windowGeometry
+    let windowGeometries = inventory.values.map(\.windowGeometry)
+    if objectGeometry == nil, windowGeometries.allSatisfy({ $0 == nil }) {
+      usesGeometryDisambiguation = false
+      return true
+    }
+    guard let objectGeometry, Self.isValid(objectGeometry),
+      windowGeometries.allSatisfy({ $0.map(Self.isValid) == true })
+    else { return fail(.windowGeometryMalformed) }
+    let matches = inventory.values.filter { $0.windowGeometry == objectGeometry }
+    guard matches.count == 1,
+      matches.first?.identity == observation.candidateWindowIdentity
+    else { return fail(.candidateGeometryMismatch) }
+    usesGeometryDisambiguation = true
+    return true
+  }
+
+  private mutating func validateStableGeometry(
+    _ observation: ManagedSlideShowRoleChallengeObservation,
+    inventory: [Int: ManagedSlideShowRoleWindowEvidence]
+  ) -> Bool {
+    guard usesGeometryDisambiguation else {
+      guard observation.semanticState.windowGeometry == nil,
+        inventory.values.allSatisfy({ $0.windowGeometry == nil })
+      else { return fail(.windowGeometryChanged) }
+      return true
+    }
+    guard observation.semanticState.windowGeometry == initialSemanticState?.windowGeometry else {
+      return fail(.windowGeometryChanged)
+    }
+    for (windowID, baseline) in baselineInventory {
+      guard inventory[windowID]?.windowGeometry == baseline.windowGeometry else {
+        return fail(.windowGeometryChanged)
+      }
+    }
+    return true
+  }
+
+  private mutating func validateGeometryDisambiguatedAuxiliaries(
+    _ observation: ManagedSlideShowRoleChallengeObservation,
+    inventory: [Int: ManagedSlideShowRoleWindowEvidence]
+  ) -> Bool {
+    guard let target else { return fail(.inventoryMalformed) }
+    let otherWindowIDs = baselineInventory.keys.filter {
+      $0 != target.candidateWindowIdentity.windowID
+    }
+    switch observation.phase {
+    case .baseline, .pixelRunningRestored:
+      for windowID in otherWindowIDs {
+        guard let current = inventory[windowID], let baseline = baselineInventory[windowID],
+          Self.sameVisualEvidence(current, baseline)
+        else {
+          return fail(observation.phase == .baseline ? .otherWindowChanged : .restorationFailed)
+        }
+      }
+      return true
+    case .pixelBlack, .pixelWhite:
+      let tone: PixelTone = observation.phase == .pixelBlack ? .black : .white
+      for windowID in otherWindowIDs {
+        guard let current = inventory[windowID], let baseline = baselineInventory[windowID],
+          let fingerprint = current.fingerprint,
+          current.isOnScreen,
+          Self.sameVisualEvidence(current, baseline) || classifies(fingerprint, as: tone)
+        else { return fail(.otherWindowChanged) }
+      }
+      let phaseEvidence = observations + [observation]
+      guard phaseEvidence.contains(where: { $0.phase == .pixelBlack }),
+        phaseEvidence.contains(where: { $0.phase == .pixelWhite })
+      else { return true }
+      for windowID in otherWindowIDs {
+        guard let baseline = baselineInventory[windowID] else {
+          return fail(.inventoryMalformed)
+        }
+        let black = phaseEvidence.last(where: { $0.phase == .pixelBlack })?.windows.first {
+          $0.identity.windowID == windowID
+        }
+        let white = phaseEvidence.last(where: { $0.phase == .pixelWhite })?.windows.first {
+          $0.identity.windowID == windowID
+        }
+        let changed =
+          black.map({ !Self.sameVisualEvidence($0, baseline) }) == true
+          || white.map({ !Self.sameVisualEvidence($0, baseline) }) == true
+        if changed {
+          guard let blackFingerprint = black?.fingerprint,
+            let whiteFingerprint = white?.fingerprint,
+            black?.isOnScreen == true,
+            white?.isOnScreen == true,
+            classifies(blackFingerprint, as: .black),
+            classifies(whiteFingerprint, as: .white)
+          else { return fail(.otherWindowChanged) }
+        }
+      }
+      return true
+    case .visibilityHidden, .visibilityRestored:
+      return fail(.phaseOutOfOrder)
+    }
   }
 
   @discardableResult
@@ -758,6 +898,13 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
       && observation.semanticState.slideIndex > 0
   }
 
+  private static func isValid(_ geometry: ManagedSlideShowWindowGeometry) -> Bool {
+    guard geometry.width > 0, geometry.height > 0 else { return false }
+    let (_, horizontalOverflow) = geometry.left.addingReportingOverflow(geometry.width)
+    let (_, verticalOverflow) = geometry.top.addingReportingOverflow(geometry.height)
+    return !horizontalOverflow && !verticalOverflow
+  }
+
   private static func validatedInventory(
     _ windows: [ManagedSlideShowRoleWindowEvidence],
     target: ManagedSlideShowRoleChallengeTarget,
@@ -840,6 +987,6 @@ public struct ManagedSlideShowRoleChallengePolicy: Equatable, Sendable {
     _ rhs: ManagedSlideShowRoleWindowEvidence
   ) -> Bool {
     lhs.identity == rhs.identity && lhs.fingerprint == rhs.fingerprint
-      && lhs.isOnScreen == rhs.isOnScreen
+      && lhs.isOnScreen == rhs.isOnScreen && lhs.windowGeometry == rhs.windowGeometry
   }
 }

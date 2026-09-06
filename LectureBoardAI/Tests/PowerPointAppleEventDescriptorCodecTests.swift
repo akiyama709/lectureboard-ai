@@ -1,5 +1,6 @@
 import ApplicationServices
 import Foundation
+import LectureBoardCore
 import Testing
 
 @testable import LectureBoard_AI
@@ -18,6 +19,11 @@ struct PowerPointAppleEventDescriptorCodecTests {
     #expect(PowerPointAppleEventCode.slideIndex == fourCC("SIdX"))
     #expect(PowerPointAppleEventCode.presentationSaved == fourCC("save"))
     #expect(PowerPointAppleEventCode.visible == fourCC("pvis"))
+    #expect(PowerPointAppleEventCode.bounds == fourCC("pbnd"))
+    #expect(PowerPointAppleEventCode.left == fourCC("plft"))
+    #expect(PowerPointAppleEventCode.top == fourCC("ptop"))
+    #expect(PowerPointAppleEventCode.width == fourCC("pwid"))
+    #expect(PowerPointAppleEventCode.height == fourCC("hght"))
     #expect(PowerPointAppleEventCode.slideShowType == fourCC("SwTy"))
     #expect(PowerPointAppleEventCode.powerPointSuite == fourCC("sPPT"))
     #expect(PowerPointAppleEventCode.runSlideShow == fourCC("RSsH"))
@@ -889,6 +895,110 @@ struct PowerPointAppleEventDescriptorCodecTests {
     case .failure(let failure): Issue.record("Unexpected failure: \(failure)")
     }
   }
+
+  @Test func exactWindowGeometryRequiresRectangleScalarCrossCheck() {
+    let codec = PowerPointAppleEventDescriptorCodec()
+    switch codec.parseExactWindowGeometryReplies(
+      bounds: reply(direct: qdRectangle(top: 340, left: 100, bottom: 1_240, right: 1_700)),
+      left: reply(direct: ieeeFloat(100)),
+      top: reply(direct: ieeeFloat(340)),
+      width: reply(direct: ieeeFloat(1_600)),
+      height: reply(direct: ieeeFloat(900))
+    ) {
+    case .value(let geometry):
+      #expect(
+        geometry
+          == ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 1_600, height: 900)
+      )
+    case .failure(let failure):
+      Issue.record("Unexpected exact-window-geometry failure: \(failure)")
+    }
+
+    expectFailure(
+      codec.parseExactWindowGeometryReplies(
+        bounds: reply(direct: qdRectangle(top: 340, left: 100, bottom: 1_240, right: 1_700)),
+        left: reply(direct: ieeeFloat(100)),
+        top: reply(direct: ieeeFloat(340)),
+        width: reply(direct: ieeeFloat(1_599)),
+        height: reply(direct: ieeeFloat(900))
+      ),
+      .malformedWindowGeometry
+    )
+  }
+
+  @Test func exactWindowGeometryRejectsMalformedTypesWidthsAndValues() {
+    let codec = PowerPointAppleEventDescriptorCodec()
+    let validBounds = reply(
+      direct: qdRectangle(top: 340, left: 100, bottom: 1_240, right: 1_700))
+    let validLeft = reply(direct: ieeeFloat(100))
+    let validTop = reply(direct: ieeeFloat(340))
+    let validWidth = reply(direct: ieeeFloat(1_600))
+    let validHeight = reply(direct: ieeeFloat(900))
+
+    let cases:
+      [(
+        NSAppleEventDescriptor?, NSAppleEventDescriptor?, NSAppleEventDescriptor?,
+        NSAppleEventDescriptor?, NSAppleEventDescriptor?, PowerPointAppleEventReplyFailure
+      )] = [
+        (
+          reply(direct: NSAppleEventDescriptor(string: "bounds")), validLeft, validTop, validWidth,
+          validHeight, .unexpectedDirectParameterType
+        ),
+        (
+          reply(direct: rawDescriptor(type: DescType(typeQDRectangle), bytes: [0, 1])), validLeft,
+          validTop, validWidth, validHeight, .malformedWindowGeometry
+        ),
+        (
+          validBounds, reply(direct: NSAppleEventDescriptor(int32: 100)), validTop, validWidth,
+          validHeight, .unexpectedDirectParameterType
+        ),
+        (
+          validBounds, validLeft, validTop,
+          reply(direct: rawDescriptor(type: DescType(typeIEEE32BitFloatingPoint), bytes: [0, 1])),
+          validHeight, .malformedWindowGeometry
+        ),
+        (
+          validBounds, validLeft, validTop, reply(direct: ieeeFloat(1_600.5)), validHeight,
+          .malformedWindowGeometry
+        ),
+        (
+          validBounds, validLeft, validTop, reply(direct: ieeeFloat(.infinity)), validHeight,
+          .malformedWindowGeometry
+        ),
+        (
+          reply(direct: qdRectangle(top: 340, left: 100, bottom: 340, right: 1_700)), validLeft,
+          validTop, validWidth, validHeight, .malformedWindowGeometry
+        ),
+      ]
+    for (bounds, left, top, width, height, expected) in cases {
+      expectFailure(
+        codec.parseExactWindowGeometryReplies(
+          bounds: bounds, left: left, top: top, width: width, height: height),
+        expected
+      )
+    }
+  }
+}
+
+private func qdRectangle(top: Int16, left: Int16, bottom: Int16, right: Int16)
+  -> NSAppleEventDescriptor
+{
+  let values = [top, left, bottom, right]
+  let data = values.withUnsafeBufferPointer { buffer in
+    Data(bytes: buffer.baseAddress!, count: buffer.count * MemoryLayout<Int16>.size)
+  }
+  return NSAppleEventDescriptor(descriptorType: DescType(typeQDRectangle), data: data)!
+}
+
+private func ieeeFloat(_ value: Float) -> NSAppleEventDescriptor {
+  var bitPattern = value.bitPattern
+  let data = withUnsafeBytes(of: &bitPattern) { Data($0) }
+  return NSAppleEventDescriptor(
+    descriptorType: DescType(typeIEEE32BitFloatingPoint), data: data)!
+}
+
+private func rawDescriptor(type: DescType, bytes: [UInt8]) -> NSAppleEventDescriptor {
+  NSAppleEventDescriptor(descriptorType: type, data: Data(bytes))!
 }
 
 private func reply(

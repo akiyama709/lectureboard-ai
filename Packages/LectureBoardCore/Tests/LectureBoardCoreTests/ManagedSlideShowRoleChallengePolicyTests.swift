@@ -505,6 +505,157 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     )
   }
 
+  @Test func exactGeometryAllowsOnlyAConsistentlyMirroredAuxiliary() {
+    let geometry = ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 1_600, height: 900)
+    let auxiliaryGeometry = ManagedSlideShowWindowGeometry(
+      left: 100, top: 340, width: 66, height: 20)
+    let phases: [(ManagedSlideShowRoleChallengePhase, UInt64, UInt8)] = [
+      (.baseline, 40, 0),
+      (.pixelBlack, 41, 0),
+      (.pixelWhite, 42, 255),
+      (.pixelRunningRestored, 43, 0),
+    ]
+    let evidence = phases.flatMap { phase, nonce, auxiliaryLuminance in
+      [0, 1].map {
+        observation(
+          method: .pixelNonce,
+          phase: phase,
+          nonce: nonce,
+          repeatIndex: $0,
+          commandReplyTime: UInt64(Int(nonce - 39) * 100),
+          candidateLuminance: phase == .pixelRunningRestored ? 100 : nil,
+          otherLuminance: auxiliaryLuminance,
+          semanticGeometry: geometry,
+          candidateGeometry: geometry,
+          otherGeometry: auxiliaryGeometry
+        )
+      }
+    }
+    #expect(
+      run(method: .pixelNonce, observations: evidence)
+        == .succeeded(freshnessBoundaryMachAbsoluteTime: 420)
+    )
+
+    let legacyEvidence = phases.flatMap { phase, nonce, auxiliaryLuminance in
+      [0, 1].map {
+        observation(
+          method: .pixelNonce,
+          phase: phase,
+          nonce: nonce,
+          repeatIndex: $0,
+          commandReplyTime: UInt64(Int(nonce - 39) * 100),
+          candidateLuminance: phase == .pixelRunningRestored ? 100 : nil,
+          otherLuminance: auxiliaryLuminance
+        )
+      }
+    }
+    #expect(
+      run(method: .pixelNonce, observations: legacyEvidence)
+        == .rejected(.otherWindowChanged)
+    )
+  }
+
+  @Test func geometryMustBeCompleteUniqueCandidateBoundAndStable() {
+    let geometry = ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 1_600, height: 900)
+    let auxiliaryGeometry = ManagedSlideShowWindowGeometry(left: 10, top: 20, width: 66, height: 20)
+    let invalidGeometry = ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 0, height: 900)
+
+    let cases:
+      [([ManagedSlideShowRoleChallengeObservation], ManagedSlideShowRoleChallengeRejection)] = [
+        ([observation(method: .pixelNonce, semanticGeometry: geometry)], .windowGeometryMalformed),
+        (
+          [
+            observation(
+              method: .pixelNonce,
+              semanticGeometry: invalidGeometry,
+              candidateGeometry: invalidGeometry,
+              otherGeometry: auxiliaryGeometry)
+          ], .windowGeometryMalformed
+        ),
+        (
+          [
+            observation(
+              method: .pixelNonce,
+              semanticGeometry: geometry,
+              candidateGeometry: auxiliaryGeometry,
+              otherGeometry: geometry)
+          ], .candidateGeometryMismatch
+        ),
+        (
+          [
+            observation(
+              method: .pixelNonce,
+              semanticGeometry: geometry,
+              candidateGeometry: geometry,
+              otherGeometry: geometry)
+          ], .candidateGeometryMismatch
+        ),
+      ]
+    for (evidence, expected) in cases {
+      #expect(run(method: .pixelNonce, observations: evidence) == .rejected(expected))
+    }
+
+    var drift = transcript(
+      method: .pixelNonce,
+      semanticGeometry: geometry,
+      candidateGeometry: geometry,
+      otherGeometry: auxiliaryGeometry
+    )
+    drift[2] = observation(
+      method: .pixelNonce,
+      phase: .pixelBlack,
+      nonce: 41,
+      repeatIndex: 0,
+      semanticGeometry: geometry,
+      candidateGeometry: ManagedSlideShowWindowGeometry(
+        left: 101, top: 340, width: 1_600, height: 900),
+      otherGeometry: auxiliaryGeometry
+    )
+    #expect(run(method: .pixelNonce, observations: drift) == .rejected(.windowGeometryChanged))
+  }
+
+  @Test func mirroredAuxiliaryMustMatchBothTonesAndRestoreItsOwnBaseline() {
+    let geometry = ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 1_600, height: 900)
+    let auxiliaryGeometry = ManagedSlideShowWindowGeometry(left: 10, top: 20, width: 66, height: 20)
+    var wrongWhite = transcript(
+      method: .pixelNonce,
+      semanticGeometry: geometry,
+      candidateGeometry: geometry,
+      otherGeometry: auxiliaryGeometry,
+      mirroredOther: true
+    )
+    wrongWhite[4] = observation(
+      method: .pixelNonce,
+      phase: .pixelWhite,
+      nonce: 42,
+      repeatIndex: 0,
+      otherLuminance: 80,
+      semanticGeometry: geometry,
+      candidateGeometry: geometry,
+      otherGeometry: auxiliaryGeometry
+    )
+    #expect(run(method: .pixelNonce, observations: wrongWhite) == .rejected(.otherWindowChanged))
+
+    var notRestored = transcript(
+      method: .pixelNonce,
+      semanticGeometry: geometry,
+      candidateGeometry: geometry,
+      otherGeometry: auxiliaryGeometry,
+      mirroredOther: true
+    )
+    notRestored[6] = observation(
+      method: .pixelNonce,
+      phase: .pixelRunningRestored,
+      nonce: 43,
+      repeatIndex: 0,
+      otherLuminance: 0,
+      semanticGeometry: geometry,
+      candidateGeometry: geometry,
+      otherGeometry: auxiliaryGeometry
+    )
+    #expect(run(method: .pixelNonce, observations: notRestored) == .rejected(.restorationFailed))
+  }
+
   private func run(
     method: ManagedSlideShowRoleChallengeMethod,
     observations: [ManagedSlideShowRoleChallengeObservation]
@@ -520,7 +671,11 @@ struct ManagedSlideShowRoleChallengePolicyTests {
 
   private func transcript(
     method: ManagedSlideShowRoleChallengeMethod,
-    challengeNonce: UInt64 = 40
+    challengeNonce: UInt64 = 40,
+    semanticGeometry: ManagedSlideShowWindowGeometry? = nil,
+    candidateGeometry: ManagedSlideShowWindowGeometry? = nil,
+    otherGeometry: ManagedSlideShowWindowGeometry? = nil,
+    mirroredOther: Bool = false
   ) -> [ManagedSlideShowRoleChallengeObservation] {
     let phases: [ManagedSlideShowRoleChallengePhase] =
       method == .visibility
@@ -535,7 +690,13 @@ struct ManagedSlideShowRoleChallengePolicyTests {
           phase: phase,
           nonce: challengeNonce + UInt64(phaseIndex),
           repeatIndex: $0,
-          commandReplyTime: UInt64((phaseIndex + 1) * 100)
+          commandReplyTime: UInt64((phaseIndex + 1) * 100),
+          otherLuminance: mirroredOther
+            ? (phase == .pixelBlack ? 0 : phase == .pixelWhite ? 255 : 80)
+            : 80,
+          semanticGeometry: semanticGeometry,
+          candidateGeometry: candidateGeometry,
+          otherGeometry: otherGeometry
         )
       }
     }
@@ -585,7 +746,10 @@ struct ManagedSlideShowRoleChallengePolicyTests {
     otherDeliveryStatus: ManagedSlideShowRoleWindowDeliveryStatus = .generated,
     candidateStreamMemberToken: String? = "candidate-member",
     candidateContinuityToken: String? = "candidate-continuity",
-    omitCandidateDeliveryProvenance: Bool = false
+    omitCandidateDeliveryProvenance: Bool = false,
+    semanticGeometry: ManagedSlideShowWindowGeometry? = nil,
+    candidateGeometry: ManagedSlideShowWindowGeometry? = nil,
+    otherGeometry: ManagedSlideShowWindowGeometry? = nil
   ) -> ManagedSlideShowRoleChallengeObservation {
     let phaseIndex = nonce - 40
     let reply = commandReplyTime ?? (phaseIndex + 1) * 100
@@ -608,7 +772,8 @@ struct ManagedSlideShowRoleChallengePolicyTests {
           continuityToken: candidateContinuityToken,
           sequence: deliverySequence ?? UInt64(nonce * 2) + UInt64(repeatIndex),
           callbackTime: callbackMachAbsoluteTime ?? observed
-        )
+        ),
+      windowGeometry: candidateGeometry
     )
     return ManagedSlideShowRoleChallengeObservation(
       bindingSessionToken: session,
@@ -628,7 +793,8 @@ struct ManagedSlideShowRoleChallengePolicyTests {
         slideID: 50,
         slideIndex: 3,
         currentViewState: defaults.state,
-        presentationSaved: presentationSaved
+        presentationSaved: presentationSaved,
+        windowGeometry: semanticGeometry
       ),
       windows: [
         ManagedSlideShowRoleWindowEvidence(
@@ -642,7 +808,8 @@ struct ManagedSlideShowRoleChallengePolicyTests {
             continuityToken: "other-continuity",
             sequence: deliverySequence ?? UInt64(nonce * 2) + UInt64(repeatIndex),
             callbackTime: callbackMachAbsoluteTime ?? observed
-          )
+          ),
+          windowGeometry: otherGeometry
         )
       ] + (candidateAbsent ? [] : [candidate])
     )

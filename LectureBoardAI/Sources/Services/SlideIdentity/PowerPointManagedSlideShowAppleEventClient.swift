@@ -1323,12 +1323,43 @@ actor PowerPointManagedSlideShowAppleEventClient:
       object: object,
       operationToken: operationToken
     )
+    let windowGeometry = try await readExactWindowGeometry(
+      object: object,
+      operationToken: operationToken
+    )
     return ManagedSlideShowRoleSemanticState(
       slideID: slideID,
       slideIndex: slideIndex,
       currentViewState: viewState,
-      presentationSaved: presentationSaved
+      presentationSaved: presentationSaved,
+      windowGeometry: windowGeometry
     )
+  }
+
+  private func readExactWindowGeometry(
+    object: PowerPointAppleEventRuntimeObjectSpecifier,
+    operationToken: UUID
+  ) async throws -> ManagedSlideShowWindowGeometry {
+    let bounds = try await getExactObjectProperty(
+      [.bounds], object: object, operationToken: operationToken)
+    let left = try await getExactObjectProperty(
+      [.left], object: object, operationToken: operationToken)
+    let top = try await getExactObjectProperty(
+      [.top], object: object, operationToken: operationToken)
+    let width = try await getExactObjectProperty(
+      [.width], object: object, operationToken: operationToken)
+    let height = try await getExactObjectProperty(
+      [.height], object: object, operationToken: operationToken)
+    switch codec.parseExactWindowGeometryReplies(
+      bounds: bounds,
+      left: left,
+      top: top,
+      width: width,
+      height: height
+    ) {
+    case .value(let geometry): return geometry
+    case .failure(let failure): throw classifyReplyFailure(failure)
+    }
   }
 
   private func readExactViewState(
@@ -1674,7 +1705,7 @@ actor PowerPointManagedSlideShowAppleEventClient:
       return .appleEventTransportFailed
     case .missingReply, .malformedReply, .missingDirectParameter,
       .unexpectedDirectParameterType, .unsupportedSlideShowState, .unsupportedSlideShowType,
-      .malformedObjectSpecifier:
+      .malformedObjectSpecifier, .malformedWindowGeometry:
       return .malformedReply
     }
   }
@@ -1690,7 +1721,7 @@ actor PowerPointManagedSlideShowAppleEventClient:
       return .startCommandDeliveryUnknown
     case .malformedReply, .missingDirectParameter,
       .unexpectedDirectParameterType, .unsupportedSlideShowState, .unsupportedSlideShowType,
-      .malformedObjectSpecifier:
+      .malformedObjectSpecifier, .malformedWindowGeometry:
       return .startCommandReplyMalformedPossiblyDelivered
     case .appleEventError(.wouldRequireUserConsent):
       return .permissionRequiresExplicitUserAction
@@ -1715,7 +1746,8 @@ actor PowerPointManagedSlideShowAppleEventClient:
       return .recoveryCommandDeliveryUnknown
     case .appleEventError(.unsupportedOperation), .missingReply, .malformedReply,
       .missingDirectParameter, .unexpectedDirectParameterType,
-      .unsupportedSlideShowState, .unsupportedSlideShowType, .malformedObjectSpecifier:
+      .unsupportedSlideShowState, .unsupportedSlideShowType, .malformedObjectSpecifier,
+      .malformedWindowGeometry:
       return .recoveryCommandReplyMalformedPossiblyDelivered
     }
   }

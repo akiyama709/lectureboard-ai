@@ -1,6 +1,8 @@
 import CoreGraphics
+import CoreVideo
 import Foundation
 import LectureBoardCore
+import ScreenCaptureKit
 import Testing
 
 @testable import LectureBoard_AI
@@ -11,6 +13,136 @@ import Testing
 struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
   private let operationID = CaptureOperationID(rawValue: 7)
   private let generation: UInt64 = 9
+
+  @Test func auxiliaryFingerprintUsesAuthoritativeContentCropAndIdleContinuity() throws {
+    let pixelBuffer = try #require(
+      brokerPixelBuffer(
+        width: 66,
+        height: 20,
+        whiteRegion: CGRect(x: 0, y: 0, width: 35, height: 20)
+      )
+    )
+    let geometry = brokerSurfaceAttachments(
+      contentRect: CGRect(x: 0, y: 0, width: 35.555_556_416_5, height: 20.000_000_484_3),
+      scaleFactor: 1,
+      contentScale: 0.022_222_22
+    )
+    var processor = PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor()
+    switch processor.process(
+      status: .generated,
+      pixelBuffer: pixelBuffer,
+      attachments: geometry
+    ) {
+    case .generated(let fingerprint):
+      #expect(fingerprint.luminance.allSatisfy { $0 == 255 })
+    case .idle, .invalid:
+      Issue.record("Expected a cropped generated fingerprint")
+    }
+    #expect(
+      processor.process(status: .idle, pixelBuffer: nil, attachments: nil) == .idle
+    )
+    #expect(
+      processor.process(status: .idle, pixelBuffer: nil, attachments: geometry) == .idle
+    )
+  }
+
+  @Test func auxiliaryFingerprintRejectsMalformedOrOutOfBoundsInitialGeometryAndPoisons() throws {
+    let pixelBuffer = try #require(
+      brokerPixelBuffer(width: 8, height: 4, whiteRegion: CGRect(x: 0, y: 0, width: 8, height: 4))
+    )
+    let valid = brokerSurfaceAttachments(
+      contentRect: CGRect(x: 0, y: 0, width: 8, height: 4),
+      scaleFactor: 1,
+      contentScale: 1
+    )
+    let invalidAttachments: [[SCStreamFrameInfo: Any]?] = [
+      nil,
+      [.contentRect: NSValue(rect: CGRect(x: 0, y: 0, width: 8, height: 4))],
+      [
+        .contentRect: NSValue(rect: CGRect(x: 0, y: 0, width: 8, height: 4)),
+        .scaleFactor: true,
+        .contentScale: NSNumber(value: 1),
+      ],
+      brokerSurfaceAttachments(
+        contentRect: CGRect(x: 0, y: 0, width: 9, height: 4),
+        scaleFactor: 1,
+        contentScale: 1
+      ),
+    ]
+    for attachments in invalidAttachments {
+      var processor = PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor()
+      #expect(
+        processor.process(
+          status: .generated,
+          pixelBuffer: pixelBuffer,
+          attachments: attachments
+        ) == .invalid
+      )
+      #expect(
+        processor.process(
+          status: .generated,
+          pixelBuffer: pixelBuffer,
+          attachments: valid
+        ) == .invalid
+      )
+    }
+  }
+
+  @Test func auxiliaryFingerprintRejectsLaterGeometryBufferAndIdleDrift() throws {
+    let pixelBuffer = try #require(
+      brokerPixelBuffer(width: 8, height: 4, whiteRegion: CGRect(x: 0, y: 0, width: 8, height: 4))
+    )
+    let resizedBuffer = try #require(
+      brokerPixelBuffer(width: 9, height: 4, whiteRegion: CGRect(x: 0, y: 0, width: 9, height: 4))
+    )
+    let valid = brokerSurfaceAttachments(
+      contentRect: CGRect(x: 0, y: 0, width: 8, height: 4),
+      scaleFactor: 1,
+      contentScale: 1
+    )
+    let moved = brokerSurfaceAttachments(
+      contentRect: CGRect(x: 0.5, y: 0, width: 7.5, height: 4),
+      scaleFactor: 1,
+      contentScale: 1
+    )
+    let partial: [SCStreamFrameInfo: Any] = [
+      .contentRect: NSValue(rect: CGRect(x: 0, y: 0, width: 8, height: 4))
+    ]
+
+    let mutations:
+      [(inout PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor) ->
+        PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor.Outcome] = [
+          { (processor: inout PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor) in
+            processor.process(status: .generated, pixelBuffer: pixelBuffer, attachments: moved)
+          },
+          { (processor: inout PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor) in
+            processor.process(status: .generated, pixelBuffer: resizedBuffer, attachments: valid)
+          },
+          { (processor: inout PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor) in
+            processor.process(status: .idle, pixelBuffer: pixelBuffer, attachments: partial)
+          },
+          { (processor: inout PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor) in
+            processor.process(status: .idle, pixelBuffer: resizedBuffer, attachments: nil)
+          },
+        ]
+    for mutation in mutations {
+      var processor = PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor()
+      guard
+        case .generated = processor.process(
+          status: .generated,
+          pixelBuffer: pixelBuffer,
+          attachments: valid
+        )
+      else {
+        Issue.record("Expected initial generated evidence")
+        continue
+      }
+      #expect(mutation(&processor) == .invalid)
+      #expect(
+        processor.process(status: .idle, pixelBuffer: nil, attachments: nil) == .invalid
+      )
+    }
+  }
 
   @Test func captureAnchorWaitsOnceForDelayedInitialDelivery() async throws {
     let candidate = identity(20)
@@ -199,15 +331,32 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
     }
   }
 
-  @Test func preAnchorSealAdoptsLateAuxiliaryAndRetainsOriginalExactHandles() async throws {
+  @Test func preAnchorSealRetainsHandlesWhileReadingFreshSameIDGeometry() async throws {
     let candidate = identity(20)
     let originalOther = identity(21)
     let late = identity(22)
-    let originalCandidateReference = BrokerRetainedWindowReference(identity: candidate)
-    let originalOtherReference = BrokerRetainedWindowReference(identity: originalOther)
-    let refreshedCandidateReference = BrokerRetainedWindowReference(identity: candidate)
-    let refreshedOtherReference = BrokerRetainedWindowReference(identity: originalOther)
-    let lateReference = BrokerRetainedWindowReference(identity: late)
+    let candidateGeometry = ManagedSlideShowWindowGeometry(
+      left: 100, top: 340, width: 1_600, height: 900)
+    let originalOtherGeometry = ManagedSlideShowWindowGeometry(
+      left: 20, top: 30, width: 800, height: 600)
+    let lateGeometry = ManagedSlideShowWindowGeometry(
+      left: 100, top: 340, width: 66, height: 20)
+    let movedOtherGeometry = ManagedSlideShowWindowGeometry(
+      left: 40, top: 60, width: 640, height: 480)
+    let originalCandidateReference = BrokerRetainedWindowReference(
+      identity: candidate, windowGeometry: candidateGeometry)
+    let originalOtherReference = BrokerRetainedWindowReference(
+      identity: originalOther, windowGeometry: originalOtherGeometry)
+    let refreshedCandidateReference = BrokerRetainedWindowReference(
+      identity: candidate,
+      windowGeometry: ManagedSlideShowWindowGeometry(left: 0, top: 0, width: 1, height: 1)
+    )
+    let refreshedOtherReference = BrokerRetainedWindowReference(
+      identity: originalOther,
+      windowGeometry: ManagedSlideShowWindowGeometry(left: 0, top: 0, width: 2, height: 2)
+    )
+    let lateReference = BrokerRetainedWindowReference(
+      identity: late, windowGeometry: lateGeometry)
     let primary = BrokerScriptedDeliverySource(
       identity: candidate,
       streamMemberToken: "candidate-member",
@@ -281,20 +430,36 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
     let factory = BrokerAuxiliaryFactory(
       sources: [21: originalOtherSource, 22: lateSource]
     )
+    let inventory = BrokerMutableWindowInventory(
+      [candidate, originalOther, late],
+      geometries: [
+        20: candidateGeometry,
+        21: originalOtherGeometry,
+        22: lateGeometry,
+      ]
+    )
     let lease = try makeLease(
       candidate: candidate,
       retained: [originalCandidateReference, originalOtherReference],
       primary: primary,
-      inventory: BrokerWindowInventory([candidate, originalOther, late]),
+      inventory: inventory,
       factory: factory,
       retainedWindowSnapshotReader: snapshotReader
     )
 
     let anchor = try await lease.captureAnchor()
-    _ = try await lease.readWindowEvidence(
+    let initial = try await lease.readWindowEvidence(
       for: request(anchor: anchor, phase: .baseline, nonce: 40, minimum: 110, started: 120)
     )
-    _ = try await lease.readWindowEvidence(
+    await inventory.replace(
+      with: [candidate, originalOther, late],
+      geometries: [
+        20: candidateGeometry,
+        21: movedOtherGeometry,
+        22: lateGeometry,
+      ]
+    )
+    let stable = try await lease.readWindowEvidence(
       for: request(anchor: anchor, phase: .baseline, nonce: 40, minimum: 135, started: 140)
     )
 
@@ -305,6 +470,20 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
       ]
     )
     #expect(!factory.requestedReferenceIDs.contains(ObjectIdentifier(refreshedOtherReference)))
+    #expect(
+      initial.windows.first(where: { $0.identity.windowID == 21 })?.windowGeometry
+        == originalOtherGeometry
+    )
+    #expect(
+      stable.windows.first(where: { $0.identity.windowID == 20 })?.windowGeometry
+        == candidateGeometry
+    )
+    #expect(
+      stable.windows.first(where: { $0.identity.windowID == 21 })?.windowGeometry
+        == movedOtherGeometry
+    )
+    #expect(
+      stable.windows.first(where: { $0.identity.windowID == 22 })?.windowGeometry == lateGeometry)
   }
 
   @Test func preAnchorSealRejectsMalformedDuplicateAndMissingOriginalSnapshots() async throws {
@@ -1000,10 +1179,63 @@ private final class BrokerRetainedWindowReference:
   PowerPointManagedSlideShowRoleRetainedWindowReference, @unchecked Sendable
 {
   let identity: PowerPointWindowIdentity
+  let windowGeometry: ManagedSlideShowWindowGeometry?
 
-  init(identity: PowerPointWindowIdentity) {
+  init(
+    identity: PowerPointWindowIdentity,
+    windowGeometry: ManagedSlideShowWindowGeometry? = nil
+  ) {
     self.identity = identity
+    self.windowGeometry = windowGeometry
   }
+}
+
+private func brokerSurfaceAttachments(
+  contentRect: CGRect,
+  scaleFactor: Double,
+  contentScale: Double
+) -> [SCStreamFrameInfo: Any] {
+  [
+    .contentRect: NSValue(rect: contentRect),
+    .scaleFactor: NSNumber(value: scaleFactor),
+    .contentScale: NSNumber(value: contentScale),
+  ]
+}
+
+private func brokerPixelBuffer(
+  width: Int,
+  height: Int,
+  whiteRegion: CGRect
+) -> CVPixelBuffer? {
+  var pixelBuffer: CVPixelBuffer?
+  guard
+    CVPixelBufferCreate(
+      kCFAllocatorDefault,
+      width,
+      height,
+      kCVPixelFormatType_32BGRA,
+      nil,
+      &pixelBuffer
+    ) == kCVReturnSuccess,
+    let pixelBuffer
+  else { return nil }
+  CVPixelBufferLockBaseAddress(pixelBuffer, [])
+  defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+  guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+  let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+  let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
+  for y in 0..<height {
+    for x in 0..<width {
+      let value: UInt8 =
+        whiteRegion.contains(CGPoint(x: CGFloat(x), y: CGFloat(y))) ? 255 : 0
+      let offset = y * bytesPerRow + x * 4
+      bytes[offset] = value
+      bytes[offset + 1] = value
+      bytes[offset + 2] = value
+      bytes[offset + 3] = 255
+    }
+  }
+  return pixelBuffer
 }
 
 private enum BrokerDeliveryStep: Sendable {
@@ -1116,9 +1348,14 @@ private actor BrokerRetainedWindowSnapshotReader:
 
 private actor BrokerWindowInventory: PowerPointManagedSlideShowRoleWindowInventoryReading {
   private let identities: [PowerPointWindowIdentity]
+  private let geometries: [Int: ManagedSlideShowWindowGeometry]
 
-  init(_ identities: [PowerPointWindowIdentity]) {
+  init(
+    _ identities: [PowerPointWindowIdentity],
+    geometries: [Int: ManagedSlideShowWindowGeometry] = [:]
+  ) {
     self.identities = identities
+    self.geometries = geometries
   }
 
   func currentPowerPointWindowIdentities(
@@ -1126,6 +1363,18 @@ private actor BrokerWindowInventory: PowerPointManagedSlideShowRoleWindowInvento
     bundleIdentifier: String
   ) async throws -> [PowerPointWindowIdentity] {
     identities
+  }
+
+  func currentPowerPointWindowInventory(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [PowerPointManagedSlideShowRoleWindowInventoryEntry] {
+    identities.map {
+      PowerPointManagedSlideShowRoleWindowInventoryEntry(
+        identity: $0,
+        windowGeometry: geometries[Int($0.windowID)]
+      )
+    }
   }
 }
 
@@ -1133,13 +1382,22 @@ private actor BrokerMutableWindowInventory:
   PowerPointManagedSlideShowRoleWindowInventoryReading
 {
   private var identities: [PowerPointWindowIdentity]
+  private var geometries: [Int: ManagedSlideShowWindowGeometry]
 
-  init(_ identities: [PowerPointWindowIdentity]) {
+  init(
+    _ identities: [PowerPointWindowIdentity],
+    geometries: [Int: ManagedSlideShowWindowGeometry] = [:]
+  ) {
     self.identities = identities
+    self.geometries = geometries
   }
 
-  func replace(with identities: [PowerPointWindowIdentity]) {
+  func replace(
+    with identities: [PowerPointWindowIdentity],
+    geometries: [Int: ManagedSlideShowWindowGeometry] = [:]
+  ) {
     self.identities = identities
+    self.geometries = geometries
   }
 
   func currentPowerPointWindowIdentities(
@@ -1147,6 +1405,18 @@ private actor BrokerMutableWindowInventory:
     bundleIdentifier: String
   ) async throws -> [PowerPointWindowIdentity] {
     identities
+  }
+
+  func currentPowerPointWindowInventory(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [PowerPointManagedSlideShowRoleWindowInventoryEntry] {
+    identities.map {
+      PowerPointManagedSlideShowRoleWindowInventoryEntry(
+        identity: $0,
+        windowGeometry: geometries[Int($0.windowID)]
+      )
+    }
   }
 }
 

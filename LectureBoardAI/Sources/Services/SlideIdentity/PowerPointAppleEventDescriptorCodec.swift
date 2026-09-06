@@ -1,5 +1,6 @@
 import ApplicationServices
 import Foundation
+import LectureBoardCore
 
 enum PowerPointAppleEventCode {
   static let activePresentation: OSType = 0x4141_5072  // AAPr
@@ -13,6 +14,11 @@ enum PowerPointAppleEventCode {
   static let slideIndex: OSType = 0x5349_6458  // SIdX
   static let presentationSaved: OSType = 0x7361_7665  // save
   static let visible: OSType = 0x7076_6973  // pvis
+  static let bounds: OSType = 0x7062_6E64  // pbnd
+  static let left: OSType = 0x706C_6674  // plft
+  static let top: OSType = 0x7074_6F70  // ptop
+  static let width: OSType = 0x7077_6964  // pwid
+  static let height: OSType = 0x6867_6874  // hght
   static let slideShowType: OSType = 0x5377_5479  // SwTy
   static let powerPointSuite: OSType = 0x7350_5054  // sPPT
   static let runSlideShow: OSType = 0x5253_7348  // RSsH
@@ -42,6 +48,11 @@ enum PowerPointAppleEventProperty: OSType, CaseIterable {
   case slideIndex = 0x5349_6458
   case presentationSaved = 0x7361_7665
   case visible = 0x7076_6973
+  case bounds = 0x7062_6E64
+  case left = 0x706C_6674
+  case top = 0x7074_6F70
+  case width = 0x7077_6964
+  case height = 0x6867_6874
   case slideShowType = 0x5377_5479
 }
 
@@ -79,6 +90,7 @@ enum PowerPointAppleEventReplyFailure: Equatable {
   case unsupportedSlideShowState
   case unsupportedSlideShowType
   case malformedObjectSpecifier
+  case malformedWindowGeometry
 }
 
 enum PowerPointAppleEventParsed<Value> {
@@ -316,6 +328,61 @@ final class PowerPointAppleEventDescriptorCodec {
     _ reply: NSAppleEventDescriptor?
   ) -> PowerPointAppleEventParsed<Bool> {
     parseDirectParameter(reply, expectedType: DescType(typeBoolean)) { $0.booleanValue }
+  }
+
+  func parseExactWindowGeometryReplies(
+    bounds: NSAppleEventDescriptor?,
+    left: NSAppleEventDescriptor?,
+    top: NSAppleEventDescriptor?,
+    width: NSAppleEventDescriptor?,
+    height: NSAppleEventDescriptor?
+  ) -> PowerPointAppleEventParsed<ManagedSlideShowWindowGeometry> {
+    let rectangle: (top: Int, left: Int, bottom: Int, right: Int)
+    switch directParameter(bounds, expectedType: DescType(typeQDRectangle)) {
+    case .failure(let failure): return .failure(failure)
+    case .value(let descriptor):
+      guard descriptor.data.count == 8 else { return .failure(.malformedWindowGeometry) }
+      let values = descriptor.data.withUnsafeBytes { bytes in
+        (0..<4).map { index in
+          Int(bytes.loadUnaligned(fromByteOffset: index * 2, as: Int16.self))
+        }
+      }
+      rectangle = (values[0], values[1], values[2], values[3])
+    }
+    guard rectangle.bottom > rectangle.top, rectangle.right > rectangle.left else {
+      return .failure(.malformedWindowGeometry)
+    }
+
+    var scalars: [Int] = []
+    for reply in [left, top, width, height] {
+      switch directParameter(reply, expectedType: DescType(typeIEEE32BitFloatingPoint)) {
+      case .failure(let failure): return .failure(failure)
+      case .value(let descriptor):
+        guard descriptor.data.count == 4 else { return .failure(.malformedWindowGeometry) }
+        let value = descriptor.data.withUnsafeBytes {
+          Float(bitPattern: $0.loadUnaligned(as: UInt32.self))
+        }
+        guard value.isFinite, value.rounded(.towardZero) == value,
+          let integer = Int(exactly: Double(value))
+        else { return .failure(.malformedWindowGeometry) }
+        scalars.append(integer)
+      }
+    }
+    let geometry = ManagedSlideShowWindowGeometry(
+      left: scalars[0],
+      top: scalars[1],
+      width: scalars[2],
+      height: scalars[3]
+    )
+    let (right, rightOverflow) = geometry.left.addingReportingOverflow(geometry.width)
+    let (bottom, bottomOverflow) = geometry.top.addingReportingOverflow(geometry.height)
+    guard geometry.width > 0, geometry.height > 0, !rightOverflow, !bottomOverflow,
+      rectangle.left == geometry.left,
+      rectangle.top == geometry.top,
+      rectangle.right == right,
+      rectangle.bottom == bottom
+    else { return .failure(.malformedWindowGeometry) }
+    return .value(geometry)
   }
 
   func parseSlideShowStateReply(

@@ -1475,7 +1475,48 @@ enum FrameFingerprintSampler {
   static let sampleColumns = 32
   static let sampleRows = 18
 
-  static func makeFingerprint(from pixelBuffer: CVPixelBuffer) -> FrameFingerprint? {
+  struct PixelCrop: Equatable, Sendable {
+    let x: Int
+    let y: Int
+    let width: Int
+    let height: Int
+
+    init?(surfaceGeometry: CaptureSurfaceGeometry) {
+      // `contentRect` is already expressed in points in the output surface. Only the documented
+      // pixels-per-point scale converts it to buffer pixels; `contentScale` is not another factor.
+      let scaleFactor = surfaceGeometry.scaleFactor
+      let rawMinimumX = surfaceGeometry.contentOriginX * scaleFactor
+      let rawMinimumY = surfaceGeometry.contentOriginY * scaleFactor
+      let rawMaximumX =
+        (surfaceGeometry.contentOriginX + surfaceGeometry.contentWidth) * scaleFactor
+      let rawMaximumY =
+        (surfaceGeometry.contentOriginY + surfaceGeometry.contentHeight) * scaleFactor
+      let values = [rawMinimumX, rawMinimumY, rawMaximumX, rawMaximumY]
+      guard values.allSatisfy(\.isFinite),
+        let minimumX = Int(exactly: rawMinimumX.rounded(.up)),
+        let minimumY = Int(exactly: rawMinimumY.rounded(.up)),
+        let maximumX = Int(exactly: rawMaximumX.rounded(.down)),
+        let maximumY = Int(exactly: rawMaximumY.rounded(.down)),
+        minimumX >= 0,
+        minimumY >= 0,
+        maximumX > minimumX,
+        maximumY > minimumY,
+        maximumX <= surfaceGeometry.outputPixelWidth,
+        maximumY <= surfaceGeometry.outputPixelHeight
+      else {
+        return nil
+      }
+      x = minimumX
+      y = minimumY
+      width = maximumX - minimumX
+      height = maximumY - minimumY
+    }
+  }
+
+  static func makeFingerprint(
+    from pixelBuffer: CVPixelBuffer,
+    pixelCrop: PixelCrop? = nil
+  ) -> FrameFingerprint? {
     guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA else {
       return nil
     }
@@ -1488,15 +1529,46 @@ enum FrameFingerprintSampler {
     let height = CVPixelBufferGetHeight(pixelBuffer)
     let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
     guard width > 0, height > 0 else { return nil }
+    let crop: PixelCrop
+    if let pixelCrop {
+      let (maximumX, horizontalOverflow) = pixelCrop.x.addingReportingOverflow(pixelCrop.width)
+      let (maximumY, verticalOverflow) = pixelCrop.y.addingReportingOverflow(pixelCrop.height)
+      guard pixelCrop.x >= 0, pixelCrop.y >= 0, pixelCrop.width > 0, pixelCrop.height > 0,
+        !horizontalOverflow, !verticalOverflow, maximumX <= width, maximumY <= height
+      else { return nil }
+      crop = pixelCrop
+    } else {
+      guard
+        let fullBuffer = CaptureSurfaceGeometry(
+          contentRect: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)),
+          scaleFactor: 1,
+          contentScale: 1,
+          outputPixelWidth: width,
+          outputPixelHeight: height
+        ),
+        let fullCrop = PixelCrop(surfaceGeometry: fullBuffer)
+      else { return nil }
+      crop = fullCrop
+    }
 
     let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
     var luminance: [UInt8] = []
     luminance.reserveCapacity(sampleColumns * sampleRows)
 
     for row in 0..<sampleRows {
-      let y = min(height - 1, ((row * 2 + 1) * height) / (sampleRows * 2))
+      let y =
+        crop.y
+        + min(
+          crop.height - 1,
+          ((row * 2 + 1) * crop.height) / (sampleRows * 2)
+        )
       for column in 0..<sampleColumns {
-        let x = min(width - 1, ((column * 2 + 1) * width) / (sampleColumns * 2))
+        let x =
+          crop.x
+          + min(
+            crop.width - 1,
+            ((column * 2 + 1) * crop.width) / (sampleColumns * 2)
+          )
         let offset = y * bytesPerRow + x * 4
         let blue = Int(bytes[offset])
         let green = Int(bytes[offset + 1])

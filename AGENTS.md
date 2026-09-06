@@ -83,6 +83,16 @@ Implemented:
   microphone or visible-board result, owner acceptance, Gatekeeper result, GitHub Release, or
   public re-download verification.
 
+- The subsequent 2026-09-06 managed-readiness working tree passed 240 Core tests in 18 suites
+  and 476 native App tests in 41 suites, most recently at
+  `DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_22-17-02-+0900.xcresult`.
+  It adds strict returned-object/current-inventory geometry disambiguation and validated auxiliary
+  surface-content fingerprints while retaining the pixel challenge and restoration boundary.
+  Doctor, local setup and release-tool boundary tests passed. The integrated live attempt stopped
+  before input at a locked macOS session. This is not managed-session, owner-lecture, visible-board,
+  final 26-stage, exact-commit or public-release evidence. See the latest handoff and verification
+  entries before resuming; do not repeat screen-recording permission changes.
+
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.

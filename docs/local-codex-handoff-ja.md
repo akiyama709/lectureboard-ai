@@ -2,6 +2,12 @@
 
 更新日：2026年9月6日
 
+## 最新の再開点（2026年9月6日22時台）
+
+　最新のworking treeはCore 240件・18 suite，App 476件・41 suiteの全テストに合格した．`make doctor`は失敗・警告0件，`make local-setup`と公開ツール境界テストも成功した．native resultは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_22-17-02-+0900.xcresult`である．正確な返却slide-show参照と現在の全ウィンドウ矩形の照合，及び補助窓のSDK contentRect内だけを使う指紋処理を追加した．矩形だけで対象を推定するfallbackではなく，既存pixel challenge，完全なinventory，freshness及び復元検査を併用する．
+
+　統合診断Appはbuildできたが，GUI操作前にmacOSのロック状態を確認したため，修正後のmanaged challengeは未実行である．診断Appは通常終了し，PowerPointは合成資料1件・slide show 0件を確認した．次はMac本体でロック解除後，合成資料で管理スライドショーを検証する．画面収録の設定変更を繰り返さない．実発話から可視板書までの所有者模擬講義，通常起動の権限持続，最終26段階gate及び公開・公開後検証は未完了である．詳細は`docs/build-verification.md`末尾と指定Obsidian開発ノートにある．
+
 ## 1．この文書の目的
 
 　本書は，iPhone上のChatGPT会話で設計・作成したLectureBoard AIを，macOS上のローカルCodex環境で継続開発するための引継ぎ文書である．通常のChatGPT会話履歴とCodexのローカル開発履歴は別系統であるため，重要な合意事項をリポジトリ内に固定する．

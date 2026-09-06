@@ -1725,3 +1725,77 @@ coordinate guarantee or a justification for a guessed tolerance. Geometry disamb
 work in progress. Apple's public definition of [SCWindow.frame](https://developer.apple.com/documentation/screencapturekit/scwindow/frame)
 describes a window rectangle within a display; it does not by itself establish a cross-application
 coordinate mapping.
+
+### 2026-09-06 exact geometry disambiguation checkpoint (live completion pending)
+
+The working-tree geometry path adds runtime-only, non-Codable exact-window geometry. It strictly
+decodes eight-byte native `qdrt` bounds and four-byte finite `sing` position/size properties,
+cross-checks all five properties, and uses the existing repeated retained-object semantic reads.
+Every phase must have exactly one geometry match, and that match must be the original candidate.
+Missing, malformed, changing or ambiguous geometry is rejected without a guessed tolerance.
+With this extra boundary, auxiliary surfaces may remain unchanged or respond consistently to the
+black/white challenge and then restore their own baseline. All candidate monochrome thresholds,
+inventory, provenance, freshness, repeat and restoration requirements remain in place. Callers
+without geometry retain the original stricter unchanged-auxiliary policy.
+
+A review caught that retained `SCWindow.frame` snapshots alone would miss a same-ID auxiliary
+window moving or resizing later. The broker now reads current geometry and identity from the same
+fresh `SCShareableContent` snapshot for every phase. Those refreshed objects are metadata only;
+all capture sources still use their original/sealed retained window handles. Regression coverage
+includes that separation and same-ID geometry changes.
+
+Core passed 240 tests in 18 suites. The first native geometry checkpoint passed 472 tests in 40
+suites at `Test-LectureBoardAI-2026.09.06_21-50-42-+0900.xcresult`. After the fresh-snapshot correction,
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_21-55-24-+0900.xcresult`
+also passed 472 tests in 40 suites. A disposable-copy query confirmed 472 authoritative tests,
+534 device runs, 14 parameterized tests/76 runs and zero failures, skips or expected failures.
+Both builds explicitly use `UNBOUND` provenance and are working-tree automated evidence only.
+
+Separate acquisition-only diagnostics retained the earlier role failure while collecting later
+black/white/restored samples; their final `finish` remained rejected and could not issue a binding.
+They must never be cited as successful role proof. In those synthetic observations the auxiliary
+mean luminance was approximately 132.68 at baseline, 4.73 at black, and 135.36 at white, with exact
+baseline restoration. Changing only auxiliary `preservesAspectRatio` to false made no difference
+and was not added to production. Delivered metadata showed a 66-by-20 buffer but `contentRect`
+approximately `(0, 0, 35.5555564, 20.0000005)`, scale factor 1 and content scale approximately
+0.02222222. The SDK header defines `contentRect` in surface points and scale factor as pixels per
+point; content scale must not be applied again. Auxiliary fingerprints over this authoritative
+content region, with bounded inward pixel quantization and strict geometry continuity, are being
+implemented. They are not yet a verified live fix. No owner lecture, microphone-to-board workflow,
+public artifact, normal-launch permission persistence or publication result follows from these
+diagnostics.
+
+### 2026-09-06 auxiliary content-region checkpoint and locked-session handoff
+
+The auxiliary capture path now fingerprints the complete SDK-reported content region rather
+than the letterboxed output buffer. It converts `contentRect` surface points using `scaleFactor`
+only, quantizes inward to whole pixels, and rejects empty, overflowing or out-of-buffer crops.
+The first generated delivery latches raw surface geometry, output dimensions and the crop.
+Missing or malformed generated-frame metadata, subsequent geometry changes, partial idle
+metadata and invalid delivery states fail closed. Valid idle reuse requires a verified prior
+fingerprint and absent geometry keys or an exactly matching complete tuple. Primary capture,
+user canvas confirmation and the 98-percent role-challenge tone thresholds are unchanged.
+Four added native tests cover letterboxing, scaled fractional crops, invalid metadata, geometry
+drift, idle continuity and unchanged legacy full-buffer sampling.
+
+The initial crop checkpoint passed 476 native tests in 41 suites at
+`Test-LectureBoardAI-2026.09.06_22-07-13-+0900.xcresult`. A disposable-copy query confirmed
+476 authoritative tests, 538 device runs, 14 parameterized tests/76 runs, zero failures, zero
+skips and zero expected failures. After all source writes had stopped, the complete rerun at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_22-17-02-+0900.xcresult`
+again passed 476 tests in 41 suites. `make doctor` reported zero failures and zero warnings;
+`make local-setup` completed, passed 240 Core tests in 18 suites and generated the Xcode project.
+The synchronized no-fee release boundary suite also passed; its retained log SHA-256 is
+`1d22f3ad1e8869d3f6f2cd83813cac65e9e0cc36921eb17e4eada06483ea1ad9`.
+These are working-tree automated checks, not a new complete 26-stage or exact-commit release gate.
+
+The integrated diagnostic Release app built successfully with `UNBOUND` provenance and without
+the earlier acquisition-after-rejection diagnostic exception. Direct launch displayed authorized
+screen-recording and microphone preflight, but the exact AX button guard could not find its
+target and sent no input. A session-state query then reported `CGSSessionScreenIsLocked = 1`.
+No integrated managed challenge, capture, transcription or board rendering was started in this
+attempt. The idle diagnostic app was terminated normally; an independent PowerPoint metadata
+check confirmed one exact synthetic presentation and zero slide shows. No new permission request,
+TCC reset or security-setting change was made. Temporary idle-sleep inhibition was active but
+does not unlock a session. The next live step requires the owner to unlock macOS; the synthetic
+managed challenge must then pass before returning to the owner's mock lecture.

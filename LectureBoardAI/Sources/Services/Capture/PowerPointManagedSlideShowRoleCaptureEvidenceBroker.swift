@@ -55,6 +55,11 @@ struct PowerPointManagedSlideShowRoleCaptureDelivery: Equatable, Sendable {
 
 protocol PowerPointManagedSlideShowRoleRetainedWindowReference: AnyObject, Sendable {
   var identity: PowerPointWindowIdentity { get }
+  var windowGeometry: ManagedSlideShowWindowGeometry? { get }
+}
+
+extension PowerPointManagedSlideShowRoleRetainedWindowReference {
+  var windowGeometry: ManagedSlideShowWindowGeometry? { nil }
 }
 
 protocol PowerPointManagedSlideShowRoleCaptureDeliverySource: AnyObject, Sendable {
@@ -88,6 +93,33 @@ protocol PowerPointManagedSlideShowRoleWindowInventoryReading: Sendable {
     processIdentifier: pid_t,
     bundleIdentifier: String
   ) async throws -> [PowerPointWindowIdentity]
+
+  func currentPowerPointWindowInventory(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [PowerPointManagedSlideShowRoleWindowInventoryEntry]
+}
+
+struct PowerPointManagedSlideShowRoleWindowInventoryEntry: Equatable, Sendable {
+  let identity: PowerPointWindowIdentity
+  let windowGeometry: ManagedSlideShowWindowGeometry?
+}
+
+extension PowerPointManagedSlideShowRoleWindowInventoryReading {
+  func currentPowerPointWindowInventory(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [PowerPointManagedSlideShowRoleWindowInventoryEntry] {
+    try await currentPowerPointWindowIdentities(
+      processIdentifier: processIdentifier,
+      bundleIdentifier: bundleIdentifier
+    ).map {
+      PowerPointManagedSlideShowRoleWindowInventoryEntry(
+        identity: $0,
+        windowGeometry: nil
+      )
+    }
+  }
 }
 
 protocol PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading: Sendable {
@@ -344,9 +376,9 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
     readInFlight = true
     defer { readInFlight = false }
     do {
-      let currentIdentities: [PowerPointWindowIdentity]
+      let currentInventory: [PowerPointManagedSlideShowRoleWindowInventoryEntry]
       do {
-        currentIdentities = try await inventoryReader.currentPowerPointWindowIdentities(
+        currentInventory = try await inventoryReader.currentPowerPointWindowInventory(
           processIdentifier: candidateIdentity.ownerProcessID,
           bundleIdentifier: candidateIdentity.bundleIdentifier
         )
@@ -356,7 +388,13 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
       guard !stopped, !poisoned else {
         throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
       }
+      let currentIdentities = currentInventory.map(\.identity)
       let visible = try validateInventory(currentIdentities, phase: request.phase)
+      let currentGeometry = Dictionary(
+        uniqueKeysWithValues: currentInventory.map {
+          (Int($0.identity.windowID), $0.windowGeometry)
+        }
+      )
       let phaseKey = (request.phase, request.nonce)
       let firstObservationInPhase =
         currentPhase.map {
@@ -418,7 +456,8 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
             continuityToken: item.validated.continuityToken,
             deliverySequence: item.validated.deliverySequence,
             callbackMachAbsoluteTime: item.validated.callbackMachAbsoluteTime
-          )
+          ),
+          windowGeometry: currentGeometry[Int(item.validated.identity.windowID)] ?? nil
         )
       }
       if !visible.contains(candidateIdentity) {
@@ -428,7 +467,8 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
             fingerprint: nil,
             isOnScreen: false,
             displayTime: nil,
-            deliveryProvenance: nil
+            deliveryProvenance: nil,
+            windowGeometry: currentGeometry[Int(candidateIdentity.windowID)] ?? nil
           )
         )
       }
@@ -843,6 +883,7 @@ final class PowerPointManagedSlideShowRoleScreenCaptureWindowReference:
 {
   let identity: PowerPointWindowIdentity
   let window: SCWindow
+  let windowGeometry: ManagedSlideShowWindowGeometry?
 
   init?(window: SCWindow) {
     guard let application = window.owningApplication,
@@ -856,6 +897,20 @@ final class PowerPointManagedSlideShowRoleScreenCaptureWindowReference:
     }
     self.identity = identity
     self.window = window
+    windowGeometry = Self.geometry(for: window.frame)
+  }
+
+  static func geometry(for frame: CGRect) -> ManagedSlideShowWindowGeometry? {
+    let values = [frame.origin.x, frame.origin.y, frame.width, frame.height].map(Double.init)
+    guard values.allSatisfy(\.isFinite),
+      let left = Int(exactly: values[0]),
+      let top = Int(exactly: values[1]),
+      let width = Int(exactly: values[2]),
+      let height = Int(exactly: values[3]),
+      width > 0,
+      height > 0
+    else { return nil }
+    return ManagedSlideShowWindowGeometry(left: left, top: top, width: width, height: height)
   }
 }
 
@@ -896,6 +951,16 @@ struct PowerPointManagedSlideShowRoleScreenCaptureInventoryReader:
     processIdentifier: pid_t,
     bundleIdentifier: String
   ) async throws -> [PowerPointWindowIdentity] {
+    try await currentPowerPointWindowInventory(
+      processIdentifier: processIdentifier,
+      bundleIdentifier: bundleIdentifier
+    ).map(\.identity)
+  }
+
+  func currentPowerPointWindowInventory(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [PowerPointManagedSlideShowRoleWindowInventoryEntry] {
     let content = try await SCShareableContent.excludingDesktopWindows(
       true,
       onScreenWindowsOnly: true
@@ -907,10 +972,17 @@ struct PowerPointManagedSlideShowRoleScreenCaptureInventoryReader:
       else {
         return nil
       }
-      return PowerPointWindowIdentity(
-        windowID: window.windowID,
-        ownerProcessID: application.processID,
-        bundleIdentifier: application.bundleIdentifier
+      guard
+        let identity = PowerPointWindowIdentity(
+          windowID: window.windowID,
+          ownerProcessID: application.processID,
+          bundleIdentifier: application.bundleIdentifier
+        )
+      else { return nil }
+      return PowerPointManagedSlideShowRoleWindowInventoryEntry(
+        identity: identity,
+        windowGeometry: PowerPointManagedSlideShowRoleScreenCaptureWindowReference.geometry(
+          for: window.frame)
       )
     }
   }
@@ -1190,6 +1262,97 @@ private enum PowerPointManagedSlideShowRoleSCFrameStatusParser {
   }
 }
 
+struct PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor {
+  enum Outcome: Equatable {
+    case generated(FrameFingerprint)
+    case idle
+    case invalid
+  }
+
+  private var latchedSurfaceGeometry: CaptureSurfaceGeometry?
+  private var latchedPixelCrop: FrameFingerprintSampler.PixelCrop?
+  private var lastVerifiedFingerprint: FrameFingerprint?
+  private var isPoisoned = false
+
+  mutating func process(
+    status: ManagedSlideShowRoleWindowDeliveryStatus,
+    pixelBuffer: CVPixelBuffer?,
+    attachments: [SCStreamFrameInfo: Any]?
+  ) -> Outcome {
+    guard !isPoisoned else { return .invalid }
+    switch status {
+    case .generated:
+      guard let pixelBuffer,
+        case .valid(let geometry) = CaptureSurfaceGeometryParser.attachmentState(
+          attachments,
+          outputPixelWidth: CVPixelBufferGetWidth(pixelBuffer),
+          outputPixelHeight: CVPixelBufferGetHeight(pixelBuffer)
+        ),
+        let crop = FrameFingerprintSampler.PixelCrop(surfaceGeometry: geometry),
+        geometryMatchesLatch(geometry, crop: crop),
+        let fingerprint = FrameFingerprintSampler.makeFingerprint(
+          from: pixelBuffer,
+          pixelCrop: crop
+        )
+      else { return poison() }
+      if latchedSurfaceGeometry == nil {
+        latchedSurfaceGeometry = geometry
+        latchedPixelCrop = crop
+      }
+      lastVerifiedFingerprint = fingerprint
+      return .generated(fingerprint)
+    case .idle:
+      guard let latchedSurfaceGeometry, let latchedPixelCrop, lastVerifiedFingerprint != nil else {
+        return poison()
+      }
+      let outputWidth =
+        pixelBuffer.map { CVPixelBufferGetWidth($0) }
+        ?? latchedSurfaceGeometry.outputPixelWidth
+      let outputHeight =
+        pixelBuffer.map { CVPixelBufferGetHeight($0) }
+        ?? latchedSurfaceGeometry.outputPixelHeight
+      switch CaptureSurfaceGeometryParser.attachmentState(
+        attachments,
+        outputPixelWidth: outputWidth,
+        outputPixelHeight: outputHeight
+      ) {
+      case .absent:
+        if let pixelBuffer {
+          guard CVPixelBufferGetWidth(pixelBuffer) == latchedSurfaceGeometry.outputPixelWidth,
+            CVPixelBufferGetHeight(pixelBuffer) == latchedSurfaceGeometry.outputPixelHeight
+          else { return poison() }
+        }
+      case .valid(let geometry):
+        guard let crop = FrameFingerprintSampler.PixelCrop(surfaceGeometry: geometry),
+          geometry == latchedSurfaceGeometry,
+          crop == latchedPixelCrop
+        else { return poison() }
+      case .invalid:
+        return poison()
+      }
+      return .idle
+    case .blank, .suspended, .stopped:
+      return poison()
+    }
+  }
+
+  private func geometryMatchesLatch(
+    _ geometry: CaptureSurfaceGeometry,
+    crop: FrameFingerprintSampler.PixelCrop
+  ) -> Bool {
+    guard let latchedSurfaceGeometry, let latchedPixelCrop else { return true }
+    return geometry == latchedSurfaceGeometry && crop == latchedPixelCrop
+  }
+
+  private mutating func poison() -> Outcome {
+    isPoisoned = true
+    latchedSurfaceGeometry = nil
+    latchedPixelCrop = nil
+    lastVerifiedFingerprint = nil
+    return .invalid
+  }
+}
+
 private final class PowerPointManagedSlideShowRoleAuxiliaryCaptureOutput:
   NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable
 {
@@ -1200,6 +1363,7 @@ private final class PowerPointManagedSlideShowRoleAuxiliaryCaptureOutput:
 
   private let recorder: PowerPointManagedSlideShowRoleCaptureDeliveryBuffer
   private var sequenceNumber: UInt64 = 0
+  private var fingerprintProcessor = PowerPointManagedSlideShowRoleAuxiliaryFingerprintProcessor()
 
   init(recorder: PowerPointManagedSlideShowRoleCaptureDeliveryBuffer) {
     self.recorder = recorder
@@ -1225,14 +1389,13 @@ private final class PowerPointManagedSlideShowRoleAuxiliaryCaptureOutput:
       recorder.recordGap()
       return
     }
-    switch status {
-    case .generated:
-      guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-        let fingerprint = FrameFingerprintSampler.makeFingerprint(from: pixelBuffer)
-      else {
-        recorder.recordGap()
-        return
-      }
+    let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+    switch fingerprintProcessor.process(
+      status: status,
+      pixelBuffer: pixelBuffer,
+      attachments: attachments
+    ) {
+    case .generated(let fingerprint):
       recorder.recordGenerated(
         fingerprint: fingerprint,
         displayTime: CaptureFrameDisplayTimeParser.parse(attachments?[.displayTime]),
@@ -1244,7 +1407,7 @@ private final class PowerPointManagedSlideShowRoleAuxiliaryCaptureOutput:
         deliverySequence: sequenceNumber,
         callbackMachAbsoluteTime: callbackMachAbsoluteTime
       )
-    case .blank, .suspended, .stopped:
+    case .invalid:
       recorder.recordGap()
     }
   }

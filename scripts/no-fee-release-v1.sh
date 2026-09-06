@@ -578,13 +578,13 @@ if not isinstance(g["logSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",g["log
 blob=g["scriptBlobOid"]
 if not isinstance(blob,str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}",blob) or blob in {"0"*40,"0"*64} or len(blob)!=len(c): raise SystemExit(1)
 core=d["coreTests"]
-if not exact(core,{"result","tests","suites","failed","skipped"}) or core["result"]!="Passed" or any(not integer(core[key]) for key in ("tests","suites","failed","skipped")) or (core["tests"],core["suites"],core["failed"],core["skipped"])!=(237,18,0,0): raise SystemExit(1)
+if not exact(core,{"result","tests","suites","failed","skipped"}) or core["result"]!="Passed" or any(not integer(core[key]) for key in ("tests","suites","failed","skipped")) or (core["tests"],core["suites"],core["failed"],core["skipped"])!=(240,18,0,0): raise SystemExit(1)
 native=d["nativeAppTests"]
 native_keys={"result","authoritativeTests","deviceRuns","parameterizedTests","parameterizedRuns","failed","skipped","expectedFailures","resultBundleName","resultBundleTreeSha256"}
 if not exact(native,native_keys) or native["result"]!="Passed" or any(not integer(native[key]) for key in native_keys-{"result","resultBundleName","resultBundleTreeSha256"}) or native["authoritativeTests"]<1 or native["deviceRuns"]<native["authoritativeTests"] or native["parameterizedRuns"]<native["parameterizedTests"]: raise SystemExit(1)
 if native["failed"]!=0 or native["skipped"]!=0 or native["expectedFailures"]!=0: raise SystemExit(1)
 if native["deviceRuns"]!=native["authoritativeTests"]+native["parameterizedRuns"]-native["parameterizedTests"]: raise SystemExit(1)
-if (native["authoritativeTests"],native["deviceRuns"],native["parameterizedTests"],native["parameterizedRuns"])!=(469,531,14,76): raise SystemExit(1)
+if (native["authoritativeTests"],native["deviceRuns"],native["parameterizedTests"],native["parameterizedRuns"])!=(476,538,14,76): raise SystemExit(1)
 name=native["resultBundleName"]
 if not isinstance(name,str) or os.path.basename(name)!=name or not re.fullmatch(r"Test-LectureBoardAI-[0-9._+-]+\.xcresult",name): raise SystemExit(1)
 if not isinstance(native["resultBundleTreeSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",native["resultBundleTreeSha256"]) or native["resultBundleTreeSha256"]=="0"*64: raise SystemExit(1)
@@ -673,7 +673,7 @@ if len(data)>16*1024*1024 or "Prepublication checks passed. Manual institutional
 stages=[int(value) for value in re.findall(r"(?m)^\[([0-9]+)/26\] ",data)]
 if stages!=list(range(1,27)):
  raise SystemExit(1)
-matches=re.findall(r"(?m)^[^\n]*Test run with 237 tests in 18 suites passed[^\n]*$",data)
+matches=re.findall(r"(?m)^[^\n]*Test run with 240 tests in 18 suites passed[^\n]*$",data)
 if len(matches)!=1:
  raise SystemExit(1)
 commit=evidence.get("sourceCommit")
@@ -747,7 +747,7 @@ evidence={
  "sourceCommit":commit,
  "generatedAt":generated,
  "prepublicationGate":{"command":"./scripts/prepublish-check.sh","result":"Passed","passedStages":26,"totalStages":26,"logSha256":log_digest,"scriptBlobOid":script_blob},
- "coreTests":{"result":"Passed","tests":237,"suites":18,"failed":0,"skipped":0},
+ "coreTests":{"result":"Passed","tests":240,"suites":18,"failed":0,"skipped":0},
  "nativeAppTests":{
   "result":summary.get("result"),"authoritativeTests":summary.get("totalTestCount"),
   "deviceRuns":device.get("passedTests"),"parameterizedTests":parameterized_tests,

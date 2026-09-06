@@ -227,6 +227,10 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
     #expect(semantic.semanticState.slideIndex == 3)
     #expect(semantic.semanticState.currentViewState == .running)
     #expect(semantic.semanticState.presentationSaved)
+    #expect(
+      semantic.semanticState.windowGeometry
+        == ManagedSlideShowWindowGeometry(left: 100, top: 340, width: 1_600, height: 900)
+    )
     #expect(sender.exactVisibility)
     #expect(sender.exactViewState == .running)
     #expect(sender.exactObjectRootIndices.allSatisfy { $0 == 1 })
@@ -242,6 +246,11 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
         PowerPointAppleEventProperty.slideID.rawValue,
         PowerPointAppleEventProperty.slideIndex.rawValue,
         PowerPointAppleEventProperty.presentationSaved.rawValue,
+        PowerPointAppleEventProperty.bounds.rawValue,
+        PowerPointAppleEventProperty.left.rawValue,
+        PowerPointAppleEventProperty.top.rawValue,
+        PowerPointAppleEventProperty.width.rawValue,
+        PowerPointAppleEventProperty.height.rawValue,
       ])
     )
     let exactIdentityReader: any ExactPowerPointSlideIdentityReadingClient = client
@@ -347,6 +356,30 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
       } == .malformedReply
     )
     #expect(sender.exactObjectRootIndices == [1])
+    #expect(
+      await client.ownsRetainedSlideShowObject(
+        bindingSessionToken: receipt.bindingSessionToken,
+        slideShowObjectToken: receipt.slideShowObjectToken
+      )
+    )
+  }
+
+  @Test func malformedExactObjectGeometryFailsClosedAndRetainsRecoveryOwnership() async throws {
+    let sender = FakeManagedAppleEventSender(exactReplyMode: .malformedGeometry)
+    let client = makeClient(sender: sender, objectToken: "malformed-geometry-object")
+    let receipt = try await client.startManagedSlideShow(startRequest())
+
+    #expect(
+      await capturedFailure {
+        try await client.readExactRoleSemanticState(
+          self.roleSemanticRequest(
+            receipt: receipt,
+            token: "malformed-geometry-request",
+            startedAt: 100
+          )
+        )
+      } == .malformedReply
+    )
     #expect(
       await client.ownsRetainedSlideShowObject(
         bindingSessionToken: receipt.bindingSessionToken,
@@ -1263,6 +1296,7 @@ enum ManagedRunReplyMode: Sendable {
 private enum ManagedExactObjectReplyMode: Sendable {
   case valid
   case malformedGet
+  case malformedGeometry
 }
 
 private enum ManagedFakeTransportError: Error {
@@ -1491,6 +1525,19 @@ private final class FakeManagedAppleEventSender:
             return managedClientReply(
               direct: NSAppleEventDescriptor(boolean: exactPresentationSaved)
             )
+          case PowerPointAppleEventProperty.bounds.rawValue:
+            if exactReplyMode == .malformedGeometry {
+              return managedClientReply(direct: NSAppleEventDescriptor(string: "malformed"))
+            }
+            return managedClientReply(direct: managedClientQDRectangle())
+          case PowerPointAppleEventProperty.left.rawValue:
+            return managedClientReply(direct: managedClientFloat32(100))
+          case PowerPointAppleEventProperty.top.rawValue:
+            return managedClientReply(direct: managedClientFloat32(340))
+          case PowerPointAppleEventProperty.width.rawValue:
+            return managedClientReply(direct: managedClientFloat32(1_600))
+          case PowerPointAppleEventProperty.height.rawValue:
+            return managedClientReply(direct: managedClientFloat32(900))
           default:
             return managedClientReply(direct: nil)
           }
@@ -1570,6 +1617,26 @@ private func managedClientPropertyLeafCode(
   _ descriptor: NSAppleEventDescriptor
 ) -> OSType? {
   descriptor.forKeyword(AEKeyword(keyAEKeyData))?.typeCodeValue
+}
+
+private func managedClientQDRectangle() -> NSAppleEventDescriptor {
+  let values: [Int16] = [340, 100, 1_240, 1_700]
+  let data = values.withUnsafeBufferPointer { buffer in
+    Data(
+      bytes: buffer.baseAddress!,
+      count: buffer.count * MemoryLayout<Int16>.size
+    )
+  }
+  return NSAppleEventDescriptor(descriptorType: DescType(typeQDRectangle), data: data)!
+}
+
+private func managedClientFloat32(_ value: Float) -> NSAppleEventDescriptor {
+  var value = value
+  let data = withUnsafeBytes(of: &value) { Data($0) }
+  return NSAppleEventDescriptor(
+    descriptorType: DescType(typeIEEE32BitFloatingPoint),
+    data: data
+  )!
 }
 
 private func managedClientRootObjectIndex(

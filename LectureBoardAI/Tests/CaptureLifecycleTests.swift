@@ -495,6 +495,76 @@ struct FreshPowerPointSampleBufferConverterTests {
   }
 }
 
+struct FrameFingerprintSamplerTests {
+  @Test func authoritativePixelCropUsesInwardScaledBoundsWithoutChangingLegacySampling() throws {
+    let pixelBuffer = try #require(
+      makeFingerprintPixelBuffer(
+        width: 8,
+        height: 4,
+        whiteRegion: CGRect(x: 1, y: 0, width: 5, height: 4)
+      )
+    )
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 0.25, y: 0, width: 3, height: 2.000_000_1),
+        scaleFactor: 2,
+        contentScale: 0.022_222_22,
+        outputPixelWidth: 8,
+        outputPixelHeight: 4
+      )
+    )
+    let crop = try #require(FrameFingerprintSampler.PixelCrop(surfaceGeometry: geometry))
+    #expect(crop.x == 1)
+    #expect(crop.y == 0)
+    #expect(crop.width == 5)
+    #expect(crop.height == 4)
+
+    let cropped = try #require(
+      FrameFingerprintSampler.makeFingerprint(from: pixelBuffer, pixelCrop: crop)
+    )
+    let legacy = try #require(FrameFingerprintSampler.makeFingerprint(from: pixelBuffer))
+    #expect(cropped.luminance.allSatisfy { $0 == 255 })
+    #expect(legacy.luminance.contains(0))
+    #expect(legacy.luminance.contains(255))
+  }
+}
+
+private func makeFingerprintPixelBuffer(
+  width: Int,
+  height: Int,
+  whiteRegion: CGRect
+) -> CVPixelBuffer? {
+  var pixelBuffer: CVPixelBuffer?
+  guard
+    CVPixelBufferCreate(
+      kCFAllocatorDefault,
+      width,
+      height,
+      kCVPixelFormatType_32BGRA,
+      nil,
+      &pixelBuffer
+    ) == kCVReturnSuccess,
+    let pixelBuffer
+  else { return nil }
+  CVPixelBufferLockBaseAddress(pixelBuffer, [])
+  defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+  guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+  let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+  let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
+  for y in 0..<height {
+    for x in 0..<width {
+      let isWhite = whiteRegion.contains(CGPoint(x: CGFloat(x), y: CGFloat(y)))
+      let value: UInt8 = isWhite ? 255 : 0
+      let offset = y * bytesPerRow + x * 4
+      bytes[offset] = value
+      bytes[offset + 1] = value
+      bytes[offset + 2] = value
+      bytes[offset + 3] = 255
+    }
+  }
+  return pixelBuffer
+}
+
 @MainActor
 struct AppModelCaptureLifecycleTests {
   @Test func supersededStartCannotStopOrOverwriteTheNewCapture() async throws {
