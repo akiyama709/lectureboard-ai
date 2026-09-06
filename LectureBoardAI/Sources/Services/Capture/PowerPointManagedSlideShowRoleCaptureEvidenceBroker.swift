@@ -90,6 +90,13 @@ protocol PowerPointManagedSlideShowRoleWindowInventoryReading: Sendable {
   ) async throws -> [PowerPointWindowIdentity]
 }
 
+protocol PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading: Sendable {
+  func currentRetainedPowerPointWindows(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [any PowerPointManagedSlideShowRoleRetainedWindowReference]
+}
+
 protocol PowerPointManagedSlideShowRoleCaptureEvidenceCleanupDeadlineWaiting: Sendable {
   func waitForDeadline() async
 }
@@ -133,16 +140,21 @@ private actor PowerPointManagedSlideShowRoleCaptureEvidenceCleanupRace {
 /// Exact-window capture lease used by the Stage B evidence reader.
 ///
 /// The candidate source is the primary stream recorder supplied by `PowerPointWindowCapture`.
-/// Auxiliary sources can be made only from the exact `SCWindow` references retained in the same
-/// start snapshot. A later shareable-content scan is used solely to prove inventory continuity;
-/// its newly returned objects are never selected for capture by numeric window identifier.
+/// Auxiliary sources can be made only from exact `SCWindow` references retained at capture start
+/// or added by the one full snapshot sealed after the first primary delivery and before the anchor
+/// is issued. Later shareable-content scans prove inventory continuity only; their newly returned
+/// objects are never selected for capture by numeric window identifier.
 actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
   nonisolated let captureOperationID: CaptureOperationID
   nonisolated let captureGeneration: UInt64
   nonisolated let candidateIdentity: PowerPointWindowIdentity
 
   private let primarySource: any PowerPointManagedSlideShowRoleCaptureDeliverySource
-  private let retainedWindows: [Int: any PowerPointManagedSlideShowRoleRetainedWindowReference]
+  private let originalRetainedWindows:
+    [Int: any PowerPointManagedSlideShowRoleRetainedWindowReference]
+  private var retainedWindows: [Int: any PowerPointManagedSlideShowRoleRetainedWindowReference]
+  private let retainedWindowSnapshotReader:
+    (any PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading)?
   private let inventoryReader: any PowerPointManagedSlideShowRoleWindowInventoryReading
   private let auxiliaryFactory: any PowerPointManagedSlideShowRoleAuxiliaryStreamFactory
   private let cleanupDeadline:
@@ -151,6 +163,8 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
   private var auxiliarySources: [Int: any PowerPointManagedSlideShowRoleCaptureDeliverySource] = [:]
   private var acceptedDeliveries: [Int: PowerPointManagedSlideShowRoleCaptureDelivery] = [:]
   private var issuedCaptureAnchor: ManagedSlideShowRoleChallengeCaptureAnchor?
+  private var captureAnchorInFlight = false
+  private var retainedWindowInventoryIsSealed: Bool
   private var currentPhase: (ManagedSlideShowRoleChallengePhase, UInt64)?
   private var readInFlight = false
   private var stopped = false
@@ -165,6 +179,8 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
     primarySource: any PowerPointManagedSlideShowRoleCaptureDeliverySource,
     inventoryReader: any PowerPointManagedSlideShowRoleWindowInventoryReading,
     auxiliaryFactory: any PowerPointManagedSlideShowRoleAuxiliaryStreamFactory,
+    retainedWindowSnapshotReader:
+      (any PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading)? = nil,
     cleanupDeadline:
       any PowerPointManagedSlideShowRoleCaptureEvidenceCleanupDeadlineWaiting =
       SystemPowerPointManagedSlideShowRoleCaptureEvidenceCleanupDeadline()
@@ -192,18 +208,23 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
     self.captureOperationID = captureOperationID
     self.captureGeneration = captureGeneration
     self.candidateIdentity = candidateIdentity
+    originalRetainedWindows = indexedWindows
     self.retainedWindows = indexedWindows
     self.primarySource = primarySource
     self.inventoryReader = inventoryReader
     self.auxiliaryFactory = auxiliaryFactory
+    self.retainedWindowSnapshotReader = retainedWindowSnapshotReader
+    retainedWindowInventoryIsSealed = retainedWindowSnapshotReader == nil
     self.cleanupDeadline = cleanupDeadline
   }
 
   func captureAnchor() async throws -> ManagedSlideShowRoleChallengeCaptureAnchor {
-    guard !stopped, !poisoned, !Task.isCancelled else {
+    guard !stopped, !poisoned, !Task.isCancelled, !captureAnchorInFlight else {
       throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
     }
     if let issuedCaptureAnchor { return issuedCaptureAnchor }
+    captureAnchorInFlight = true
+    defer { captureAnchorInFlight = false }
     let delivery: PowerPointManagedSlideShowRoleCaptureDelivery
     if let currentDelivery = await primarySource.currentDelivery() {
       delivery = currentDelivery
@@ -238,6 +259,10 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
       isCandidate: true,
       firstObservationInPhase: false
     )
+    try await sealRetainedWindowInventoryIfNeeded()
+    guard !stopped, !poisoned, !Task.isCancelled else {
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
+    }
     acceptedDeliveries[Int(candidateIdentity.windowID)] = delivery
     let anchor = ManagedSlideShowRoleChallengeCaptureAnchor(
       candidateStreamMemberToken: validated.streamMemberToken,
@@ -248,10 +273,62 @@ actor PowerPointManagedSlideShowRoleCaptureEvidenceLease {
     return anchor
   }
 
+  private func sealRetainedWindowInventoryIfNeeded() async throws {
+    guard !retainedWindowInventoryIsSealed else { return }
+    guard let retainedWindowSnapshotReader else {
+      poisoned = true
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.malformedLease
+    }
+    let snapshot: [any PowerPointManagedSlideShowRoleRetainedWindowReference]
+    do {
+      snapshot = try await retainedWindowSnapshotReader.currentRetainedPowerPointWindows(
+        processIdentifier: candidateIdentity.ownerProcessID,
+        bundleIdentifier: candidateIdentity.bundleIdentifier
+      )
+    } catch let failure as PowerPointManagedSlideShowRoleCaptureEvidenceFailure {
+      poisoned = true
+      throw failure
+    } catch {
+      poisoned = true
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inventoryUnavailable
+    }
+    guard !stopped, !poisoned, !Task.isCancelled else {
+      poisoned = true
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
+    }
+
+    var snapshotIdentities: Set<PowerPointWindowIdentity> = []
+    var sealed = originalRetainedWindows
+    for retainedWindow in snapshot {
+      let identity = retainedWindow.identity
+      guard identity.ownerProcessID == candidateIdentity.ownerProcessID,
+        identity.bundleIdentifier == candidateIdentity.bundleIdentifier,
+        snapshotIdentities.insert(identity).inserted
+      else {
+        poisoned = true
+        throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inventoryDrift
+      }
+      if let original = originalRetainedWindows[Int(identity.windowID)] {
+        guard original.identity == identity else {
+          poisoned = true
+          throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inventoryDrift
+        }
+      } else {
+        sealed[Int(identity.windowID)] = retainedWindow
+      }
+    }
+    guard snapshotIdentities.isSuperset(of: originalRetainedWindows.values.map(\.identity)) else {
+      poisoned = true
+      throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inventoryDrift
+    }
+    retainedWindows = sealed
+    retainedWindowInventoryIsSealed = true
+  }
+
   func readWindowEvidence(
     for request: PowerPointManagedSlideShowRoleFreshEvidenceRequest
   ) async throws -> PowerPointManagedSlideShowRoleWindowEvidenceSnapshot {
-    guard !stopped, !poisoned, !readInFlight else {
+    guard !stopped, !poisoned, !readInFlight, !captureAnchorInFlight else {
       throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inactiveLease
     }
     guard request.captureOperationID == captureOperationID.rawValue,
@@ -779,6 +856,36 @@ final class PowerPointManagedSlideShowRoleScreenCaptureWindowReference:
     }
     self.identity = identity
     self.window = window
+  }
+}
+
+struct PowerPointManagedSlideShowRoleScreenCaptureRetainedWindowSnapshotReader:
+  PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading
+{
+  func currentRetainedPowerPointWindows(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [any PowerPointManagedSlideShowRoleRetainedWindowReference] {
+    let content = try await SCShareableContent.excludingDesktopWindows(
+      true,
+      onScreenWindowsOnly: true
+    )
+    var retained: [any PowerPointManagedSlideShowRoleRetainedWindowReference] = []
+    for window in content.windows {
+      guard let application = window.owningApplication,
+        application.processID == processIdentifier,
+        application.bundleIdentifier == bundleIdentifier
+      else {
+        continue
+      }
+      guard
+        let reference = PowerPointManagedSlideShowRoleScreenCaptureWindowReference(window: window)
+      else {
+        throw PowerPointManagedSlideShowRoleCaptureEvidenceFailure.inventoryDrift
+      }
+      retained.append(reference)
+    }
+    return retained
   }
 }
 
@@ -1404,7 +1511,9 @@ enum PowerPointManagedSlideShowRoleScreenCaptureEvidenceLeaseFactory {
       retainedWindows: retained,
       primarySource: primaryRecorder,
       inventoryReader: PowerPointManagedSlideShowRoleScreenCaptureInventoryReader(),
-      auxiliaryFactory: PowerPointManagedSlideShowRoleScreenCaptureAuxiliaryStreamFactory()
+      auxiliaryFactory: PowerPointManagedSlideShowRoleScreenCaptureAuxiliaryStreamFactory(),
+      retainedWindowSnapshotReader:
+        PowerPointManagedSlideShowRoleScreenCaptureRetainedWindowSnapshotReader()
     )
     return PowerPointManagedSlideShowRoleScreenCaptureEvidenceLeaseComponents(
       lease: lease,

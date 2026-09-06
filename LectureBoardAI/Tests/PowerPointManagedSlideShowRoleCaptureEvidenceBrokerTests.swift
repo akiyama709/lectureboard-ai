@@ -199,6 +199,246 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
     }
   }
 
+  @Test func preAnchorSealAdoptsLateAuxiliaryAndRetainsOriginalExactHandles() async throws {
+    let candidate = identity(20)
+    let originalOther = identity(21)
+    let late = identity(22)
+    let originalCandidateReference = BrokerRetainedWindowReference(identity: candidate)
+    let originalOtherReference = BrokerRetainedWindowReference(identity: originalOther)
+    let refreshedCandidateReference = BrokerRetainedWindowReference(identity: candidate)
+    let refreshedOtherReference = BrokerRetainedWindowReference(identity: originalOther)
+    let lateReference = BrokerRetainedWindowReference(identity: late)
+    let primary = BrokerScriptedDeliverySource(
+      identity: candidate,
+      streamMemberToken: "candidate-member",
+      continuityToken: "candidate-continuity",
+      current: delivery(candidate, sequence: 10, callback: 100, display: 90, luminance: 1),
+      steps: [
+        .delivery(delivery(candidate, sequence: 11, callback: 130, display: 125, luminance: 2)),
+        .delivery(
+          delivery(
+            candidate,
+            status: .idle,
+            sequence: 12,
+            callback: 150,
+            display: 125,
+            luminance: 2
+          )
+        ),
+      ]
+    )
+    let originalOtherSource = BrokerScriptedDeliverySource(
+      identity: originalOther,
+      streamMemberToken: "other-member",
+      continuityToken: "other-continuity",
+      steps: [
+        .delivery(delivery(originalOther, sequence: 1, callback: 130, display: 125, luminance: 3)),
+        .delivery(
+          delivery(
+            originalOther,
+            status: .idle,
+            sequence: 2,
+            callback: 150,
+            display: 125,
+            luminance: 3
+          )
+        ),
+      ]
+    )
+    let lateSource = BrokerScriptedDeliverySource(
+      identity: late,
+      streamMemberToken: "late-member",
+      continuityToken: "late-continuity",
+      steps: [
+        .delivery(
+          delivery(
+            late,
+            sequence: 1,
+            callback: 130,
+            display: 125,
+            luminance: 4,
+            streamMemberToken: "late-member",
+            continuityToken: "late-continuity"
+          )
+        ),
+        .delivery(
+          delivery(
+            late,
+            status: .idle,
+            sequence: 2,
+            callback: 150,
+            display: 125,
+            luminance: 4,
+            streamMemberToken: "late-member",
+            continuityToken: "late-continuity"
+          )
+        ),
+      ]
+    )
+    let snapshotReader = BrokerRetainedWindowSnapshotReader(
+      windows: [refreshedCandidateReference, refreshedOtherReference, lateReference]
+    )
+    let factory = BrokerAuxiliaryFactory(
+      sources: [21: originalOtherSource, 22: lateSource]
+    )
+    let lease = try makeLease(
+      candidate: candidate,
+      retained: [originalCandidateReference, originalOtherReference],
+      primary: primary,
+      inventory: BrokerWindowInventory([candidate, originalOther, late]),
+      factory: factory,
+      retainedWindowSnapshotReader: snapshotReader
+    )
+
+    let anchor = try await lease.captureAnchor()
+    _ = try await lease.readWindowEvidence(
+      for: request(anchor: anchor, phase: .baseline, nonce: 40, minimum: 110, started: 120)
+    )
+    _ = try await lease.readWindowEvidence(
+      for: request(anchor: anchor, phase: .baseline, nonce: 40, minimum: 135, started: 140)
+    )
+
+    #expect(await snapshotReader.readCount == 1)
+    #expect(
+      factory.requestedReferenceIDs == [
+        ObjectIdentifier(originalOtherReference), ObjectIdentifier(lateReference),
+      ]
+    )
+    #expect(!factory.requestedReferenceIDs.contains(ObjectIdentifier(refreshedOtherReference)))
+  }
+
+  @Test func preAnchorSealRejectsMalformedDuplicateAndMissingOriginalSnapshots() async throws {
+    let candidate = identity(20)
+    let other = identity(21)
+    let foreign = PowerPointWindowIdentity(
+      windowID: 22,
+      ownerProcessID: 701,
+      bundleIdentifier: PowerPointWindowIdentity.expectedBundleIdentifier
+    )!
+    let snapshots: [[any PowerPointManagedSlideShowRoleRetainedWindowReference]] = [
+      [
+        BrokerRetainedWindowReference(identity: candidate),
+        BrokerRetainedWindowReference(identity: foreign),
+      ],
+      [
+        BrokerRetainedWindowReference(identity: candidate),
+        BrokerRetainedWindowReference(identity: candidate),
+        BrokerRetainedWindowReference(identity: other),
+      ],
+      [BrokerRetainedWindowReference(identity: candidate)],
+    ]
+
+    for snapshot in snapshots {
+      let primary = primarySource(candidate)
+      let snapshotReader = BrokerRetainedWindowSnapshotReader(windows: snapshot)
+      let lease = try makeLease(
+        candidate: candidate,
+        retained: [
+          BrokerRetainedWindowReference(identity: candidate),
+          BrokerRetainedWindowReference(identity: other),
+        ],
+        primary: primary,
+        inventory: BrokerWindowInventory([candidate, other]),
+        factory: BrokerAuxiliaryFactory(sources: [:]),
+        retainedWindowSnapshotReader: snapshotReader
+      )
+
+      #expect(
+        await capturedFailure {
+          _ = try await lease.captureAnchor()
+        } == .inventoryDrift
+      )
+      #expect(
+        await capturedFailure {
+          _ = try await lease.captureAnchor()
+        } == .inactiveLease
+      )
+      #expect(await snapshotReader.readCount == 1)
+    }
+  }
+
+  @Test func preAnchorSealRejectsParallelCreationAndNeverAdoptsPostSealWindows() async throws {
+    let candidate = identity(20)
+    let late = identity(21)
+    let postSeal = identity(22)
+    let gate = BrokerNextDeliveryGate()
+    let snapshotReader = BrokerRetainedWindowSnapshotReader(
+      windows: [
+        BrokerRetainedWindowReference(identity: candidate),
+        BrokerRetainedWindowReference(identity: late),
+      ],
+      gate: gate
+    )
+    let inventory = BrokerMutableWindowInventory([candidate, late])
+    let primary = primarySource(candidate)
+    let lease = try makeLease(
+      candidate: candidate,
+      retained: [BrokerRetainedWindowReference(identity: candidate)],
+      primary: primary,
+      inventory: inventory,
+      factory: BrokerAuxiliaryFactory(sources: [:]),
+      retainedWindowSnapshotReader: snapshotReader
+    )
+    let pending = Task { try await lease.captureAnchor() }
+    while await snapshotReader.readCount == 0 { await Task.yield() }
+
+    #expect(
+      await capturedFailure {
+        _ = try await lease.captureAnchor()
+      } == .inactiveLease
+    )
+    await gate.release()
+    let anchor = try await pending.value
+    #expect(try await lease.captureAnchor() == anchor)
+    #expect(await snapshotReader.readCount == 1)
+
+    await inventory.replace(with: [candidate, late, postSeal])
+    #expect(
+      await capturedFailure {
+        _ = try await lease.readWindowEvidence(
+          for: self.request(anchor: anchor, phase: .baseline)
+        )
+      } == .inventoryDrift
+    )
+    #expect(await snapshotReader.readCount == 1)
+  }
+
+  @Test func stoppedOrCancelledPendingPreAnchorSealCannotIssueAnchor() async throws {
+    for cancellation in [false, true] {
+      let candidate = identity(20)
+      let gate = BrokerNextDeliveryGate()
+      let snapshotReader = BrokerRetainedWindowSnapshotReader(
+        windows: [BrokerRetainedWindowReference(identity: candidate)],
+        gate: gate
+      )
+      let lease = try makeLease(
+        candidate: candidate,
+        retained: [BrokerRetainedWindowReference(identity: candidate)],
+        primary: primarySource(candidate),
+        inventory: BrokerWindowInventory([candidate]),
+        factory: BrokerAuxiliaryFactory(sources: [:]),
+        retainedWindowSnapshotReader: snapshotReader
+      )
+      let pending = Task { try await lease.captureAnchor() }
+      while await snapshotReader.readCount == 0 { await Task.yield() }
+      if cancellation {
+        pending.cancel()
+      } else {
+        await lease.stop()
+      }
+      await gate.release()
+
+      #expect(
+        await capturedFailure {
+          _ = try await pending.value
+        } == .inactiveLease,
+        "cancellation: \(cancellation)"
+      )
+      #expect(await snapshotReader.readCount == 1)
+      if cancellation { await lease.stop() }
+    }
+  }
+
   @Test func primaryIdleAndSamePayloadAuxiliaryIdlePreserveExactContinuity() async throws {
     let candidate = identity(20)
     let other = identity(21)
@@ -601,8 +841,10 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
     candidate: PowerPointWindowIdentity,
     retained: [any PowerPointManagedSlideShowRoleRetainedWindowReference],
     primary: any PowerPointManagedSlideShowRoleCaptureDeliverySource,
-    inventory: BrokerWindowInventory,
+    inventory: any PowerPointManagedSlideShowRoleWindowInventoryReading,
     factory: BrokerAuxiliaryFactory,
+    retainedWindowSnapshotReader:
+      (any PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading)? = nil,
     cleanupDeadline: any PowerPointManagedSlideShowRoleCaptureEvidenceCleanupDeadlineWaiting =
       BrokerImmediateCleanupDeadline()
   ) throws -> PowerPointManagedSlideShowRoleCaptureEvidenceLease {
@@ -614,6 +856,7 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
       primarySource: primary,
       inventoryReader: inventory,
       auxiliaryFactory: factory,
+      retainedWindowSnapshotReader: retainedWindowSnapshotReader,
       cleanupDeadline: cleanupDeadline
     )
   }
@@ -663,7 +906,9 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
     callback: UInt64,
     display: UInt64,
     luminance: UInt8,
-    mutation: BrokerDeliveryMutation? = nil
+    mutation: BrokerDeliveryMutation? = nil,
+    streamMemberToken: String? = nil,
+    continuityToken: String? = nil
   ) -> PowerPointManagedSlideShowRoleCaptureDelivery {
     PowerPointManagedSlideShowRoleCaptureDelivery(
       identity: mutation == .missingIdentity ? nil : identity,
@@ -673,10 +918,11 @@ struct PowerPointManagedSlideShowRoleCaptureEvidenceBrokerTests {
       captureGeneration: mutation == .generationDrift ? generation + 1 : generation,
       streamMemberToken: mutation == .streamDrift
         ? "drift-member"
-        : (identity.windowID == 20 ? "candidate-member" : "other-member"),
+        : streamMemberToken ?? (identity.windowID == 20 ? "candidate-member" : "other-member"),
       continuityToken: mutation == .continuityDrift
         ? "drift-continuity"
-        : (identity.windowID == 20 ? "candidate-continuity" : "other-continuity"),
+        : continuityToken
+          ?? (identity.windowID == 20 ? "candidate-continuity" : "other-continuity"),
       deliverySequence: mutation == .sequenceReplay ? 10 : sequence,
       callbackMachAbsoluteTime: mutation == .callbackReplay ? 100 : callback,
       displayTime: display,
@@ -843,10 +1089,56 @@ private actor BrokerNextDeliveryGate {
   }
 }
 
+private actor BrokerRetainedWindowSnapshotReader:
+  PowerPointManagedSlideShowRoleRetainedWindowSnapshotReading
+{
+  private let windows: [any PowerPointManagedSlideShowRoleRetainedWindowReference]
+  private let gate: BrokerNextDeliveryGate?
+  private(set) var readCount = 0
+
+  init(
+    windows: [any PowerPointManagedSlideShowRoleRetainedWindowReference],
+    gate: BrokerNextDeliveryGate? = nil
+  ) {
+    self.windows = windows
+    self.gate = gate
+  }
+
+  func currentRetainedPowerPointWindows(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [any PowerPointManagedSlideShowRoleRetainedWindowReference] {
+    readCount += 1
+    if let gate { await gate.wait() }
+    return windows
+  }
+}
+
 private actor BrokerWindowInventory: PowerPointManagedSlideShowRoleWindowInventoryReading {
   private let identities: [PowerPointWindowIdentity]
 
   init(_ identities: [PowerPointWindowIdentity]) {
+    self.identities = identities
+  }
+
+  func currentPowerPointWindowIdentities(
+    processIdentifier: pid_t,
+    bundleIdentifier: String
+  ) async throws -> [PowerPointWindowIdentity] {
+    identities
+  }
+}
+
+private actor BrokerMutableWindowInventory:
+  PowerPointManagedSlideShowRoleWindowInventoryReading
+{
+  private var identities: [PowerPointWindowIdentity]
+
+  init(_ identities: [PowerPointWindowIdentity]) {
+    self.identities = identities
+  }
+
+  func replace(with identities: [PowerPointWindowIdentity]) {
     self.identities = identities
   }
 

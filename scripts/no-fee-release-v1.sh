@@ -584,7 +584,7 @@ native_keys={"result","authoritativeTests","deviceRuns","parameterizedTests","pa
 if not exact(native,native_keys) or native["result"]!="Passed" or any(not integer(native[key]) for key in native_keys-{"result","resultBundleName","resultBundleTreeSha256"}) or native["authoritativeTests"]<1 or native["deviceRuns"]<native["authoritativeTests"] or native["parameterizedRuns"]<native["parameterizedTests"]: raise SystemExit(1)
 if native["failed"]!=0 or native["skipped"]!=0 or native["expectedFailures"]!=0: raise SystemExit(1)
 if native["deviceRuns"]!=native["authoritativeTests"]+native["parameterizedRuns"]-native["parameterizedTests"]: raise SystemExit(1)
-if (native["authoritativeTests"],native["deviceRuns"],native["parameterizedTests"],native["parameterizedRuns"])!=(464,526,14,76): raise SystemExit(1)
+if (native["authoritativeTests"],native["deviceRuns"],native["parameterizedTests"],native["parameterizedRuns"])!=(469,531,14,76): raise SystemExit(1)
 name=native["resultBundleName"]
 if not isinstance(name,str) or os.path.basename(name)!=name or not re.fullmatch(r"Test-LectureBoardAI-[0-9._+-]+\.xcresult",name): raise SystemExit(1)
 if not isinstance(native["resultBundleTreeSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",native["resultBundleTreeSha256"]) or native["resultBundleTreeSha256"]=="0"*64: raise SystemExit(1)

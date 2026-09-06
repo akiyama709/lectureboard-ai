@@ -156,7 +156,7 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
         token: "visibility-capability"
       )
     )
-    #expect(visibility.state == .available)
+    #expect(visibility.state == .unavailable)
     let pixel = try await client.readCapability(
       roleCapabilityRequest(
         receipt: receipt,
@@ -246,6 +246,23 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
     )
     let exactIdentityReader: any ExactPowerPointSlideIdentityReadingClient = client
     _ = exactIdentityReader
+  }
+
+  @Test func readableVisibilityDoesNotClaimWritableChallengeCapability() async throws {
+    let sender = FakeManagedAppleEventSender()
+    let client = makeClient(sender: sender)
+    let receipt = try await client.startManagedSlideShow(startRequest())
+    let callsBeforeCapability = sender.totalSendCount
+    let visibility = try await client.readCapability(
+      roleCapabilityRequest(
+        receipt: receipt,
+        capability: .visibility,
+        token: "readable-is-not-writable"
+      )
+    )
+    #expect(visibility.state == .unavailable)
+    #expect(sender.totalSendCount == callsBeforeCapability + 1)
+    #expect(sender.exactObjectRootIndices == [1])
   }
 
   @Test func wrongOrReplayedObjectTokenFailsBeforeAnotherExternalCall() async throws {

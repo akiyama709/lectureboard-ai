@@ -1684,3 +1684,44 @@ The controlled attempts used only the disposable synthetic presentation, not the
 content. Earlier independent count checks after failed starts found one presentation and zero
 slide shows. Successful role proof, semantic polling, microphone input, visible automatic board
 content, owner acceptance and normal LaunchServices permission persistence remain unverified.
+
+### 2026-09-06 pre-anchor inventory sealing and native pixel-challenge selection
+
+Production capture now seals its full PowerPoint inventory once after the first validated primary
+delivery and before issuing any capture anchor. This accepts exact auxiliary `SCWindow` references
+from that one complete snapshot; it never replaces the original candidate window, stream,
+operation, generation or recorder. Missing original identities, duplicate or malformed identities,
+wrong owners, snapshot failure, cancellation and concurrent initialization fail closed. Once sealed,
+later inventory changes are rejected exactly as before. Four new deterministic tests cover these
+branches, original-handle retention, and unchanged auxiliary evidence.
+
+A separate exact-returned-object synthetic probe found that setting `visible` to false returned
+command success but reading it immediately afterward still returned true. Setting the retained
+view state to black, white and running returned matching scalar readbacks, and the same retained
+object was restored and exited. The saved log SHA-256 is
+`b229f3b067fcffb4950a7d7a8bb6be2c52f4054f2bc8534cb64986b3a776529e` in
+`Diagnostics-20260906-ManagedReadiness` under the external verification directory. This establishes
+only scalar behavior, not visible role proof. The native provider therefore no longer treats a
+readable visibility property as a verified writable capability. Before any challenge mutation,
+it selects the existing pixel-nonce path; all that path's evidence and restoration checks remain
+mandatory. A regression covers that distinction.
+
+The first 469-test native run failed solely because the diagnostic build command incorrectly
+embedded abbreviated commit `382431f`; the provenance test correctly rejected it. The corrected
+working-tree build explicitly uses `UNBOUND`. Its result
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.06_21-28-27-+0900.xcresult`
+passed 469 tests in 40 suites. This is not a final clean-commit gate. The failed test host remained
+running after assertions finished and was subsequently terminated normally; its final process
+status was failure, and its result is not substituted for the corrected run.
+
+The updated diagnostic application passed Stage A and pre-anchor sealing but its pixel challenge
+then rejected `otherWindowChanged`: the auxiliary miniature also changed. The application is not
+yet ready for owner mock-lecture acceptance. No small-window exclusion or relaxed role proof has
+been implemented. Further synthetic geometry probes observed strict eight-byte `qdrt` bounds and
+four-byte `sing` position/size values from the actual returned object. The initial ScreenCaptureKit
+frame could be inset during startup animation; after a separate 200-millisecond observation it
+exactly matched `(100, 340, 1600, 900)`. This is an observed single-display case, not a universal
+coordinate guarantee or a justification for a guessed tolerance. Geometry disambiguation remains
+work in progress. Apple's public definition of [SCWindow.frame](https://developer.apple.com/documentation/screencapturekit/scwindow/frame)
+describes a window rectangle within a display; it does not by itself establish a cross-application
+coordinate mapping.

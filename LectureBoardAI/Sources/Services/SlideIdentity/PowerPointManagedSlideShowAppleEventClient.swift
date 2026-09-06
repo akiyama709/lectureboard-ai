@@ -1223,7 +1223,12 @@ actor PowerPointManagedSlideShowAppleEventClient:
     )
     switch codec.parseBooleanReply(reply) {
     case .value:
-      return .available
+      // A readable `visible` property is not evidence that PowerPoint can hide this exact show.
+      // The controlled Mac probe acknowledged `set false` but read back `true`. Until a writable
+      // visibility contract is verified, choose the existing pixel-nonce challenge before any
+      // mutation. This is not fallback after a failed challenge; all pixel evidence and restoration
+      // checks remain mandatory.
+      return .unavailable
     case .failure(.appleEventError(.unsupportedOperation)):
       return .unavailable
     case .failure(let failure):
