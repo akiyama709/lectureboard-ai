@@ -2155,3 +2155,43 @@ during that trial. Exact-production managed binding, microphone recognition, vis
 board output, owner canvas, representative PPTX behavior, latency, mouse priority, export,
 original-file immutability, Gatekeeper installation, publication, and public re-download remain
 unverified.
+
+### 2026-09-07 bounded permission and synthetic microphone attempt
+
+The same frozen owner-trial app was subsequently exercised only far enough to resolve the two
+privacy prompts and run one bounded transcription lifecycle check. The exact microphone prompt
+was matched to the fixed application path and accepted. The owner then accepted the Speech
+Recognition prompt through the system UI after being shown Apple's disclosure. The application
+entered the state in which transcription could be stopped, remained alive, and returned to its
+idle controls after one stop action. This does not establish that a partial or final recognition
+result was produced.
+
+While that single session was active, the local macOS `Kyoko` voice played the synthetic sentence
+`地球環境問題では、地域ごとの違いが重要です。` through the Mac speaker. A privacy-bounded
+Accessibility check tested only for the two predetermined fragments and did not read or emit any
+other recognized text. Neither fragment appeared. The app remained running and stopped normally.
+This is permission and start/stop lifecycle evidence with no crash. It is not successful real
+microphone recognition, natural speech, stable-partial delivery, pre-final board promotion, or
+microphone-to-visible-board evidence. Speaker playback may be suppressed by routing or echo
+cancellation, so the negative observation is not assigned a more specific cause and the input was
+not repeated.
+
+With explicit owner authorization, the one enabled `LectureBoard AI.app` row then visible in the
+Screen Recording settings was selected and removed. A second exact-identifier query confirmed that
+the row was absent. It was not restored: the normal settings window did not remain available long
+enough to add the fixed path, and launching the System Settings executable directly was rejected by
+macOS launch constraints with `Code Signing Invalid`. That direct-launch route is abandoned and
+must not be retried. The retained owner screenshot
+`system-settings-direct-launch-rejected-20260907.png` has SHA-256
+`421ce0ba2ca5ef29ea51bb11dd68753a419b43407cfdafd400458659aee0a169`.
+
+The application made one standard Screen Recording request after the row removal, without
+obtaining a retained settings window. The owner then directed that repeated Screen Recording
+permission work be skipped. The fixed app was quit normally to release cached TCC state and was
+not relaunched because its exact path is no longer authorized. No capture, PowerPoint input,
+canvas, overlay, export, owner PPTX, or owner acceptance occurred. The `c525ee4` trial app is
+therefore retained only as failed/incomplete historical evidence and is not a release acceptance
+candidate. Future release work must use one newly frozen exact final candidate; if the owner elects
+to run the core lecture acceptance, Screen Recording must be granted once to that exact candidate.
+Skipping that grant is allowed operationally, but cannot be recorded as successful capture or a
+completed owner acceptance.

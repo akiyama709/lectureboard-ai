@@ -217,3 +217,11 @@ make verify
 ```
 
 　`scripts/publish-to-github.sh`は初回リポジトリ公開専用であり，再実行しない．今後は作業ブランチをpushし，プルリクエストの必須CI成功後に`main`へ統合する．正式版は，最終candidateの受入検証後，バージョン整合性を確認し，`v1.0.0`タグ，リリースノート本文，ad hoc署名済みApp archive，SHA-256 checksum manifest，内容を含まないtest evidence，SBOM及びprovenanceの正確な5添付assetを備えたGitHub Releaseとして公開する．Developer ID署名又はApple notarization済みとは表示しない．外部公開に当たるpush，PR，タグ及びReleaseの実行は，それぞれ必要な確認を得て行う．
+
+## 8．2026-09-07限定権限試験と次の再開点
+
+　固定`c525ee4` Appについて，正確なマイク許可dialogをApp pathまで照合して許可し，Appleの説明が表示された音声認識許可は秋山さんがsystem UI上で許可した．文字起こし開始後は停止可能状態へ遷移し，Mac内蔵の`Kyoko`で非privateの合成文「地球環境問題では、地域ごとの違いが重要です。」をspeaker再生した．未知の認識本文は読み出さず，既知の2断片だけを照合したが，いずれもUI上で確認できなかった．入力は反復せず，停止を1回行うとidleへ戻り，Appはcrashしなかった．これはpermissionとstart／stop lifecycleの証拠であり，実発話認識，partial又はfinal，pre-final板書及び可視板書の成功証拠ではない．speaker出力のrouting又はecho cancellationを含む原因は未確定である．
+
+　秋山さんの明示許可に基づき，画面収録設定に存在した有効な`LectureBoard AI.app`行1件を選択して削除し，固定identifierの再照会で行が消えたことを確認した．その後の正規設定windowが保持されず，Apple純正System Settings実行fileを直接起動した経路はmacOSのlaunch constraintにより`Code Signing Invalid`で拒否された．この直接起動経路は廃止し，再試行しない．問題report画像は`Mock-Lecture-c525ee4/system-settings-direct-launch-rejected-20260907.png`へ保存し，SHA-256は`421ce0ba2ca5ef29ea51bb11dd68753a419b43407cfdafd400458659aee0a169`である．System Settingsの失敗であり，LectureBoard AI又は設定dataを破損した証拠ではない．
+
+　行削除後にApp本来の画面収録要求を1回だけ実行したが，設定windowは保持されなかった．秋山さんから反復する画面収録作業をskipする指示があったため，固定Appを正常終了して打ち切り，再起動しなかった．`c525ee4`固定Appは不完全な履歴証拠として保持し，受入候補には使わない．次は文書を同期したclean exact commitから最終候補を新しいpathへ1回だけ固定し，自動evidence，5 asset生成及びlocal verifyへ進む．本人がcore lecture受入を行う場合だけ，その最終候補へ画面収録を1回許可する．これをskipする場合，capture又は本人受入を成功扱いにせず，GitHub公開完了とも記録しない．
