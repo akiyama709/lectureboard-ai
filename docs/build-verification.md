@@ -2196,7 +2196,7 @@ to run the core lecture acceptance, Screen Recording must be granted once to tha
 Skipping that grant is allowed operationally, but cannot be recorded as successful capture or a
 completed owner acceptance.
 
-### 2026-09-07 exact-commit evidence freeze retry correction
+### 2026-09-07 exact-commit evidence ownership-normalization correction
 
 Clean commit `ac81e0da02a0fe4e3ddd0a34103ea1663897ad7c` was passed to the isolated
 `evidence` transaction. All 26 prepublication stages passed, including 250 Core tests in 19 suites
@@ -2206,17 +2206,28 @@ third attempt was stopped by the former two-copy limit. The requested evidence d
 published and no release asset, tag, push, or GitHub Release was created. This is a failed evidence
 transaction, not exact-commit release evidence and not an application-test failure.
 
-The copy boundary was checked against both the historical 2026-09-07 `.xcresult` and a newly
-generated 480-test result. For each, a `ditto --rsrc --extattr --acl` copy produced the same
-canonical tree manifest as its source. This excluded a generally corrupt copy method. The observed
-failure is consistent with more than one delayed Xcode result-service update during the long
-canonical manifest pass. The release tool continues to reject every inconsistent pair and keeps
-the existing 600-second deadline, but permits at most four copy candidates instead of two.
+An initial diagnostic against already settled local results showed byte- and metadata-equal copies,
+so commit `3a72f61a526f5f09a6ed70ff013e0f3297ef343a` temporarily raised the copy limit to four. Its
+clean isolated `evidence` transaction again passed all 26 stages, then rejected all four candidates
+and stopped at the 600-second deadline. It also published no evidence directory or release asset.
+This disproved the delayed-update explanation and showed that increasing retries was not a valid
+fix.
 
-A regression fixture now mutates the source after each of the first two copies. Both candidates
-must be rejected and deleted, and only a third copy containing the second settled update may pass.
-The existing continuous-mutation, deadline, final-seal mutation, source and candidate mutation,
-root replacement, parent replacement, path-swap, query-isolation, and digest guards remain active;
-the final-seal fixture now exhausts all four bounded candidates. Shell syntax, `git diff --check`,
-and the complete no-fee release-tool boundary suite passed. A new clean exact-commit `evidence`
-transaction is still required; these targeted results do not create or verify release assets.
+A fresh isolated 480-test `.xcresult` retained across the copy established the exact difference.
+The source tree was stable across two complete manifests. Xcode had created every source entry with
+owner 501 and group 0 under the isolated temporary checkout. A normal-user
+`ditto --rsrc --extattr --acl` copy into the requested verification directory retained the same
+paths, bytes, modes, flags, ACLs, and extended attributes, but macOS assigned group 20 to the copied
+entries because the user cannot preserve group 0 there. The result-bundle digest incorrectly
+treated that expected placement-specific ownership change as evidence corruption.
+
+The ineffective four-copy change is reverted. Only the private `.xcresult` digest now normalizes
+owner and group fields after generating the complete canonical manifest. Paths, file bytes, modes,
+flags, ACLs, and extended attributes remain exact. Source and candidate stability tokens still
+include uid, gid, inode, size, modification and change times, so an ownership change while either
+tree is being observed still fails closed. A new regression changes only the copied tree's group
+and requires digest equality, then changes its file mode and content separately and requires both
+to be rejected. The existing two-copy limit, 600-second deadline, continuous-mutation, final-seal,
+source and candidate mutation, root, parent and path-swap, query-isolation, and digest guards remain
+active. A new clean exact-commit `evidence` transaction is still required; these targeted results
+do not create or verify release assets.

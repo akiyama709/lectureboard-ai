@@ -780,7 +780,8 @@ PY
 }
 
 result_bundle_tree_digest() {
-  local result_bundle="$1" source_root="$2" manifest_root manifest_path digest status=0
+  local result_bundle="$1" source_root="$2" manifest_root manifest_path
+  local normalized_manifest_path digest status=0
   [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] || return 1
   [[ "$source_root" == /* && -d "$source_root" && ! -L "$source_root" ]] || return 1
   [[ -z "$(/usr/bin/find "$result_bundle" -type l -print -quit)" ]] || return 1
@@ -790,11 +791,23 @@ result_bundle_tree_digest() {
   manifest_root="$(/usr/bin/mktemp -d /private/tmp/lectureboard-result-bundle-manifest.XXXXXX)" \
     || return 1
   manifest_path="$manifest_root/result-bundle.tree"
+  normalized_manifest_path="$manifest_root/result-bundle.normalized.tree"
   if ! /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LC_ALL=C \
     /bin/bash -p "$source_root/scripts/release-artifact-tools.sh" tree-manifest \
       --root "$result_bundle" --output "$manifest_path"; then
     status=1
-  elif ! digest="$(sha256 "$manifest_path")"; then
+  elif ! /usr/bin/awk -F '|' '
+    BEGIN { OFS="|" }
+    {
+      valid=($1 == "directory" && NF == 9) \
+        || (($1 == "file" || $1 == "link") && NF == 10)
+      if (!valid || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/) exit 1
+      $2="-"; $3="-"; print; count += 1
+    }
+    END { if (count < 1) exit 1 }
+  ' "$manifest_path" >"$normalized_manifest_path"; then
+    status=1
+  elif ! digest="$(sha256 "$normalized_manifest_path")"; then
     status=1
   fi
   /usr/bin/find "$manifest_root" -depth -delete || status=1
@@ -1014,7 +1027,7 @@ freeze_result_bundle_when_stable() {
   local pair_digest_matches=0 final_seal_failure=''
   local stable_since=0 started_at=0 deadline=0
   local required_stable_observations=6 quiet_nanoseconds=5000000000
-  local maximum_observations=600 maximum_copy_attempts=4 deadline_nanoseconds=600000000000
+  local maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000
   [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
     || return 1
   frozen_result_bundle_digest=''

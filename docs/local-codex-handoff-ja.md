@@ -226,10 +226,12 @@ make verify
 
 　行削除後にApp本来の画面収録要求を1回だけ実行したが，設定windowは保持されなかった．秋山さんから反復する画面収録作業をskipする指示があったため，固定Appを正常終了して打ち切り，再起動しなかった．`c525ee4`固定Appは不完全な履歴証拠として保持し，受入候補には使わない．次は文書を同期したclean exact commitから最終候補を新しいpathへ1回だけ固定し，自動evidence，5 asset生成及びlocal verifyへ進む．本人がcore lecture受入を行う場合だけ，その最終候補へ画面収録を1回許可する．これをskipする場合，capture又は本人受入を成功扱いにせず，GitHub公開完了とも記録しない．
 
-## 9．2026-09-07 exact-commit evidence固定失敗と修正
+## 9．2026-09-07 exact-commit evidence固定失敗と所有group修正
 
 　clean commit `ac81e0da02a0fe4e3ddd0a34103ea1663897ad7c`に対するisolated `evidence` transactionは，全26段階，Core 250件・19 suite及びApp 480件・41 suiteへ合格した．しかし，authoritative `.xcresult`の固定時に2候補が`pairDigestMismatch`で安全側に棄却され，旧上限2回のため3回目のcopy前に`copyAttemptsExhausted`で停止した．指定したevidence directoryは作成されず，asset，tag，push及びGitHub Releaseも作成していない．これはApp test失敗ではなく，exact-commit release evidence成功でもない．
 
-　履歴上の実在`.xcresult`及び新規に生成した480件test resultを原本として確認すると，`ditto --rsrc --extattr --acl`によるcopyは，内容，mode，所有者，group，flag，ACL及び拡張属性を含むcanonical tree manifestで原本と一致した．したがって，一般的なcopy破損ではなく，長いmanifest監査中にXcode result serviceの遅延更新が複数回発生した場合へ旧上限が対応できなかったものと限定した．
+　安定済みresultだけを使った最初の診断は原本とcopyのmanifestが一致したため，commit `3a72f61a526f5f09a6ed70ff013e0f3297ef343a`でcopy上限を一時的に4へ増やした．しかし，そのclean isolated `evidence`も全26段階の後に4候補を全て棄却し，600秒deadlineで停止した．evidence directory及びassetは作成されていない．これにより遅延更新の説明と再試行増加案は否定され，4回案は撤回した．
 
-　修正は600秒のdeadline及び全TOCTOU検査を維持し，不一致候補を必ず棄却した上でcopy候補の上限を4回へ拡張する．新しい回帰testは，1回目及び2回目のcopy直後にsourceを更新し，両候補を拒否・削除し，2回目の更新を含む3回目だけを受理することを確認した．連続改変，期限超過，final seal改変，source／candidate改変，root／parent／path差替え及びquery分離の既存否定testも維持し，no-fee release tool suite全体へ合格した．次はこの修正と記録をclean commitへ固定し，その正確なcommitに対して`evidence`を再実行する．
+　新しい隔離checkoutで480件testを1回生成し，生成直後の`.xcresult`を保持してcopy前後の完全manifestを比較した．sourceは2回のmanifest間で不変だった．Xcodeがtemporary checkoutへ作成した全entryはowner 501・group 0であり，通常userが指定検証directoryへ`ditto --rsrc --extattr --acl`でcopyすると，path，bytes，mode，flag，ACL及び拡張属性は一致したまま，保存先entryのgroupだけが20になった．userはgroup 0を保存先へ再現できないため，配置依存の正常な所有group正規化をcopy破損と誤判定していたことが原因である．
+
+　修正はprivate `.xcresult`専用digestのowner及びgroup fieldだけを正規化する．path，bytes，mode，flag，ACL及び拡張属性の完全一致は維持する．source／candidateのstability tokenはuid，gid，inode，size，mtime及びctimeを引き続き含むため，観測中の所有変更はfail closedとなる．copy上限は2回，deadlineは600秒へ戻した．新回帰testはcopy側のgroupだけを変更した場合の一致を要求し，mode変更及びcontent変更は別々に拒否する．既存の連続改変，期限，final seal，source／candidate改変，root／parent／path差替え及びquery分離境界も維持する．次はこの根本修正をclean commitへ固定し，そのexact commitで`evidence`を再実行する．

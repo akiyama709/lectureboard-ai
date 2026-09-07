@@ -46,7 +46,9 @@ require_text 'freeze_result_bundle_when_stable "$after_result" "$copied_result" 
 reject_text 'materialize_result_bundle_for_queries "$after_result" "$isolated_source"'
 require_text 'extract_result_bundle_query_outputs "$result_bundle" "$source_root" "$result_digest"'
 require_text 'required_stable_observations=6 quiet_nanoseconds=5000000000'
-require_text 'maximum_observations=600 maximum_copy_attempts=4 deadline_nanoseconds=600000000000'
+require_text 'result-bundle.normalized.tree'
+require_text '$2="-"; $3="-"; print; count += 1'
+require_text 'maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000'
 require_text 'local seconds_value="${SECONDS-}"'
 require_text '(( seconds_value <= 9223372036 ))'
 reject_text 'time.monotonic_ns()'
@@ -436,6 +438,28 @@ result_bundle_tree_digest() {
   result_bundle_tree_digest_original "$@"
 }
 
+ownership_normalized_source="$root/Test-LectureBoardAI-ownership-source.xcresult"
+ownership_normalized_copy="$root/Test-LectureBoardAI-ownership-copy.xcresult"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$ownership_normalized_source"
+/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$ownership_normalized_copy"
+/usr/bin/chgrp -R 12 "$ownership_normalized_copy"
+[[ "$(result_bundle_tree_digest "$ownership_normalized_source" "$source_root")" \
+  == "$(result_bundle_tree_digest "$ownership_normalized_copy" "$source_root")" ]] \
+  || { /usr/bin/printf '%s\n' 'A group-normalized result-bundle copy was rejected.' >&2; exit 1; }
+/bin/chmod 600 "$ownership_normalized_copy/Data/payload"
+if [[ "$(result_bundle_tree_digest "$ownership_normalized_source" "$source_root")" \
+  == "$(result_bundle_tree_digest "$ownership_normalized_copy" "$source_root")" ]]; then
+  /usr/bin/printf '%s\n' 'A result-bundle mode mismatch was ignored.' >&2
+  exit 1
+fi
+/bin/chmod 644 "$ownership_normalized_copy/Data/payload"
+/usr/bin/printf '%s\n' 'content mismatch' >>"$ownership_normalized_copy/Data/payload"
+if [[ "$(result_bundle_tree_digest "$ownership_normalized_source" "$source_root")" \
+  == "$(result_bundle_tree_digest "$ownership_normalized_copy" "$source_root")" ]]; then
+  /usr/bin/printf '%s\n' 'A result-bundle content mismatch was ignored.' >&2
+  exit 1
+fi
+
 (
   SECONDS=9000000000
   clock_seconds_before="$SECONDS"
@@ -565,8 +589,8 @@ if freeze_result_bundle_when_stable \
   /usr/bin/printf '%s\n' 'A destination mutation in the final clock window was accepted.' >&2
   exit 1
 fi
-[[ "$seal_window_mutations" == 4 ]] \
-  || { /usr/bin/printf '%s\n' 'The final clock-window mutation did not exercise every bounded retry.' >&2; exit 1; }
+[[ "$seal_window_mutations" == 2 ]] \
+  || { /usr/bin/printf '%s\n' 'The final clock-window mutation did not exercise both bounded retries.' >&2; exit 1; }
 /usr/bin/grep -Fq 'retry=finalTokenMismatch' "$seal_window_log" \
   || { /usr/bin/printf '%s\n' 'The final clock-window mutation was not rejected by the final seal.' >&2; exit 1; }
 [[ ! -e "$seal_window_frozen_bundle" && ! -L "$seal_window_frozen_bundle" ]] \
@@ -619,30 +643,6 @@ freeze_result_bundle_when_stable \
 /usr/bin/grep -Fq 'source mutation during first freeze copy' \
   "$copy_race_frozen_bundle/Data/payload" \
   || { /usr/bin/printf '%s\n' 'The copy-time mutation was absent from the final frozen result.' >&2; exit 1; }
-
-repeated_copy_race_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-31-+0900.xcresult"
-repeated_copy_race_frozen_bundle="$root/repeated-copy-race-frozen.xcresult"
-/usr/bin/ditto --rsrc --extattr --acl "$result_bundle" "$repeated_copy_race_result_bundle"
-repeated_copy_race_count=0
-copy_result_bundle_for_freeze() {
-  /usr/bin/ditto --rsrc --extattr --acl "$1" "$2" || return 1
-  repeated_copy_race_count=$((repeated_copy_race_count + 1))
-  if (( repeated_copy_race_count <= 2 )); then
-    /usr/bin/printf '%s\n' "delayed xcresult service update $repeated_copy_race_count" \
-      >>"$repeated_copy_race_result_bundle/Data/payload"
-  fi
-}
-freeze_result_bundle_when_stable \
-  "$repeated_copy_race_result_bundle" "$repeated_copy_race_frozen_bundle" "$source_root" \
-  || { /usr/bin/printf '%s\n' 'Two settling copy-time updates could not be retried safely.' >&2; exit 1; }
-[[ "$repeated_copy_race_count" == 3 ]] \
-  || { /usr/bin/printf '%s\n' 'Two settling copy-time updates were not rejected before the third copy.' >&2; exit 1; }
-[[ "$(result_bundle_tree_digest "$repeated_copy_race_result_bundle" "$source_root")" \
-  == "$(result_bundle_tree_digest "$repeated_copy_race_frozen_bundle" "$source_root")" ]] \
-  || { /usr/bin/printf '%s\n' 'The repeated copy-time retry accepted inconsistent result bytes.' >&2; exit 1; }
-/usr/bin/grep -Fq 'delayed xcresult service update 2' \
-  "$repeated_copy_race_frozen_bundle/Data/payload" \
-  || { /usr/bin/printf '%s\n' 'The final repeated copy omitted the second settled update.' >&2; exit 1; }
 
 candidate_race_result_bundle="$root/Test-LectureBoardAI-2026.09.06_09-13-51-+0900.xcresult"
 candidate_race_frozen_bundle="$root/candidate-race-frozen.xcresult"
