@@ -172,6 +172,27 @@ Implemented:
   passed. Real microphone-to-visible-board success, export, owner acceptance, the complete
   exact-commit gate, and public release remain unverified.
 
+- The `926be0855b3e96cb288aa7b0fc60602a4bc9543e` owner retry still produced zero
+  confirmed board elements regardless of additional speaking or pause length. Commit
+  `7dd1c78d8ff8d7802e1e30a7cfd05328e059a45b` corrects three live-only gaps: the narrowly
+  bounded 700-millisecond Japanese explicit-cue path accepts finite partial confidence in the
+  valid zero-through-one range while the ordinary path retains its 0.5 floor; unchanged displayed
+  text updates the latest observation without restarting the stability timer; and one compact
+  keyword may fall back from the default layout size to `0.24 x 0.15` and then `0.20 x 0.12`
+  without allowing overlap. Text, segment, language, final, stop, capture, and context boundaries
+  still cancel pending work. Core 269 tests and the 44 directly affected App tests passed;
+  formatting and diff checks passed; independent review found no P0/P1 issue. The accepted P2
+  tradeoff is that a true low-quality confidence-zero partial may be committed after explicit-cue
+  and text-stability checks. The exact Git-archive owner build is frozen at
+  `/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7dd1c78/LectureBoard AI.app`.
+  Its arm64 ad hoc Hardened Runtime executable SHA-256 is
+  `a7a0d8696e5b730572de810b062fbe26a1d4b1abaacbde5ec6d9d60fd00e4684`, CDHash is
+  `1701b6ba7e970fb0924ede3dbef1f91288b5e25a`, and tree-manifest SHA-256 is
+  `a4f58ffbc4d617b22c935dda589274fab3712bb026ab4d976a13ec6dbad2d7a4`. Strict deep signature,
+  thin arm64, exact audio-input entitlement, no TeamIdentifier, and build-tree identity passed.
+  The app has not been launched by Codex. Real microphone-to-visible-board success, complete App
+  and publication gates, owner acceptance, and public release remain unverified.
+
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.

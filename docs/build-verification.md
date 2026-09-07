@@ -2455,3 +2455,42 @@ The bundle is thin arm64, reports `adhoc,runtime`, contains only the audio-input
 TeamIdentifier, passes strict deep verification, and exactly matches the archived build product.
 It has not yet passed the repeated owner utterance, visible preview or PowerPoint overlay checks,
 so acceptance and publication remain open.
+
+### 2026-09-07 live partial-confidence, text-stability, and compact-placement correction
+
+The owner retry of `926be0855b3e96cb288aa7b0fc60602a4bc9543e` still produced zero confirmed
+board elements regardless of added speech or pause length. Source tracing found three gaps that
+the earlier deterministic fixture did not represent. Apple Speech can report a zero or low mean
+confidence for a usable partial while the fixture supplied 0.8. Repeated callbacks for unchanged
+displayed text could carry new time or confidence metadata and restart the timer indefinitely.
+Finally, a classified confirmed intent was silently omitted when the default `0.30 x 0.18` board
+layout did not fit among the occupied regions.
+
+Commit `7dd1c78d8ff8d7802e1e30a7cfd05328e059a45b` accepts finite confidence from zero through one
+only on the existing 700-millisecond, explicit-cue, conservative Japanese stable-text path; the
+ordinary two-revision path retains its 0.5 threshold. Same-text callbacks update the observation
+used at firing time without restarting the timer. Text, segment, language, final, stop, capture,
+and context boundaries still cancel it, and stale operation tokens remain rejected. Placement
+first tries the unchanged default size. Only one compact 1-to-24-character keyword may retry at
+`0.24 x 0.15` and then `0.20 x 0.12`, with the existing no-overlap rule unchanged.
+
+All 269 Core tests in 19 suites passed. The directly affected native
+`AppSlideIdentityIntegrationTests` selection passed 44 tests at
+`/tmp/LectureBoardAI-pause-partial-tests/Logs/Test/Test-LectureBoardAI-2026.09.07_23-28-40-+0900.xcresult`.
+Strict Swift formatting of all six changed source/test files and `git diff --check` passed.
+Independent review found no P0 or P1 issue. The accepted P2 tradeoff is that a confidence-zero
+partial may represent true low recognition quality rather than unavailable confidence and can
+therefore become a wrong board item after the additional explicit-cue and text-stability checks.
+The complete App suite and 26-stage publication gate were deliberately not rerun for this bounded,
+resource-conscious owner retry.
+
+An isolated Git archive of the exact commit was built once as arm64 Release version 1.0.0 build 1
+with ad hoc signing and Hardened Runtime. The fixed copy is
+`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7dd1c78/LectureBoard AI.app`.
+The executable SHA-256 is `a7a0d8696e5b730572de810b062fbe26a1d4b1abaacbde5ec6d9d60fd00e4684`,
+the CDHash is `1701b6ba7e970fb0924ede3dbef1f91288b5e25a`, and the tree-manifest SHA-256 is
+`a4f58ffbc4d617b22c935dda589274fab3712bb026ab4d976a13ec6dbad2d7a4`. The bundle is thin arm64,
+reports `adhoc,runtime`, contains only the audio-input entitlement, has no TeamIdentifier, passes
+strict deep verification, and exactly matches the archived build product. Codex has not launched
+this app. Live preview and PowerPoint-overlay success, latency, export, owner acceptance, the full
+publication gate, Gatekeeper, GitHub publication, and public re-download remain unverified.

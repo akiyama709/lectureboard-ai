@@ -2,15 +2,17 @@
 
 更新日：2026年9月7日
 
-## 最新の再開点（2026年9月7日20時台，句読点なしpartial修正版）
+## 最新の再開点（2026年9月7日23時台，実音声と狭い空白の修正版）
 
-　固定候補`e2c66af09c716ccbbffa3623350497bbf6355e66`の本人再試験では，PowerPoint取得，利用者確定canvas及びVision解析は動作し，2,576 frame，文字領域17，矩形領域6，筆跡候補52，占有領域10を観測した．Speechも「ここで重要なのはテストです」を暫定結果として正しく表示したが，確定板書要素は0のままだった．したがって，画面収録又はoverlay安全確認ではなく，暫定発話からpublic boardまでの経路が直接の障害だった．同候補は再使用又は公開しない．
+　固定候補`926be0855b3e96cb288aa7b0fc60602a4bc9543e`の本人再試験でも，停止時間を長くして発話を繰り返しても確定板書要素は0のままだった．長い間を置けば解決する問題ではなく，同候補は再使用又は公開しない．
 
-　原因は，UIが最新partialを直ちに表示する一方，板書判断側は同一IDの2回の安定結果と句読点境界を要求していたため，句読点のない単発partialがContextualBoardEngineへ一度も届かなかったことである．commit `926be0855b3e96cb288aa7b0fc60602a4bc9543e`は，更新が700 ms止まった同一の日本語partialについて，明示的重要cue，信頼度0.5以上，有限で正しい時刻・強調，12–240文字及び保守的な完結語を満たす場合だけsynthetic finalとして既存のgrounding・importance・public-scene境界へ渡す．新partial，final，手動停止，capture又は文脈境界は待機処理を取消し，古いoperation及び古いmach時刻を拒否する．疑問，不完全文，「ここで重要なのはまだ」，低信頼及び不正metadataは公開しない．
+　追加調査で三つの実装差を特定した．Apple Speechの実partialは信頼度0又は低値を返し得るが，従来testは0.8に固定され，700 ms経路は0.5未満を拒否していた．また，同じ表示文のcallbackでも時刻又は信頼度が更新されるたびにtimerを再開しており，実際には文の安定時間を測っていなかった．さらに，分類に成功しても，占有領域の多いslideで既定の`0.30×0.18`配置が入らない場合，`BoardSceneComposer`が確定intentを黙って破棄していた．
 
-　最終Core全267件・19 suite及び直接影響するApp 43件・1 suiteは失敗なしで合格した．初期実装時点の全App 512件・41 suiteも合格したが，その後の停止競合及び完結語hardeningを含む全App再実行ではないため，最終exact commitの全App証拠とは扱わない．独立再reviewではP0／P1 findingが残らず，strict format及び`git diff --check`も合格した．全26段階の公開用gateは実行していない．
+　commit `7dd1c78d8ff8d7802e1e30a7cfd05328e059a45b`は，明示的重要cue，保守的な日本語完結形及び700 msの同文安定をすべて満たす狭い経路だけで，有限かつ0〜1の低いpartial信頼度を許容する．通常の2改訂経路は従来どおり0.5以上を要求する．同じ表示文のcallbackは最新観測へ更新するがtimerを再開せず，文，segment ID又は言語の変更，final，停止，capture若しくは文脈境界では取消す．配置は，既定sizeが入らない1〜24文字の単一keywordだけを`0.24×0.15`，次に`0.20×0.12`へ縮小し，重なり禁止は維持する．
 
-　同exact commitのGit archiveだけからarm64 Release，version 1.0.0 build 1，Hardened Runtime及びad hoc署名のAppを一度buildし，`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-926be08/LectureBoard AI.app`へ旧候補を上書きせず固定した．executable SHA-256は`0c1c1fe2b7e9a1d169bba3b8fefe5bba1524fd4e6491893adc32340eec5d24a2`，CDHashは`3bc46e781ebef14e21ea2f4e3026ac11a1dcc258`，tree manifest SHA-256は`3a31c5f5b709ddd9d08d2e41fb7f97d32ee81ed47c025bb3369431e23c2a3afa`である．arm64，`adhoc,runtime`，audio-input entitlementのみ，TeamIdentifierなし，strict deep署名及びbuild元との完全なtree一致を確認した．次はこのAppで同じ自然発話を一度だけ再試験し，約1秒以内にpreviewとPowerPoint overlayへ「テストです」が現れるかを確認する．実機成功前に公開準備へ進まない．
+　Core全269件・19 suite及び直接影響するApp 44件・1 suiteは失敗なしで合格し，strict format及び`git diff --check`も合格した．独立reviewにP0／P1 findingはない．残るP2 riskは，信頼度0が「利用不能値」ではなく本当に低品質な認識を表す場合でも，明示cueと同文安定により誤板書し得ることである．これは実用経路を閉じないための限定的trade-offであり，実音声で評価する．全App及び全26段階の公開用gateは，今回の短い本人再試験用修正では省資源のため再実行していない．
+
+　同exact commitのGit archiveだけからarm64 Release，version 1.0.0 build 1，Hardened Runtime及びad hoc署名のAppを一度buildし，`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7dd1c78/LectureBoard AI.app`へ旧候補を上書きせず固定した．executable SHA-256は`a7a0d8696e5b730572de810b062fbe26a1d4b1abaacbde5ec6d9d60fd00e4684`，CDHashは`1701b6ba7e970fb0924ede3dbef1f91288b5e25a`，tree manifest SHA-256は`a4f58ffbc4d617b22c935dda589274fab3712bb026ab4d976a13ec6dbad2d7a4`である．thin arm64，`adhoc,runtime`，audio-input entitlementのみ，TeamIdentifierなし，strict deep署名及びbuild元との完全なtree一致を確認した．AppはCodexから起動しておらず，実音声からpreview及びPowerPoint overlayが出るかは本人の一度の再試験待ちである．GitHubへのpush，tag更新又はRelease作成は行っていない．
 
 ## 直前の履歴（2026年9月7日16時台，visual-onlyへ確定）
 
