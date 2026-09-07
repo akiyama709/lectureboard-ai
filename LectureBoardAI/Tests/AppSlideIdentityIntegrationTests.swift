@@ -860,6 +860,56 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func unchangedPartialTextCommitsLatestObservationWithoutRestartingPause() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let segmentID = UUID()
+    let text = "ここで重要なのはテストです"
+
+    func observation(endTime: TimeInterval, sourceMachTime: UInt64) -> TranscriptionObservation {
+      TranscriptionObservation(
+        segment: TranscriptSegment(
+          id: segmentID,
+          text: text,
+          startTime: 0,
+          endTime: endTime,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: sourceMachTime
+      )
+    }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(endTime: 1, sourceMachTime: 1)
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(endTime: 2, sourceMachTime: 2)
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(endTime: 3, sourceMachTime: UInt64.max)
+    )
+    await drainMainActorQueue()
+    #expect(await pauseWaiter.invocationCount == 1)
+
+    await pauseWaiter.resume(invocation: 0)
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    #expect(model.liveTranscript == text)
+    #expect(model.liveTranscriptPhase == .partial)
+    await model.stopWindowCapture()
+  }
+
   @Test func supersededPauseCannotCommitAnOlderImportancePartial() async throws {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
@@ -2434,6 +2484,8 @@ private actor ControllableStablePartialTranscriptPauseWaiter:
 {
   private var continuations: [Int: CheckedContinuation<Void, Never>] = [:]
   private var nextInvocation = 0
+
+  var invocationCount: Int { nextInvocation }
 
   func wait(for duration: Duration) async {
     let invocation = nextInvocation

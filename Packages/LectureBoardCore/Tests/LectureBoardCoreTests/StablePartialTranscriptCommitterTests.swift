@@ -130,7 +130,7 @@ struct StablePartialTranscriptCommitterTests {
     #expect(committer.commitAfterPause(partial) == nil)
   }
 
-  @Test func pauseFallbackDoesNotWeakenOrdinaryReliabilityThresholds() {
+  @Test func pauseFallbackPromotesFiniteLowConfidenceWithoutWeakeningOrdinaryPath() throws {
     let id = UUID()
     let text = "ここで重要なのはテストです"
 
@@ -138,7 +138,9 @@ struct StablePartialTranscriptCommitterTests {
       var committer = StablePartialTranscriptCommitter()
       let partial = segment(id: id, text: text, endTime: 1, confidence: confidence)
       #expect(committer.observe(partial) == nil)
-      #expect(committer.commitAfterPause(partial) == nil)
+      let pausedObservation = committer.commitAfterPause(partial)
+      let pausedCommit = try #require(pausedObservation)
+      #expect(pausedCommit.confidence == 0.5)
 
       var ordinary = StablePartialTranscriptCommitter()
       let punctuated = segment(id: id, text: text + "．", endTime: 1, confidence: confidence)

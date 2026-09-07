@@ -103,18 +103,17 @@ private struct BoardCandidateContext {
   }
 }
 
-private struct PendingStablePartialTranscriptCommit: Equatable {
+private struct StablePartialTranscriptPauseKey: Equatable {
   let operationID: TranscriptionOperationID
-  let observation: TranscriptionObservation
+  let segmentID: UUID
+  let language: LanguageTag
+  let text: String
+}
 
-  static func == (
-    lhs: PendingStablePartialTranscriptCommit,
-    rhs: PendingStablePartialTranscriptCommit
-  ) -> Bool {
-    lhs.operationID == rhs.operationID
-      && lhs.observation.segment == rhs.observation.segment
-      && lhs.observation.sourceMachTime == rhs.observation.sourceMachTime
-  }
+private struct PendingStablePartialTranscriptCommit {
+  let token: UUID
+  let key: StablePartialTranscriptPauseKey
+  var observation: TranscriptionObservation
 }
 
 private struct RenderedProductionOverlayState: Equatable {
@@ -1154,7 +1153,6 @@ final class AppModel: ObservableObject {
     transcriptionOperationID: TranscriptionOperationID?
   ) {
     let segment = observation.segment
-    cancelPendingStablePartialTranscriptCommit()
     liveTranscript = segment.text
     if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       liveTranscriptPhase = .empty
@@ -1162,12 +1160,14 @@ final class AppModel: ObservableObject {
       liveTranscriptPhase = segment.isFinal ? .final : .partial
     }
     if segment.isFinal {
+      cancelPendingStablePartialTranscriptCommit()
       _ = stablePartialTranscriptCommitter.observe(segment)
       processBoardSegment(segment, sourceMachTime: observation.sourceMachTime)
       return
     }
 
     if let committedPartial = stablePartialTranscriptCommitter.observe(segment) {
+      cancelPendingStablePartialTranscriptCommit()
       processBoardSegment(committedPartial, sourceMachTime: observation.sourceMachTime)
       return
     }
@@ -1177,6 +1177,8 @@ final class AppModel: ObservableObject {
         observation,
         transcriptionOperationID: transcriptionOperationID
       )
+    } else {
+      cancelPendingStablePartialTranscriptCommit()
     }
   }
 
@@ -1255,8 +1257,23 @@ final class AppModel: ObservableObject {
     _ observation: TranscriptionObservation,
     transcriptionOperationID: TranscriptionOperationID
   ) {
-    let pending = PendingStablePartialTranscriptCommit(
+    let key = StablePartialTranscriptPauseKey(
       operationID: transcriptionOperationID,
+      segmentID: observation.segment.id,
+      language: observation.segment.language,
+      text: observation.segment.text
+    )
+    if var pending = pendingStablePartialTranscriptCommit, pending.key == key {
+      pending.observation = observation
+      pendingStablePartialTranscriptCommit = pending
+      return
+    }
+
+    cancelPendingStablePartialTranscriptCommit()
+    let token = UUID()
+    let pending = PendingStablePartialTranscriptCommit(
+      token: token,
+      key: key,
       observation: observation
     )
     pendingStablePartialTranscriptCommit = pending
@@ -1265,23 +1282,25 @@ final class AppModel: ObservableObject {
     stablePartialTranscriptPauseTask = Task { @MainActor [weak self] in
       await waiter.wait(for: delay)
       guard !Task.isCancelled, let self,
-        self.pendingStablePartialTranscriptCommit == pending,
-        self.transcriptionOperationGate.accepts(transcriptionOperationID),
+        let pending = self.pendingStablePartialTranscriptCommit,
+        pending.token == token,
+        self.transcriptionOperationGate.accepts(pending.key.operationID),
         self.liveTranscriptPhase == .partial,
-        self.liveTranscript == observation.segment.text
+        self.liveTranscript == pending.key.text
       else {
         return
       }
+      let latestObservation = pending.observation
       self.stablePartialTranscriptPauseTask = nil
       self.pendingStablePartialTranscriptCommit = nil
       guard
         let committed = self.stablePartialTranscriptCommitter.commitAfterPause(
-          observation.segment
+          latestObservation.segment
         )
       else {
         return
       }
-      self.processBoardSegment(committed, sourceMachTime: observation.sourceMachTime)
+      self.processBoardSegment(committed, sourceMachTime: latestObservation.sourceMachTime)
     }
   }
 

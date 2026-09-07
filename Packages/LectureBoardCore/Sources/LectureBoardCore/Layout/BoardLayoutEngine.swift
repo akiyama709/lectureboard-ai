@@ -14,16 +14,32 @@ public struct BoardLayoutEngine: Sendable {
     slideOccupied: [NormalizedRect],
     boardOccupied: [NormalizedRect]
   ) -> NormalizedRect? {
-    let desired = desiredSize(for: intent.kind)
     let obstacles = (slideOccupied + boardOccupied).map { expanded($0, by: margin) }
-    let candidates = candidateRects(size: desired)
-
-    return
-      candidates
-      .filter { candidate in
+    for size in candidateSizes(for: intent) {
+      let available = candidateRects(size: size).filter { candidate in
         obstacles.allSatisfy { candidate.intersectionArea(with: $0) <= 0.0001 }
       }
-      .max { score($0, intent: intent) < score($1, intent: intent) }
+      if let placement = available.max(by: {
+        score($0, intent: intent) < score($1, intent: intent)
+      }) {
+        return placement
+      }
+    }
+    return nil
+  }
+
+  private func candidateSizes(for intent: BoardIntent) -> [(width: Double, height: Double)] {
+    let desired = desiredSize(for: intent.kind)
+    guard intent.kind == .keyword, hasCompactKeywordContent(intent) else { return [desired] }
+    return [desired, (0.24, 0.15), (0.20, 0.12)]
+  }
+
+  private func hasCompactKeywordContent(_ intent: BoardIntent) -> Bool {
+    guard intent.items.count == 1 else { return false }
+    let itemLength = intent.items[0].reduce(into: 0) { count, character in
+      if !character.isWhitespace { count += 1 }
+    }
+    return (1...24).contains(itemLength)
   }
 
   private func desiredSize(for kind: BoardIntentKind) -> (width: Double, height: Double) {
