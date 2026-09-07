@@ -2,13 +2,21 @@
 
 更新日：2026年9月7日
 
-## 最新の再開点（2026年9月7日16時台，visual-onlyへ確定）
+## 最新の再開点（2026年9月7日18時台，発話板書修正版）
+
+　visual-only候補`f18c873d38062b98c4f8d48e048edda0a9d5a521`による最初の本人試用では，発話しても板書が動かなかったため不合格とした．調査により，利用者が視覚contextの準備前に文字起こし開始を要求するとSpeech providerの開始時期とApp側の受理境界がずれること，及び文脈上重要な通常発話の多くが内部`proposed`状態に留まりpublic boardへ入らないことを特定した．旧候補は再使用又は公開しない．画面収録設定の反復操作も行わない．
+
+　commit `e2c66af09c716ccbbffa3623350497bbf6355e66`では，開始要求をcapture・canvas・current analysisの準備完了まで保持して自動開始する．自然な重要表現及び十分な独立反復を安全に確定し，公開候補を内部候補より優先する決定的な順序を追加した．疑問，低信頼，重複時刻・ID，異言語反復，不正な引用及び曖昧な構造は従来どおり公開しない．Core全263件・19 suite及び直接影響するApp全74件・2 suiteは失敗なしで合格し，重大なreview findingは残っていない．これは限定自動証拠であり，全26段階gateではない．
+
+　同commitのGit archiveだけからarm64 Release・Hardened Runtime・ad hoc署名Appを一度buildし，`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-e2c66af/LectureBoard AI.app`へ固定した．executable SHA-256は`bde978d6d1c81e2a42cb45fff4731ea35883e34b4cd6277f0215e4279a32e919`，CDHashは`a80d02738e45d048d28555846fc8376f37716aa3`，tree manifest SHA-256は`4b39bef3b7d0758877d0405a02a116ce6205f116336274fae5b28109530681be`であり，build元とのbyte一致，arm64及びstrict deep署名を確認した．次はこの正確なAppだけで，実音声から板書preview及びPowerPoint overlayが動くかを短く再試用する．未確認なら公開準備へ進まない．
+
+## 直前の履歴（2026年9月7日16時台，visual-onlyへ確定）
 
 　ADR 0014を採択し，公開v1のPowerPoint経路をvisual-onlyへ変更した．講師が通常の全画面又はwindow表示slide showを開始し，LectureBoard AIで正確な聴衆向け画面を選んで「この画面で板書を開始」を押す．AppはApple Events又はPowerPoint内部のslide IDを使わず，presentationを開始，編集，保存又は終了しない．安定した視覚状態をlocal baseline，確定した大きな視覚変化を新しいlocal visual epochとする．Presenter View及び複数displayは対象外である．
 
 　sourceでは，visual baseline／切替，切替時の旧board・analysis・speech callback無効化，current analysis後の文字起こし自動再開，dense fingerprint欠落後の復帰，bounded fresh sampleによるcoarse切替，stable button listによる画面選択，full ScreenCaptureKit inventoryの再検出及びfull-screen Spaceへ参加できるoverlayを実装した．直接影響する47件の統合testは合格した．Info.plist及びentitlementからPowerPoint Automation／Apple Events権限を削除した．旧managed実装と証拠は研究上の履歴として保持するが，公開v1のUI，権限，受入又は配布物には用いない．
 
-　次は，このsourceをclean exact commitへ固定し，そのcommitだけからarm64 Release・Hardened Runtime・ad hoc署名の本人試用Appを1件生成してstable pathへ保存する．そのAppと本人PPTXの作業用copyで，正確な画面選択，canvas，実音声partial，final前の可視板書，visual epoch，遅延，overlay alignment，mouse優先，export，取得停止後もPowerPointが通常操作できること及び原本不変を確認する．旧`c525ee4`及び`e32917e`候補は再使用又は公開しない．本人受入後にだけ全exact-commit gateと5 assetを生成し，正確なcommit及びZIP SHA-256を示して外部公開の明示承認を得る．
+　当時の次工程は，このsourceをclean exact commitへ固定し，そのcommitだけからarm64 Release・Hardened Runtime・ad hoc署名の本人試用Appを1件生成することだった．これは`f18c873…`で実施したが，発話しても板書が動かず不合格となった．現行の再開手順は本書先頭及び第4節だけを使う．
 
 ## 最新の再開点（2026年9月7日11–12時台）
 
@@ -18,7 +26,7 @@
 
 　sourceでは，通常App終了をAppKitの`terminateLater` handshakeへ変更し，exact PowerPoint cleanupを確認できた場合だけ終了を許可する．runtime verificationは自身が停止をawaitした後に即時終了する．exact retained-object receiptはexit失敗後もclientとともに保持し，同一descriptorへの再試行をsingle-flight化した．managed startはAutomation許可待ちより前に所有状態を登録し，許可後及びcapture anchor取得後に取消しとtokenを再確認する．stop tombstoneはwork成功とfinishの競合にも勝ち，cleanup前の成功公開を防ぐ．App終了latchは新規capture／managed開始を遮断し，scene activationのPowerPoint refreshはepoch及びawait後の所有検査によって進行中sessionへ干渉しない．
 
-	限定回帰証拠は，関連4 suiteのfocused 76件，最新coordinator 15件及びanchor最終修正前のcoordinator 14件×10反復＝140件の合格である．最終post-anchor sourceでは，`make doctor`，Core 250件・19 suiteを含む`make local-setup`，`make build-runtime`及び画面収録要求を行わないruntime launch smokeが合格した．全App testもauthoritative 498件，device run 561件，parameterized test 15件・78 run，失敗・skip・expected failure 0件で合格した．497件の旧全App結果はpost-anchor取消しguardより前のtreeに対する履歴であり，現行sourceの最終証拠には使わない．同じpost-anchor working treeの全26段階`make verify`も合格し，native resultは`Test-LectureBoardAI-2026.09.07_12-23-44-+0900.xcresult`である．その後，非失敗のline-length warning 1件をtest行の折返しだけで除去した．clean exact commitのisolated evidenceはまだ実行しておらず，合格扱いにしない．
+　限定回帰証拠は，関連4 suiteのfocused 76件，最新coordinator 15件及びanchor最終修正前のcoordinator 14件×10反復＝140件の合格である．最終post-anchor sourceでは，`make doctor`，Core 250件・19 suiteを含む`make local-setup`，`make build-runtime`及び画面収録要求を行わないruntime launch smokeが合格した．全App testもauthoritative 498件，device run 561件，parameterized test 15件・78 run，失敗・skip・expected failure 0件で合格した．497件の旧全App結果はpost-anchor取消しguardより前のtreeに対する履歴であり，現行sourceの最終証拠には使わない．同じpost-anchor working treeの全26段階`make verify`も合格し，native resultは`Test-LectureBoardAI-2026.09.07_12-23-44-+0900.xcresult`である．その後，非失敗のline-length warning 1件をtest行の折返しだけで除去した．clean exact commitのisolated evidenceはまだ実行しておらず，合格扱いにしない．
 
 　commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab`のisolated evidence，5 asset，local tag及びowner展開物は，当時の自動検証履歴として固定保存するが，後続のlifecycle defectにより公開候補として却下した．`Release-Evidence-e32917e`，`Approved-Release-e32917e`及び`Owner-Acceptance-e32917e`の内容を変更せず，旧tag又はZIPをpush／公開しない．次は現行修正のreviewと最終gateを完了し，新しいclean exact commitからevidence，5 asset及び1件のowner候補を作り直す．production PowerPointの正常終了・取消し・中断，owner PPTX，実microphoneから可視板書，遅延，mouse優先，export，原本不変，Gatekeeper，GitHub Actions，公開及びpublic再downloadは未検証又は未完了である．
 
@@ -191,38 +199,24 @@
 
 　session解除後，同じdecoder-hardening前固定Appはstatic，8秒間隔6入力dynamic及びsingle-stroke／eraseを別々に完了した．保存済みruntime reportのSHA-256は順に`76ccbb00397b46753cace26a471d871a0b5555b0e6447cef6cec819be22dcf53`，`87551e6151e206b4887ea82b3a26ddc3db204c575c82c788135e1cf9fd23b252`及び`6487fa3586454d893f3116868dc8098f48a7425d659f271e2a4d249d7c187289`である．single-strokeのbefore及びafter-erase画像はSHA-256 `21854ac6048ee58528dbd8a52fc914ca8a5b9e6399fc947f69bdcb37c88ef5b7`でbyte-identical，after-ink画像はSHA-256 `daf9a8ad32d5b3d9504d3036ebbc897b360de92d1e523df0b595105e11fe0946`である．これらは旧producer／decoder build固有の履歴証拠であり，上記decoder-hardening後Appのrunへ置き換えず，逆方向にも一般化しない．両固定App及び全report・画像をbuild，移動，置換又は改名しない．
 
-## 4．最初にローカルで行うこと
+## 4．現在のローカル再開手順
 
-```bash
-make doctor
-make local-setup
-make test-app
-make build-runtime
-make test-runtime-launch-smoke
-```
+　旧`c525ee4…`及び`f18c873…`のAppは履歴証拠であり，再起動，移動，置換又は公開しない．次の本人予備再試験には，commit `e2c66af09c716ccbbffa3623350497bbf6355e66`から固定した`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-e2c66af/LectureBoard AI.app`だけを使う．この段階では再build又は全gate再実行を行わない．
 
-　`make test-runtime-launch-smoke`は，画面収録許可を要求せず，不正引数では診断を出してJSONを残さず自動終了し，対象窓なしではメタデータだけの失敗JSONを書いて自動終了することを確認する．通常の公開前検査`make verify`にも，Coreテスト，Appテスト，ネイティブビルド，runtimeビルド及びこの起動スモークを組み込む．
+1. PowerPointの通常の全画面又はwindow表示slide showを利用者が開始する．Presenter View及び複数displayは使わない．
+2. 上記固定Appを通常起動する．画面収録が許可済みなら設定buttonを押さない．未許可表示が残る場合は反復操作せず，その状態を記録して停止する．
+3. `PowerPointウィンドウを再検出`で受講者に見せる正確な画面を選び，`この画面で板書を開始`を押す．凍結preview上でslide面だけを選択して確定する．
+4. `文字起こしを開始`はcurrent視覚contextの準備前に押してもよい．修正版は要求を待機させ，capture，canvas及びcurrent analysisが揃った後に自動開始する．
+5. PowerPointを前面に戻して自然に発話し，App内の板書preview及びPowerPoint overlayの両方を確認する．最初の限定確認では，自然な重要表現，定義，因果，比較又は列挙を含む一つの完結文を使える．音声commandの暗記は要件ではない．
+6. 成否と診断表示だけを記録する．本人PPTX，slide画像，文字起こし又は音声をGit，connector，cloud若しくは別のmodel contextへ送らない．
 
-　次の作業は，次の順で進める．固定schema 8，schema 9，schema 10及びschema 11 App，report，helper sidecar及び画像はbuild，置換，移動又は改名せず，それぞれのbuild固有証拠として保持する．新規reportはsystem temporary directory内の一意なpathへ書き，内容を検証してからexternal verification directoryへcopyし，`cmp`とSHA-256で保存結果を確認する．
-
-1. 合成資料を用いた固定診断Appでは，PowerPoint資料1件，windowed slide show，display 1台の条件で，managed object／window／slide binding，日本語・英語slide切替及び正常cleanupまで確認した．次は同じ範囲を新しいexact production owner trial Appと本人の作業用copyで確認する．
-2. 合成資料のcalibration UIではslide面だけのdrag・明示確定とcurrent visual analysisを確認した．次は本人によるcanvas確認，production overlayの目視alignment及びclick-through mouse priorityを確認する．診断Appの結果を可視自動板書の成功証拠へ読み替えない．
-3. 日本語と英語を別sessionで，microphoneからfinal transcript，current `SlideContext`，context engine，confirmed board scene及びvisible board renderingまで確認する．
-4. 公開board sceneだけを含むsession JSON／SVG exportをlive検証し，元`.pptx`が不変であることをhash及びZIP整合性で確認する．
-5. 正常停止，取消し，許可拒否，window終了及びcapture中断のcleanup／recoveryを同じ対応範囲で反復確認する．
-6. 代表的な日本語・英語資料，privacy，accessibility，license，既知の制限，導入，初回講義及びtroubleshooting文書を完成させる．full-screen，Presenter View，複数display，日英code switching，physical pen tablet，speaker notes import及びcloud adapterはpost-v1範囲とし，成功を推定しない．
-7. current treeで最終`make verify`を一度だけ実行し，Hardened Runtime，ad hoc署名，checksum manifest，内容を含まないtest evidence，SBOM及びcommit-bound provenanceを備える正確な`v1.0.0` archiveを生成して，App単位の「このまま開く」を検証する．
-8. 正確なcommitとarchive SHA-256を示してユーザーの明示確認を得た場合だけpublic `v1.0.0` GitHub Releaseを作成し，再downloadしたartifactのbyte同一性，SHA-256，ad hoc署名，Hardened Runtime，metadata，導入及び起動を再確認する．
-
-　確認結果は，成功・失敗を問わず`docs/build-verification.md`へ記録する．
+　previewが変わってoverlayだけが見えない場合はfocus／mapping境界，認識中の発話が変わってpreviewが空のままならgrounding／importance／空白配置境界として切り分ける．成功・失敗を問わず`docs/build-verification.md`及び指定Obsidian開発ノートへ記録する．
 
 ## 5．次の実装単位
 
-　選択したPowerPoint windowの連続取得からoverlayのfail-closedな座標変換までの決定論的基盤に加え，schema 10のbounded capture-terminal診断，schema 11のcontent revision interval，post-baseline coarse／dense候補に限定したbounded one-shot sample経路，8秒単位の端末内音声認識継続，保守的grounding及び誤解を避ける実行時診断を実装した．現行working treeはCore 235件・18 suite，App 455件・40 suite及び全26段階gateに合格する．decoder-hardening後の固定Appは，static exact-window capture，6件のdynamic visual revision及びsingle-stroke／eraseを完了した．operator-captured helper sidecarとの組合せは，8秒間隔の6入力windowへのattributionを支持するが，runtime reportへ暗号的に結合されておらず，release-grade provenanceではない．dynamic sourceはcoarse 5件及びcontinuous dense idle repeat 1件，stroke runもcontinuous dense 2件であり，`boundedFreshSample`をliveには通っていない．手書き後の赤線と消去後のbyte-identical復元はpixel証拠であり，意味的又は入力ごとのink／erase分類，既存ink検出，semantic slide identity，利用者確認精度，目視alignment，AI rendering又はproduction挙動の証拠ではない．
+　現在の唯一の次工程は，上記固定Appによる短いmicrophone-to-board予備再試験である．成功した場合だけ，slide切替，mouse入力優先，JSON／SVG export，停止後のPowerPoint通常操作及びPPTX不変性を同候補で確認する．失敗した場合は，診断で特定した一つの境界だけを修正し，新しいcommitと固定候補で再試験する．
 
-　exact-window-bound managed identity provider，条件付き文字起こし自動再開，公開scene限定JSON／SVG export及びno-fee release metadataは現行sourceへ実装済みであり，それぞれ対象testが合格している．2026年9月7日の固定診断Appは，合成資料に限ってmanaged開始，exact object／window／slide binding，明示canvas確定，2回の意味的slide切替，切替後解析，managed停止及び正常終了を完了した．この結果に対応する最終policyはcommit `fa62c73…`へ固定し，全26段階gateに合格した．production owner trial Appはcommit `c525ee4…`から上記exact pathへ固定し，通常起動と権限未付与時のfail-closed停止まで確認した．次は同じAppへ画面収録を1回許可し，前節2以降の実マイク・可視板書・本人資料受入を行う．全固定App及び証拠fileは移動・置換しない．
-
-　AIやクラウドサービスを先に接続してはならない．まず，何を見て，どのスライドを対象とし，どこが空いており，どの発話を根拠としたかを観察・記録できる基盤を完成させる．
+　本人予備再試験及び残る機能確認が合格した後，clean exact release commitで全gateと5 assetを生成し，Gatekeeper及びGitHub Actionsを確認する．正確なcommitとarchive SHA-256を示してユーザーの明示承認を得た場合だけ，public `v1.0.0` GitHub Releaseを作成して未認証再downloadを検証する．managed slide show，PowerPoint Automation，旧固定App及びcloud providerをこの経路へ戻さない．
 
 ## 6．ローカルCodex開始時の指示文
 
@@ -246,13 +240,13 @@ make verify
 
 　`scripts/publish-to-github.sh`は初回リポジトリ公開専用であり，再実行しない．今後は作業ブランチをpushし，プルリクエストの必須CI成功後に`main`へ統合する．正式版は，最終candidateの受入検証後，バージョン整合性を確認し，`v1.0.0`タグ，リリースノート本文，ad hoc署名済みApp archive，SHA-256 checksum manifest，内容を含まないtest evidence，SBOM及びprovenanceの正確な5添付assetを備えたGitHub Releaseとして公開する．Developer ID署名又はApple notarization済みとは表示しない．外部公開に当たるpush，PR，タグ及びReleaseの実行は，それぞれ必要な確認を得て行う．
 
-## 8．2026-09-07限定権限試験と次の再開点
+## 8．履歴：2026-09-07限定権限試験
 
 　固定`c525ee4` Appについて，正確なマイク許可dialogをApp pathまで照合して許可し，Appleの説明が表示された音声認識許可は秋山さんがsystem UI上で許可した．文字起こし開始後は停止可能状態へ遷移し，Mac内蔵の`Kyoko`で非privateの合成文「地球環境問題では、地域ごとの違いが重要です。」をspeaker再生した．未知の認識本文は読み出さず，既知の2断片だけを照合したが，いずれもUI上で確認できなかった．入力は反復せず，停止を1回行うとidleへ戻り，Appはcrashしなかった．これはpermissionとstart／stop lifecycleの証拠であり，実発話認識，partial又はfinal，pre-final板書及び可視板書の成功証拠ではない．speaker出力のrouting又はecho cancellationを含む原因は未確定である．
 
 　秋山さんの明示許可に基づき，画面収録設定に存在した有効な`LectureBoard AI.app`行1件を選択して削除し，固定identifierの再照会で行が消えたことを確認した．その後の正規設定windowが保持されず，Apple純正System Settings実行fileを直接起動した経路はmacOSのlaunch constraintにより`Code Signing Invalid`で拒否された．この直接起動経路は廃止し，再試行しない．問題report画像は`Mock-Lecture-c525ee4/system-settings-direct-launch-rejected-20260907.png`へ保存し，SHA-256は`421ce0ba2ca5ef29ea51bb11dd68753a419b43407cfdafd400458659aee0a169`である．System Settingsの失敗であり，LectureBoard AI又は設定dataを破損した証拠ではない．
 
-　行削除後にApp本来の画面収録要求を1回だけ実行したが，設定windowは保持されなかった．秋山さんから反復する画面収録作業をskipする指示があったため，固定Appを正常終了して打ち切り，再起動しなかった．`c525ee4`固定Appは不完全な履歴証拠として保持し，受入候補には使わない．次は文書を同期したclean exact commitから最終候補を新しいpathへ1回だけ固定し，自動evidence，5 asset生成及びlocal verifyへ進む．本人がcore lecture受入を行う場合だけ，その最終候補へ画面収録を1回許可する．これをskipする場合，capture又は本人受入を成功扱いにせず，GitHub公開完了とも記録しない．
+　行削除後にApp本来の画面収録要求を1回だけ実行したが，設定windowは保持されなかった．秋山さんから反復する画面収録作業をskipする指示があったため，固定Appを正常終了して打ち切り，再起動しなかった．`c525ee4`固定Appは不完全な履歴証拠として保持し，受入候補には使わない．これは当時の履歴であり，現在の操作手順ではない．
 
 ## 9．2026-09-07 exact-commit evidence固定失敗と所有group修正
 

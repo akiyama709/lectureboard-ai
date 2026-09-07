@@ -2,7 +2,7 @@
 
 更新日：2026年9月7日
 
-状態：全体計画．ADR 0014により，公開v1はPowerPointを自動操作せず，利用者が選択した正確な画面を観測してlocal visual epochを形成する方式に確定した．段階1のsource修正，段階2の保守的な部分結果経路及びvisual epochの境界は自動test済みである．実音声・可視板書・遅延目標・本人資料受入は未検証であり，合格済みとは扱わない．
+状態：全体計画．ADR 0014により，公開v1はPowerPointを自動操作せず，利用者が選択した正確な画面を観測してlocal visual epochを形成する方式に確定した．段階1のsource修正，段階2の保守的な部分結果経路及びvisual epochの境界は自動test済みである．最初のvisual-only本人試用は発話しても板書が動かず不合格となり，開始待機とpublic board確定を修正したcommit `e2c66af…`の固定Appで予備再試験を行う．実音声からの可視板書・遅延目標・本人資料受入は未確認である．
 
 ## 1．完成形と現在位置
 
@@ -10,7 +10,7 @@
 
 　最終到達点は，既定の全5添付物・exact commitとの対応・未認証再取得検証を伴う，公開かつimmutableで非prereleaseのGitHub v1.0.0である．有料Apple Developer加入・機関名義は使わず，ad hoc署名及び未公証という配布条件を明示する．α・βという名前で中核要件の未達を公開しない．既存の公開要件はROADMAP及びv1-release-checklistを維持する．
 
-　現在は，視覚観測方式のsourceを確定し，新しい本人試用Appで段階1・2・4・5を一続きに確認することが次の主要境界である．2026年9月6日から7日の旧本人試用では，managed開始，TCC callback及びUI menuに複数の障害が生じた．managed経路を公開v1から外し，通常の全画面又はwindow表示slide showを利用者が開始し，正確な聴衆向け画面を選択する構成へ変更した．local visual baseline／切替，旧speech callbackの拒否，dense evidence欠落後の復帰及び非menu型画面選択を実装し，直接影響する47件の統合testは合格した．旧commit `c525ee4…`の本人試用Appは新構成の候補ではなく，再使用しない．実音声認識，発話中の可視板書，overlay，export及び本人資料は未確認である．全体の完成率をテスト件数から計算しない．
+　現在は，固定App`Visual-Owner-Trial-e2c66af`で段階1・2・4・5を短く再確認することが次の主要境界である．2026年9月6日から7日の旧本人試用では，managed開始，TCC callback及びUI menuに複数の障害が生じ，後続のvisual-only候補`f18c873…`も発話からpublic boardを動かせず不合格となった．commit `e2c66af…`では，開始要求をcurrent視覚contextまで保持する処理，自然な重要表現及び独立反復をpublic boardへ安全に確定する処理，並びに決定的な候補順を追加した．Core全263件及び関連App全74件は合格したが，実音声認識，発話中の可視板書，overlay，export及び本人資料は再試用まで未確認である．旧候補は再使用しない．全体の完成率をテスト件数から計算しない．
 
 ## 2．構成判断
 
@@ -29,11 +29,11 @@
 | 段階 | 主な作業・成果物 | 次へ進む条件 | 現在の状態 |
 |---|---|---|---|
 | 0．仕様・評価の固定 | 発話中の板書，原本保護，手書き優先，無課金前提を明文化し，重要／非重要・否定・訂正を含む小さな合成評価セットを定義 | 成功／失敗を実測で判定でき，対象範囲と構成比較条件が明確 | 計画作成済．評価セット未作成 |
-| 1．通常起動と入力 | 固定Appの通常起動，音声権限，連続した部分認識，開始・停止・再開を確認．TCC終了を原因別に修正 | Codexからの実行ファイル直接起動に依存せず，実マイクの部分結果が継続して届く．拒否時は正常に停止し，クラッシュしない | exact Appの通常起動・画面収録未許可時停止は合格．同じAppへの1回の画面収録許可後，実マイク確認待ち |
+| 1．通常起動と入力 | 固定Appの通常起動，音声権限，連続した部分認識，開始・停止・再開を確認．TCC終了を原因別に修正 | Codexからの実行ファイル直接起動に依存せず，実マイクの部分結果が継続して届く．拒否時は正常に停止し，クラッシュしない | 修正版`e2c66af…`のexact Appは生成済み．実マイク予備再試験待ち |
 | 2．短い発話の即時板書 | 同一発話のpartial改訂を管理し，安定した短い意味単位を出力へつなぐ．既存描画部を使う最小の縦通し試験 | 合成スライド1枚と短い実発話で，全文確定前に根拠ある短い板書が見える．遅延を測定できる | 保守的なsource経路と合成統合testは合格．実音声・可視表示・遅延は未検証 |
 | 3．文脈判断の品質 | 現スライドと直前の発話を使い，単なる字幕ではなく重要な内容を選ぶ．固定規則と必要に応じたローカル推論を同じ評価例で比較 | 言い直し・否定・非重要な説明・重複等を含む評価で，誤出力・見逃し・遅延を把握し，採用方式を決める | 現行規則実装はあるが講義品質は未検証 |
-| 4．PowerPoint上で結合 | 普段の全画面又はwindow表示slide show，正確な画面選択，canvas確認，視覚切替・戻り，空白配置，人の手書き優先を一本の流れで検証 | 本物のslide show上に発話中の板書が出る．別窓・旧visual epochへの誤表示がなく，原本を変更しない | 視覚観測sourceと直接影響する統合testは合格．可視自動板書・手書き優先・production Appは未合格 |
-| 5．本人の短い模擬講義 | 新しい正確な候補と作業用コピーで5〜10分程度試し，タイミング・内容・邪魔にならないかを本人が評価 | 秋山さんが実際の表示を見て，講義に使えるかを判断できる．未解決の主要な不具合は修正して再試験 | 視覚観測方式のexact owner trial App生成後に再試験する．旧managed候補は再使用しない |
+| 4．PowerPoint上で結合 | 普段の全画面又はwindow表示slide show，正確な画面選択，canvas確認，視覚切替・戻り，空白配置，人の手書き優先を一本の流れで検証 | 本物のslide show上に発話中の板書が出る．別窓・旧visual epochへの誤表示がなく，原本を変更しない | 視覚観測sourceと直接影響する統合testは合格．`f18c873…`の可視自動板書は不合格，修正版は未確認 |
+| 5．本人の短い模擬講義 | 新しい正確な候補と作業用コピーで5〜10分程度試し，タイミング・内容・邪魔にならないかを本人が評価 | 秋山さんが実際の表示を見て，講義に使えるかを判断できる．未解決の主要な不具合は修正して再試験 | `f18c873…`候補は不合格．修正済みexact owner trial `e2c66af…`で予備再試験待ち |
 | 6．対応範囲の仕上げ | 講義時間相当の連続動作，日英と対応する混在条件，簡単な図，復帰，JSON/SVG書出し，導入UI，privacy・license・説明を確認 | 公開する対応機能が検証記録と一致する．短時間試験だけを長時間講義の証拠にしない | 未完了 |
 | 7．配布物の最終検証 | sourceを固定し，全gateをexact commitで実行．署名・5添付物・checksums・来歴を生成し，清浄な対応環境で導入・権限・中核動作を検証 | 正確な配布物が公開前チェックリストを通る．別buildの合格を流用しない | 未完了 |
 | 8．GitHub正式公開 | exact commitとZIP hashを提示して公開承認を得た後，v1.0.0を公開し，未認証で再取得・照合 | 公開Releaseと全5添付物が定義どおりで，再取得したAppでも必要な検証を通る | 未完了 |
@@ -68,8 +68,8 @@
 - 実機の正負の証拠：[build-verification.md](build-verification.md)．
 - 正式公開の条件：[v1-release-checklist.md](v1-release-checklist.md)及び[ROADMAP.md](../ROADMAP.md)．
 - 2026-09-06：engineering:architectureによる構成比較とproduct-management:roadmap-updateによる優先順位整理を反映．既存の細かな証拠は保持し，中核の実動作と早期本人試用を先に置いた．
-- 2026-09-07：Speech authorizationのbackground callbackによるexecutor crashを確定し，同じ危険を持つaudio及びrecognition callbackとともにactor入口を修正した．段階1は自動test合格，live未合格として更新した．
-- 2026-09-07：同一Speech cycleへ一つのsegment IDを与え，2回の連続partialで安定した完結文だけを既存のgrounding・importance・public scene境界へ渡す段階2のsource経路を追加した．自動testと全26段階gateは合格，liveは未合格として更新した．
+- 2026-09-07：Speech authorizationのbackground callbackによるexecutor crashを確定し，同じ危険を持つaudio及びrecognition callbackとともにactor入口を修正した．段階1は自動test合格，live未確認として更新した．
+- 2026-09-07：同一Speech cycleへ一つのsegment IDを与え，2回の連続partialで安定した完結文だけを既存のgrounding・importance・public scene境界へ渡す段階2のsource経路を追加した．自動testと全26段階gateは合格，liveは未確認として更新した．
 - 2026-09-07：黒帯・アンチエイリアスを限定的に扱うrole-evidence policyをcommit `fa62c73eada6d94daf094ac92c8032135fdd1e72`へ固定した．合成資料の固定診断Appでmanaged開始，明示canvas確定，日英2切替，切替後解析及び正常停止を確認した．実音声，production可視板書及び本人資料は未検証として維持した．
 - 2026-09-07：production本人試用Appをcommit `c525ee468283bee333166cb301a3c9570fae0086`から固定し，署名，byte同一性，通常起動，画面収録未許可時のfail-closed停止及び正常終了を確認した．このexact Appへの1回の画面収録許可，実マイク，可視板書及び本人資料受入は未検証として維持した．
 - 2026-09-07：ADR 0014を採択し，公開v1をApple Eventsなしのvisual-only workflowへ変更した．旧managed候補`c525ee4…`を棄却し，利用者開始の全画面又はwindow表示slide show，正確な画面選択，local visual epoch，視覚境界でのspeech再開及びPowerPoint非操作を受入条件とした．

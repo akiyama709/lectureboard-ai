@@ -136,8 +136,25 @@ Implemented:
   It uses a stable non-menu selection UI, continuous full inventory discovery, local visual epochs,
   stale-speech invalidation and automatic resume across epochs, missing-dense recovery, and
   full-screen-Space overlay participation. It removes the Apple Events usage description and
-  Automation entitlement. The 47 directly affected visual integration tests pass. This remains
-  working-tree evidence until it is committed and a fixed owner candidate is built.
+  Automation entitlement. The 47 directly affected visual integration tests pass. This source
+  was committed as `f18c873d38062b98c4f8d48e048edda0a9d5a521`; its owner candidate later
+  failed as recorded below.
+
+- The visual-only owner candidate from commit `f18c873d38062b98c4f8d48e048edda0a9d5a521`
+  failed owner use because speaking produced no board movement. Commit
+  `e2c66af09c716ccbbffa3623350497bbf6355e66` fixes the two bounded causes: an early
+  user transcription request is retained until capture, canvas, and current analysis are ready;
+  and safe natural importance statements or sufficiently independent repeated assertions can
+  enter the public board while unsafe or internal proposals cannot starve them at the candidate
+  limit. All 263 Core tests in 19 suites and the 74 directly affected App tests in two suites
+  passed. The exact Git-archive build is frozen at
+  `/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-e2c66af/LectureBoard AI.app`.
+  Its arm64 ad hoc Hardened Runtime executable SHA-256 is
+  `bde978d6d1c81e2a42cb45fff4731ea35883e34b4cd6277f0215e4279a32e919`, CDHash is
+  `a80d02738e45d048d28555846fc8376f37716aa3`, and strict deep signature and build-byte
+  identity passed. This is a replacement owner-trial candidate, not a release artifact. Real
+  microphone-to-preview and PowerPoint-visible board output, export, original-file preservation,
+  the complete exact-commit gate, and public release remain unverified.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 

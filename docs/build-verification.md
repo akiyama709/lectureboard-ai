@@ -2382,3 +2382,37 @@ microphone-to-visible-board path, pre-final latency, owner-confirmed canvas, ove
 click-through behavior, mouse-input priority, live JSON/SVG export, original-file immutability,
 clean-Mac Gatekeeper installation, GitHub Actions for the replacement commit, public Release, and
 unauthenticated public re-download all remain unverified or incomplete.
+
+### 2026-09-07 visual owner-trial board-activation correction
+
+The first visual-only owner trial built from commit
+`f18c873d38062b98c4f8d48e048edda0a9d5a521` failed because speaking produced no board movement.
+The failed app remains historical negative evidence and must not be reused or published. Source
+review isolated two bounded causes: an early user transcription request could begin before the
+capture, confirmed canvas, and current analysis context could accept observations; and most
+important ordinary utterances remained internal proposals that never entered the public scene.
+
+Commit `e2c66af09c716ccbbffa3623350497bbf6355e66` retains an early start request as a queued user
+intent and starts the provider automatically only after current visual context is ready. It also
+adds safe natural importance expressions, independent-repetition promotion, public-first and
+fully deterministic candidate ordering, and negative boundaries for questions, unreliable or
+duplicate evidence, malformed cues, unsafe quotation, and cross-language repetition. Independent
+review found no remaining P0 or P1 issue. All 263 Core tests in 19 suites passed. The combined
+focused native selection passed 74 tests in two suites at
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_18-24-31-+0900.xcresult`, with zero
+failures. Strict formatting of every changed Swift file and `git diff --check` also passed. These
+are bounded regression results, not the complete 26-stage publication gate.
+
+An isolated Git archive of that exact commit was built once as arm64 Release version 1.0.0 build
+1 with ad hoc signing and Hardened Runtime. The fixed copy is
+`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-e2c66af/LectureBoard AI.app`.
+The app passes `codesign --verify --deep --strict`, contains only the audio-input entitlement,
+has no TeamIdentifier, and is byte-identical to the build product. Its executable SHA-256 is
+`bde978d6d1c81e2a42cb45fff4731ea35883e34b4cd6277f0215e4279a32e919`, CDHash is
+`a80d02738e45d048d28555846fc8376f37716aa3`, and tree-manifest SHA-256 is
+`4b39bef3b7d0758877d0405a02a116ce6205f116336274fae5b28109530681be`.
+
+The replacement app has not yet passed owner microphone-to-board use. Visible preview and
+PowerPoint overlay output, latency, slide changes, mouse priority, export, source-file invariance,
+the complete exact-commit gate, Gatekeeper, GitHub publication, and public re-download remain open
+and must not be inferred from the build or deterministic tests.
