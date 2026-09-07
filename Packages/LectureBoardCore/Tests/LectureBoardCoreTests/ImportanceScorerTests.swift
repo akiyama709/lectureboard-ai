@@ -52,4 +52,69 @@ struct ImportanceScorerTests {
     #expect(score.novelty < 0.2)
     #expect(score.total < 0.58)
   }
+
+  @Test func explicitImportanceCuesClearTheProductionThresholdWithoutOtherSignals() {
+    let examples: [(String, LanguageTag)] = [
+      ("ここで重要なのは，変化には時間がかかることです．", .japanese),
+      ("重要な点は，変化には時間がかかることです．", .japanese),
+      ("The key point is change takes time.", .englishUS),
+      ("What matters is change takes time.", .englishUS),
+    ]
+
+    for (text, language) in examples {
+      let slide = SlideContext(
+        slideNumber: 1,
+        title: "",
+        textBlocks: [
+          SlideTextBlock(
+            text: text,
+            region: NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+          )
+        ]
+      )
+      let segment = TranscriptSegment(
+        text: text,
+        startTime: 0,
+        endTime: 4,
+        language: language,
+        emphasis: 0
+      )
+
+      let score = ImportanceScorer().score(
+        segment: segment,
+        slide: slide,
+        recentSegments: []
+      )
+
+      #expect(score.discourseStructure == 1, "Missing importance cue for: \(text)")
+      #expect(score.total >= 0.58, "Importance cue did not clear threshold: \(text)")
+    }
+  }
+
+  @Test func malformedEnglishImportancePrefixesReceiveNoLexicalBonus() {
+    let examples = [
+      "The key point isn't settled.",
+      "What matters isn’t obvious.",
+      "The key point island remains remote.",
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "")
+
+    for text in examples {
+      let segment = TranscriptSegment(
+        text: text,
+        startTime: 0,
+        endTime: 4,
+        language: .englishUS,
+        emphasis: 0
+      )
+      let score = ImportanceScorer().score(
+        segment: segment,
+        slide: slide,
+        recentSegments: []
+      )
+
+      #expect(score.discourseStructure == 0.35, "Malformed cue received structure: \(text)")
+      #expect(score.total < 0.58, "Malformed cue received lexical importance: \(text)")
+    }
+  }
 }

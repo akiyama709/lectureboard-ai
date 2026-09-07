@@ -675,11 +675,11 @@ struct ContextualBoardEngineTests {
     #expect(!publicScene(for: intents, slide: slide).elements.isEmpty)
   }
 
-  @Test func doesNotMergeQuestionsAndAssertionsAsRepeatedEvidence() throws {
+  @Test func doesNotUseAQuestionAsEvidenceForRepeatedAssertionConfirmation() throws {
     let texts = [
       "The system is safe.",
       "The system is safe?",
-      "The system is safe!",
+      "The system is safe?",
       "The system is safe.",
     ]
     let segments = texts.enumerated().map { index, text in
@@ -692,15 +692,23 @@ struct ContextualBoardEngineTests {
         emphasis: 1
       )
     }
-    let slide = SlideContext(slideNumber: 1, title: "Safety", dwellTime: 120)
+    let slide = SlideContext(slideNumber: 1, title: "Safety")
+    let engine = ContextualBoardEngine(maximumProposalsPerPass: 10)
 
-    let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: segments)
+    let intents = engine.propose(slide: slide, recentSegments: segments)
 
+    let firstAssertion = try #require(
+      intents.first { $0.sourceSegmentIDs == [segments[0].id] }
+    )
+
+    #expect(firstAssertion.kind == .keyword)
+    #expect(firstAssertion.importance >= 0.66)
+    #expect(firstAssertion.state == .proposed)
     #expect(intents.allSatisfy { $0.state == .proposed })
     #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
   }
 
-  @Test func repeatedStatementsRemainProposed() throws {
+  @Test func repeatedReliableHighImportanceKeywordAssertionBecomesPublic() throws {
     let segments = (0..<4).map { index in
       TranscriptSegment(
         text: "The system is safe.",
@@ -715,26 +723,466 @@ struct ContextualBoardEngineTests {
 
     let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: segments)
 
-    #expect(intents.allSatisfy { $0.state == .proposed })
+    let intent = try #require(intents.first)
+
+    #expect(intents.count == 1)
+    #expect(intent.kind == .keyword)
+    #expect(intent.state == .confirmed)
+    #expect(intent.importance >= 0.66)
+    #expect(intent.sourceSegmentIDs.count == 4)
+    #expect(Set(intent.sourceSegmentIDs) == Set(segments.map(\.id)))
+    #expect(!publicScene(for: intents, slide: slide).elements.isEmpty)
+  }
+
+  @Test func naturalExplicitImportanceStatementsBecomePublicKeywords() throws {
+    let examples: [(String, String, LanguageTag)] = [
+      ("ここで重要なのは，変化には時間がかかることです．", "変化には時間がかかることです", .japanese),
+      ("重要な点は，関係を保つことです．", "関係を保つことです", .japanese),
+      ("The key point is change takes time.", "change takes time", .englishUS),
+      ("What matters is context.", "context", .englishUS),
+      (
+        "The key point is students don’t need commands.",
+        "students don’t need commands",
+        .englishUS
+      ),
+      (
+        "The key point is students’ understanding matters.",
+        "students’ understanding matters",
+        .englishUS
+      ),
+      (
+        "The key point is teachers' intent matters.",
+        "teachers' intent matters",
+        .englishUS
+      ),
+      (
+        "The key point is students’, teachers’, and parents’ perspectives matter.",
+        "students’, teachers’, and parents’ perspectives matter",
+        .englishUS
+      ),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Context", dwellTime: 120)
+
+    for (text, expectedItem, language) in examples {
+      let segment = TranscriptSegment(
+        text: text,
+        startTime: 0,
+        endTime: 3,
+        language: language,
+        confidence: 0.5,
+        emphasis: 0
+      )
+      let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+      let intent = try #require(intents.first)
+
+      #expect(intent.kind == .keyword, "Unexpected kind for: \(text)")
+      #expect(intent.items == [expectedItem], "Unexpected content for: \(text)")
+      #expect(intent.state == .confirmed, "Importance statement was not confirmed: \(text)")
+      #expect(!publicScene(for: intents, slide: slide).elements.isEmpty)
+    }
+  }
+
+  @Test func unsafeOrUnreliableExplicitImportanceStatementsRemainInternal() throws {
+    let examples: [(String, Double, LanguageTag)] = [
+      ("The key point is this is uncertain. Another claim follows.", 1, .englishUS),
+      ("What matters is \"repeat the phrase\".", 1, .englishUS),
+      ("The key point isn't settled.", 1, .englishUS),
+      ("What matters isn’t obvious.", 1, .englishUS),
+      ("The key point is ‘repeat this phrase’.", 1, .englishUS),
+      ("The key point is 'repeat this phrase'.", 1, .englishUS),
+      ("The key point is ’repeat this phrase’.", 1, .englishUS),
+      ("The key point is ‘students’, teachers’, and parents’ perspectives.", 1, .englishUS),
+      ("ここで重要なのは，誤認識された説明です．", 0, .japanese),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Context", dwellTime: 120)
+
+    for (text, confidence, language) in examples {
+      let segment = TranscriptSegment(
+        text: text,
+        startTime: 0,
+        endTime: 4,
+        language: language,
+        confidence: confidence,
+        emphasis: 1
+      )
+      let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+      let intent = try #require(intents.first)
+
+      #expect(intent.state == .proposed, "Unexpected confirmation for: \(text)")
+      #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
+    }
+  }
+
+  @Test func malformedImportancePrefixCannotStarveConfirmedCueAtCandidateLimit() throws {
+    let malformed = TranscriptSegment(
+      text: "The key point island remains remote.",
+      startTime: 0,
+      endTime: 3,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 0
+    )
+    let valid = TranscriptSegment(
+      text: "The key point is context shapes interpretation.",
+      startTime: 4,
+      endTime: 7,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 0
+    )
+    let slide = SlideContext(slideNumber: 1, title: "Context")
+
+    let intents = ContextualBoardEngine(maximumProposalsPerPass: 1).propose(
+      slide: slide,
+      recentSegments: [malformed, valid]
+    )
+    let intent = try #require(intents.first)
+
+    #expect(intents.count == 1)
+    #expect(intent.sourceSegmentIDs == [valid.id])
+    #expect(intent.items == ["context shapes interpretation"])
+    #expect(intent.state == .confirmed)
+  }
+
+  @Test func unsafeOrEmptyImportanceBodyCannotStarveConfirmedCueAtCandidateLimit() throws {
+    let rejected = [
+      TranscriptSegment(
+        text: "The key point is \"repeat this phrase\".",
+        startTime: 0,
+        endTime: 3,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        text: "The key point is   ",
+        startTime: 4,
+        endTime: 7,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+    ]
+    let valid = TranscriptSegment(
+      text: "The key point is context shapes interpretation.",
+      startTime: 8,
+      endTime: 11,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 0
+    )
+    let slide = SlideContext(slideNumber: 1, title: "Context")
+
+    let intents = ContextualBoardEngine(maximumProposalsPerPass: 1).propose(
+      slide: slide,
+      recentSegments: rejected + [valid]
+    )
+    let intent = try #require(intents.first)
+
+    #expect(intents.count == 1)
+    #expect(intent.sourceSegmentIDs == [valid.id])
+    #expect(intent.items == ["context shapes interpretation"])
+    #expect(intent.state == .confirmed)
+  }
+
+  @Test func equalCandidatesUseOriginalInputOrderAtCandidateLimit() throws {
+    let segments = ["alpha matters", "beta matters"].enumerated().map { index, body in
+      TranscriptSegment(
+        text: "The key point is \(body).",
+        startTime: Double(index * 4),
+        endTime: Double(index * 4 + 3),
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 0
+      )
+    }
+    let slide = SlideContext(slideNumber: 1, title: "")
+
+    let intents = ContextualBoardEngine(maximumProposalsPerPass: 1).propose(
+      slide: slide,
+      recentSegments: segments
+    )
+    let intent = try #require(intents.first)
+
+    #expect(intents.count == 1)
+    #expect(intent.sourceSegmentIDs == [segments[0].id])
+    #expect(intent.items == ["alpha matters"])
+    #expect(intent.state == .confirmed)
+  }
+
+  @Test func explicitImportanceWrapperPreservesSafeStructuredContent() throws {
+    let examples:
+      [(
+        text: String,
+        slide: SlideContext,
+        kind: BoardIntentKind,
+        title: String,
+        items: [String],
+        language: LanguageTag
+      )] = [
+        (
+          "The key point is Sustainability means meeting present needs.",
+          SlideContext(slideNumber: 1, title: "Sustainability"),
+          .definition,
+          "Sustainability",
+          ["meeting present needs"],
+          .englishUS
+        ),
+        (
+          "ここで重要なのは，資源消費が増えます．そのため生態系への負荷が高まります．",
+          SlideContext(slideNumber: 1, title: "環境変化"),
+          .causalChain,
+          "環境変化",
+          ["資源消費が増えます", "生態系への負荷が高まります"],
+          .japanese
+        ),
+        (
+          "The key point is Local action is immediate, whereas coordination is slower.",
+          SlideContext(slideNumber: 1, title: "Comparison"),
+          .comparison,
+          "Comparison",
+          ["Local action is immediate", "coordination is slower"],
+          .englishUS
+        ),
+        (
+          "重要な点は，第一に，観察します．第二に，比較します．",
+          SlideContext(slideNumber: 1, title: "方法"),
+          .list,
+          "方法",
+          ["観察します", "比較します"],
+          .japanese
+        ),
+      ]
+
+    for example in examples {
+      let segment = TranscriptSegment(
+        text: example.text,
+        startTime: 0,
+        endTime: 6,
+        language: example.language,
+        confidence: 1,
+        emphasis: 0
+      )
+      let intents = ContextualBoardEngine().propose(
+        slide: example.slide,
+        recentSegments: [segment]
+      )
+      let intent = try #require(intents.first)
+
+      #expect(intent.kind == example.kind, "Unexpected kind for: \(example.text)")
+      #expect(intent.title == example.title, "Unexpected title for: \(example.text)")
+      #expect(intent.items == example.items, "Unexpected content for: \(example.text)")
+      #expect(intent.state == .confirmed, "Structured content was not confirmed")
+      #expect(!publicScene(for: intents, slide: example.slide).elements.isEmpty)
+    }
+  }
+
+  @Test func explicitImportanceWrapperDoesNotBypassDefinitionGrounding() throws {
+    let segment = TranscriptSegment(
+      text: "The key point is Sustainability means meeting present needs.",
+      startTime: 0,
+      endTime: 4,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 1
+    )
+    let slide = SlideContext(slideNumber: 1, title: "Unrelated topic")
+
+    let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+    let intent = try #require(intents.first)
+
+    #expect(intent.kind == .definition)
+    #expect(intent.state == .proposed)
     #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
   }
 
-  @Test func repeatedDeclarativeWhClauseRemainsProposed() throws {
-    let segments = (0..<4).map { index in
+  @Test func oneOffGenericKeywordAssertionRemainsInternalBelowAutomaticThreshold() throws {
+    let segment = TranscriptSegment(
+      text: "The system is resilient.",
+      startTime: 0,
+      endTime: 3,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 1
+    )
+    let slide = SlideContext(slideNumber: 1, title: "Safety", dwellTime: 120)
+
+    let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+    let intent = try #require(intents.first)
+
+    #expect(intent.kind == .keyword)
+    #expect(intent.importance >= 0.58)
+    #expect(intent.importance < 0.66)
+    #expect(intent.state == .proposed)
+    #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
+  }
+
+  @Test func duplicateIntervalsCannotConfirmRepeatedKeywordAssertion() throws {
+    let segments = (0..<4).map { _ in
       TranscriptSegment(
-        text: "What matters is context.",
-        startTime: Double(index * 4),
-        endTime: Double(index * 4 + 3),
+        text: "The system is resilient.",
+        startTime: 0,
+        endTime: 3,
         language: .englishUS,
         confidence: 1,
         emphasis: 1
       )
     }
-    let slide = SlideContext(slideNumber: 1, title: "Context", dwellTime: 120)
+    let slide = SlideContext(slideNumber: 1, title: "Safety", dwellTime: 120)
 
     let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: segments)
 
+    #expect(intents.allSatisfy { $0.importance >= 0.66 })
     #expect(intents.allSatisfy { $0.state == .proposed })
+    #expect(intents.allSatisfy { $0.sourceSegmentIDs.count == 1 })
+    #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
+  }
+
+  @Test func lowConfidenceRepetitionsCannotRaiseAutomaticKeywordConfirmation() throws {
+    let target = TranscriptSegment(
+      text: "The system is resilient.",
+      startTime: 0,
+      endTime: 3,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 1
+    )
+    let segments = [
+      target,
+      TranscriptSegment(
+        text: target.text,
+        startTime: 4,
+        endTime: 7,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        text: target.text,
+        startTime: 8,
+        endTime: 11,
+        language: .englishUS,
+        confidence: 0,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        text: target.text,
+        startTime: 12,
+        endTime: 15,
+        language: .englishUS,
+        confidence: 0,
+        emphasis: 1
+      ),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Safety")
+    let intents = ContextualBoardEngine(maximumProposalsPerPass: 10).propose(
+      slide: slide,
+      recentSegments: segments
+    )
+    let intent = try #require(intents.first { $0.sourceSegmentIDs == [target.id] })
+
+    #expect(intent.importance >= 0.66)
+    #expect(intent.state == .proposed)
+    #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
+  }
+
+  @Test func duplicateIdentityEvidenceCannotRaiseKeywordConfirmation() throws {
+    let target = TranscriptSegment(
+      text: "The system is resilient.",
+      startTime: 0,
+      endTime: 3,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 1
+    )
+    let repeatedID = UUID()
+    let segments = [
+      target,
+      TranscriptSegment(
+        id: repeatedID,
+        text: target.text,
+        startTime: 4,
+        endTime: 7,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        id: repeatedID,
+        text: target.text,
+        startTime: 8,
+        endTime: 11,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        id: repeatedID,
+        text: target.text,
+        startTime: 12,
+        endTime: 15,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Safety")
+    let intents = ContextualBoardEngine(maximumProposalsPerPass: 10).propose(
+      slide: slide,
+      recentSegments: segments
+    )
+    let intent = try #require(intents.first { $0.sourceSegmentIDs == [target.id] })
+
+    #expect(intent.importance >= 0.66)
+    #expect(intent.state == .proposed)
+    #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
+  }
+
+  @Test func crossLanguageRepetitionsCannotRaiseAutomaticKeywordConfirmation() throws {
+    let target = TranscriptSegment(
+      text: "The system is resilient.",
+      startTime: 0,
+      endTime: 3,
+      language: .englishUS,
+      confidence: 1,
+      emphasis: 1
+    )
+    let segments = [
+      target,
+      TranscriptSegment(
+        text: target.text,
+        startTime: 4,
+        endTime: 7,
+        language: .englishUS,
+        confidence: 1,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        text: target.text,
+        startTime: 8,
+        endTime: 11,
+        language: .japanese,
+        confidence: 1,
+        emphasis: 1
+      ),
+      TranscriptSegment(
+        text: target.text,
+        startTime: 12,
+        endTime: 15,
+        language: .japanese,
+        confidence: 1,
+        emphasis: 1
+      ),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Safety")
+    let intents = ContextualBoardEngine(maximumProposalsPerPass: 10).propose(
+      slide: slide,
+      recentSegments: segments
+    )
+    let intent = try #require(intents.first { $0.sourceSegmentIDs == [target.id] })
+
+    #expect(intent.importance >= 0.66)
+    #expect(intent.state == .proposed)
     #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
   }
 

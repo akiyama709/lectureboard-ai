@@ -114,6 +114,11 @@ final class AppModel: ObservableObject {
     case error(String)
   }
 
+  private enum ApplicationStatusErrorSource {
+    case powerPointScan
+    case transcription
+  }
+
   enum CaptureStatus: Equatable {
     case stopped
     case starting
@@ -264,6 +269,7 @@ final class AppModel: ObservableObject {
   private var transcriptionOperationGate = TranscriptionOperationGate()
   private var transcriptionRequestedByUser = false
   private var automaticTranscriptionResumeTask: Task<Void, Never>?
+  private var applicationStatusErrorSource: ApplicationStatusErrorSource?
   private var overlayDemoSceneIsLoaded = false
   private var productionOverlayIsManuallySuppressed = false
   private var latestOverlayPlacement: SlideCanvasOverlayPlacement?
@@ -421,7 +427,6 @@ final class AppModel: ObservableObject {
       return
     }
 
-    invalidateTranscriptionContext()
     clearConfirmedSlideCanvas(resetVisualPipeline: true)
     slideCanvasCalibrationSource = source
     slideCanvasCalibrationFrame = source.image
@@ -453,7 +458,7 @@ final class AppModel: ObservableObject {
       return false
     }
 
-    invalidateTranscriptionContext()
+    invalidateTranscriptionContextForSetupTransition()
     slideCanvasGeneration &+= 1
     confirmedSlideCanvasSelection = selection
     confirmedSlideCanvasRegion = region
@@ -561,7 +566,7 @@ final class AppModel: ObservableObject {
         if status == .scanning { status = statusBeforeRefresh }
         return
       }
-      status = .error(error.localizedDescription)
+      setApplicationErrorStatus(error.localizedDescription, source: .powerPointScan)
     }
   }
 
@@ -610,7 +615,7 @@ final class AppModel: ObservableObject {
       status = .ready
     } catch {
       guard generation == refreshGeneration else { return }
-      status = .error(error.localizedDescription)
+      setApplicationErrorStatus(error.localizedDescription, source: .powerPointScan)
     }
   }
 
@@ -983,7 +988,19 @@ final class AppModel: ObservableObject {
   // Keep user actions single-flight without changing explicit internal restart semantics.
   func requestTranscriptionStart() async {
     guard canRequestTranscriptionStart else { return }
-    await startTranscription()
+    transcriptionRequestedByUser = true
+    if applicationStatusErrorSource == .transcription,
+      case .error = status
+    {
+      applicationStatusErrorSource = nil
+      status = .ready
+    }
+    guard transcriptionContextIsReady else {
+      transcriptionLifecycleState = .waitingForContext
+      clearLiveTranscript()
+      return
+    }
+    await startTranscriptionOperation()
   }
 
   func requestTranscriptionStop() {
@@ -1031,7 +1048,7 @@ final class AppModel: ObservableObject {
       transcriptionRequestedByUser = false
       speechProvider.stop(operationID: operationID)
       clearLiveTranscript()
-      status = .error(error.localizedDescription)
+      setApplicationErrorStatus(error.localizedDescription, source: .transcription)
       transcriptionLifecycleState = .failed(error.localizedDescription)
     }
   }
@@ -1089,7 +1106,7 @@ final class AppModel: ObservableObject {
       transcriptionLifecycleState = .idle
     case .failure(let error):
       clearLiveTranscript()
-      status = .error(error.localizedDescription)
+      setApplicationErrorStatus(error.localizedDescription, source: .transcription)
       transcriptionLifecycleState = .failed(error.localizedDescription)
     }
   }
@@ -1311,7 +1328,7 @@ final class AppModel: ObservableObject {
 
   private func prepareSlideCanvasForNewCapture() {
     cancelFreshContentSampling(resetEpisode: true)
-    invalidateTranscriptionContext()
+    invalidateTranscriptionContextForSetupTransition()
     resetBoardCandidateContext()
     clearOverlayDemoForCaptureStart()
     invalidateOverlayPlacement()
@@ -1349,7 +1366,7 @@ final class AppModel: ObservableObject {
   }
 
   private func clearConfirmedSlideCanvas(resetVisualPipeline: Bool) {
-    invalidateTranscriptionContext()
+    invalidateTranscriptionContextForSetupTransition()
     slideCanvasGeneration &+= 1
     confirmedSlideCanvasSelection = nil
     confirmedSlideCanvasRegion = nil
@@ -1490,7 +1507,7 @@ final class AppModel: ObservableObject {
 
   private func resetCanvasVisualPipeline() {
     cancelFreshContentSampling(resetEpisode: true)
-    invalidateTranscriptionContext()
+    invalidateTranscriptionContextForSetupTransition()
     resetVisualDetectors()
     latestDifferenceFromStableFrame = nil
     stableFrameCount = 0
@@ -2702,12 +2719,7 @@ final class AppModel: ObservableObject {
       transcriptionRequestedByUser,
       !transcriptionOperationGate.hasActiveOperation,
       automaticTranscriptionResumeTask == nil,
-      captureStatus == .capturing,
-      slideCanvasStatus == .confirmed,
-      currentSlideContextIsUsable,
-      slideAnalysisStatus == .ready,
-      !slideAnalysisNeedsRefresh,
-      latestCompletedAnalysisGeneration == analysisGeneration
+      transcriptionContextIsReady
     else { return }
 
     automaticTranscriptionResumeTask = Task { @MainActor [weak self] in
@@ -2716,15 +2728,29 @@ final class AppModel: ObservableObject {
       guard
         self.transcriptionRequestedByUser,
         !self.transcriptionOperationGate.hasActiveOperation,
-        self.captureStatus == .capturing,
-        self.slideCanvasStatus == .confirmed,
-        self.currentSlideContextIsUsable,
-        self.slideAnalysisStatus == .ready,
-        !self.slideAnalysisNeedsRefresh,
-        self.latestCompletedAnalysisGeneration == self.analysisGeneration
+        self.transcriptionContextIsReady
       else { return }
       await self.startTranscriptionOperation()
     }
+  }
+
+  private var transcriptionContextIsReady: Bool {
+    captureStatus == .capturing
+      && slideCanvasStatus == .confirmed
+      && currentSlideContextIsUsable
+      && slideAnalysisStatus == .ready
+      && !slideAnalysisNeedsRefresh
+      && latestCompletedAnalysisGeneration == analysisGeneration
+  }
+
+  private var transcriptionRequestIsQueued: Bool {
+    transcriptionRequestedByUser
+      && !transcriptionOperationGate.hasActiveOperation
+      && transcriptionLifecycleState == .waitingForContext
+  }
+
+  private func invalidateTranscriptionContextForSetupTransition() {
+    invalidateTranscriptionContext(preserveUserRequest: transcriptionRequestIsQueued)
   }
 
   private func invalidateTranscriptionContext(
@@ -2753,5 +2779,13 @@ final class AppModel: ObservableObject {
     stablePartialTranscriptCommitter.reset()
     liveTranscript = ""
     liveTranscriptPhase = .empty
+  }
+
+  private func setApplicationErrorStatus(
+    _ message: String,
+    source: ApplicationStatusErrorSource
+  ) {
+    applicationStatusErrorSource = source
+    status = .error(message)
   }
 }

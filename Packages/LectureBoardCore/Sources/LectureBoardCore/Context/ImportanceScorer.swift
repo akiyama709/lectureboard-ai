@@ -44,6 +44,7 @@ public struct ImportanceScorer: Sendable {
     let repetition = repetitionScore(segmentTokens, in: recentSegments)
     let emphasis = min(max(segment.emphasis, 0), 1)
     let dwell = min(max(slide.dwellTime / 120, 0), 1)
+    let lexicalImportanceBonus = Self.containsExplicitImportanceCue(segment.text) ? 0.30 : 0
 
     let total = clamp(
       0.28 * novelty
@@ -51,6 +52,7 @@ public struct ImportanceScorer: Sendable {
         + 0.18 * repetition
         + 0.17 * emphasis
         + 0.08 * dwell
+        + lexicalImportanceBonus
     )
 
     return ImportanceScore(
@@ -68,6 +70,7 @@ public struct ImportanceScorer: Sendable {
   }
 
   private func discourseStructureScore(_ text: String) -> Double {
+    if Self.containsExplicitImportanceCue(text) { return 1.0 }
     if TextFeatures.containsAny(text, phrases: Self.definitionCues) { return 1.0 }
     if TextFeatures.containsAny(text, phrases: Self.causalCues) { return 0.95 }
     if TextFeatures.containsAny(text, phrases: Self.comparisonCues) { return 0.9 }
@@ -100,6 +103,28 @@ public struct ImportanceScorer: Sendable {
     "とは", "を意味します", "を意味する", "定義", "すなわち", "言い換えると",
     "means", "is defined as", "refers to", "in other words",
   ]
+
+  static let importanceCuePatterns = [
+    #"^\s*(?:ここで\s*)?重要なのは\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?重要な点は\s*[、，,;；:：]?\s*"#,
+    #"^\s*the\s+key\s+point\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*what\s+matters\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+  ]
+
+  static func containsExplicitImportanceCue(_ text: String) -> Bool {
+    let searchRange = NSRange(text.startIndex..<text.endIndex, in: text)
+    return importanceCuePatterns.contains { pattern in
+      guard
+        let expression = try? NSRegularExpression(
+          pattern: pattern,
+          options: [.caseInsensitive]
+        )
+      else {
+        return false
+      }
+      return expression.firstMatch(in: text, range: searchRange) != nil
+    }
+  }
 
   static let causalCues = [
     "なぜなら", "そのため", "したがって", "結果として", "につながる", "をもたらす",

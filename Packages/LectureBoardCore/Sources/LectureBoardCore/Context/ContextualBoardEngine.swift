@@ -1,6 +1,8 @@
 import Foundation
 
 public struct ContextualBoardEngine: Sendable {
+  private static let automaticKeywordConfirmationThreshold = 0.66
+
   private struct ExplicitBoardContent {
     var kind: BoardIntentKind
     var title: String?
@@ -54,20 +56,31 @@ public struct ContextualBoardEngine: Sendable {
 
     let candidates =
       finalizedSegments
-      .filter { !existingSources.contains($0.id) }
-      .compactMap { segment -> BoardIntent? in
+      .enumerated()
+      .filter { !existingSources.contains($0.element.id) }
+      .compactMap { sourceIndex, segment -> (sourceIndex: Int, intent: BoardIntent)? in
         let otherFinalizedSegments = finalizedSegments.filter { $0.id != segment.id }
+        let matchingRepeatedEvidence = repeatedEvidence(
+          for: segment,
+          among: otherFinalizedSegments
+        )
         let score = scorer.score(
           segment: segment,
           slide: slide,
           recentSegments: otherFinalizedSegments
         )
         guard scorer.shouldPropose(score) else { return nil }
+        let reliableRepeatedScore = scorer.score(
+          segment: segment,
+          slide: slide,
+          recentSegments: matchingRepeatedEvidence
+        )
         let intent = classify(
           segment: segment,
           slide: slide,
           score: score,
-          repeatedEvidence: repeatedEvidence(for: segment, among: otherFinalizedSegments)
+          reliableRepeatedScore: reliableRepeatedScore,
+          repeatedEvidence: matchingRepeatedEvidence
         )
         guard
           !existingIntents.contains(where: { existing in
@@ -76,14 +89,23 @@ public struct ContextualBoardEngine: Sendable {
         else {
           return nil
         }
-        return intent
+        return (sourceIndex, intent)
       }
       .sorted {
-        if $0.importance == $1.importance {
-          return $0.confidence > $1.confidence
+        let lhsIsPublic = isPublic($0.intent.state)
+        let rhsIsPublic = isPublic($1.intent.state)
+        if lhsIsPublic != rhsIsPublic {
+          return lhsIsPublic
         }
-        return $0.importance > $1.importance
+        if $0.intent.importance != $1.intent.importance {
+          return $0.intent.importance > $1.intent.importance
+        }
+        if $0.intent.confidence != $1.intent.confidence {
+          return $0.intent.confidence > $1.intent.confidence
+        }
+        return $0.sourceIndex < $1.sourceIndex
       }
+      .map(\.intent)
 
     var accepted: [BoardIntent] = []
     for candidate in candidates {
@@ -102,6 +124,7 @@ public struct ContextualBoardEngine: Sendable {
     segment: TranscriptSegment,
     slide: SlideContext,
     score: ImportanceScore,
+    reliableRepeatedScore: ImportanceScore,
     repeatedEvidence: [TranscriptSegment]
   ) -> BoardIntent {
     let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,6 +134,12 @@ public struct ContextualBoardEngine: Sendable {
     let hasReliableEvidence = isReliable(segment)
     let hasRepeatedExplicitQuestion =
       hasReliableEvidence && isExplicitQuestion(text) && repeatedEvidence.count >= 3
+    let hasHighImportanceRepeatedKeywordAssertion =
+      hasReliableEvidence
+      && inferredKind == .keyword
+      && repeatedEvidence.count >= 1
+      && reliableRepeatedScore.total >= Self.automaticKeywordConfirmationThreshold
+      && isSafeAutomaticKeywordAssertion(text)
     let kind: BoardIntentKind
     let content: (title: String?, items: [String])
     let state: BoardIntentState
@@ -123,6 +152,11 @@ public struct ContextualBoardEngine: Sendable {
       usesRepeatedEvidence = false
     } else if hasRepeatedExplicitQuestion {
       kind = .question
+      content = (nil, [bounded(text)])
+      state = .confirmed
+      usesRepeatedEvidence = true
+    } else if hasHighImportanceRepeatedKeywordAssertion {
+      kind = .keyword
       content = (nil, [bounded(text)])
       state = .confirmed
       usesRepeatedEvidence = true
@@ -194,6 +228,24 @@ public struct ContextualBoardEngine: Sendable {
   ) -> ExplicitBoardContent? {
     guard !isExplicitQuestion(text) else { return nil }
 
+    if let importanceBody = explicitImportanceBody(in: text) {
+      let structuredCandidates = [
+        explicitDefinition(in: importanceBody, on: slide),
+        explicitCausalChain(in: importanceBody),
+        explicitComparison(in: importanceBody),
+        explicitList(in: importanceBody),
+      ].compactMap { $0 }
+      if structuredCandidates.count == 1 {
+        return structuredCandidates[0]
+      }
+      guard structuredCandidates.isEmpty, classifyKind(importanceBody) == .keyword,
+        isSingleSubstantiveClause(importanceBody)
+      else {
+        return nil
+      }
+      return ExplicitBoardContent(kind: .keyword, title: nil, items: [bounded(importanceBody)])
+    }
+
     let candidates = [
       explicitDefinition(in: text, on: slide),
       explicitCausalChain(in: text),
@@ -202,6 +254,20 @@ public struct ContextualBoardEngine: Sendable {
     ].compactMap { $0 }
 
     return candidates.count == 1 ? candidates[0] : nil
+  }
+
+  private func explicitImportanceBody(in text: String) -> String? {
+    let matches = ImportanceScorer.importanceCuePatterns.flatMap {
+      regexRanges($0, in: text, caseInsensitive: true)
+    }
+    guard matches.count == 1, let cue = matches.first else { return nil }
+
+    let body = trimBoardItem(String(text[cue.upperBound...]))
+    guard !body.isEmpty, !isExplicitQuestion(body), isSafeStructuredUtterance(text)
+    else {
+      return nil
+    }
+    return body
   }
 
   private func explicitDefinition(
@@ -527,8 +593,7 @@ public struct ContextualBoardEngine: Sendable {
   }
 
   private func isSafeStructuredUtterance(_ text: String) -> Bool {
-    let quotationMarks = CharacterSet(charactersIn: "\"“”‘’「」『』")
-    guard text.rangeOfCharacter(from: quotationMarks) == nil else { return false }
+    guard !containsUnsafeQuotationMark(in: text) else { return false }
 
     let normalized = TextFeatures.normalize(text)
     let japaneseMetalinguisticCues = ["接続詞", "という語", "という表現"]
@@ -538,6 +603,42 @@ public struct ContextualBoardEngine: Sendable {
       in: normalized,
       caseInsensitive: true
     ).isEmpty
+  }
+
+  private func isSafeAutomaticKeywordAssertion(_ text: String) -> Bool {
+    let assertion = trimBoardItem(text)
+    guard !isExplicitQuestion(text), isSingleSubstantiveClause(assertion),
+      isSafeStructuredUtterance(text)
+    else {
+      return false
+    }
+    return !ImportanceScorer.containsExplicitImportanceCue(text)
+  }
+
+  private func containsUnsafeQuotationMark(in text: String) -> Bool {
+    let unconditionalQuotationMarks = CharacterSet(charactersIn: "\"“”‘「」『』")
+    guard text.rangeOfCharacter(from: unconditionalQuotationMarks) == nil else { return true }
+
+    let characters = Array(text)
+    for index in characters.indices where "'’".contains(characters[index]) {
+      guard index > characters.startIndex else { return true }
+      let nextIndex = characters.index(after: index)
+      guard nextIndex < characters.endIndex else { return true }
+      let previousIndex = characters.index(before: index)
+      guard characters[previousIndex].isLetter else { return true }
+      if characters[nextIndex].isLetter {
+        continue
+      }
+      if characters[nextIndex] == "," || characters[nextIndex] == "，" {
+        continue
+      }
+      guard characters[nextIndex].isWhitespace,
+        characters[nextIndex...].first(where: { !$0.isWhitespace })?.isLetter == true
+      else {
+        return true
+      }
+    }
+    return false
   }
 
   private func isSingleSubstantiveClause(_ text: String) -> Bool {

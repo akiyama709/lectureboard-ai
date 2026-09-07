@@ -464,6 +464,67 @@ struct AppSlideIdentityIntegrationTests {
     #expect(transcriptionProvider.startCount == 1)
   }
 
+  @Test func retryAfterSpeechFailureQueuesWithoutKeepingStaleAppError() async {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider
+    )
+
+    await model.startTranscription()
+    transcriptionProvider.emitTerminal(
+      startIndex: 0,
+      error: .recognitionFinalizationTimedOut
+    )
+    #expect(
+      model.status
+        == .error(TranscriptionError.recognitionFinalizationTimedOut.localizedDescription)
+    )
+
+    await model.requestTranscriptionStart()
+
+    #expect(model.status == .ready)
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(model.canRequestTranscriptionStop)
+
+    model.requestTranscriptionStop()
+  }
+
+  @Test func queuedRetryDoesNotHideANewerPowerPointScanError() async {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = makeModel(
+      capture: SlideIdentityFrameCapture(),
+      provider: ControllableSlideIdentityProvider(),
+      transcriptionProvider: transcriptionProvider,
+      scanner: FailingSlideIdentityWindowScanner()
+    )
+
+    await model.startTranscription()
+    transcriptionProvider.emitTerminal(
+      startIndex: 0,
+      error: .recognitionFinalizationTimedOut
+    )
+    await model.refreshPowerPointWindows()
+    #expect(
+      model.status
+        == .error(SlideIdentityWindowScanError.controlled.localizedDescription)
+    )
+
+    await model.requestTranscriptionStart()
+
+    #expect(
+      model.status
+        == .error(SlideIdentityWindowScanError.controlled.localizedDescription)
+    )
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(transcriptionProvider.startCount == 1)
+    #expect(model.canRequestTranscriptionStop)
+
+    model.requestTranscriptionStop()
+  }
+
   @Test func transcriptPhaseTracksAcceptedPartialFinalAndNewOperationReset() async throws {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let model = makeModel(
@@ -583,7 +644,7 @@ struct AppSlideIdentityIntegrationTests {
     model.requestTranscriptionStop()
     #expect(transcriptionProvider.stopCount == 0)
 
-    let startTask = Task { await model.requestTranscriptionStart() }
+    let startTask = Task { await model.startTranscription() }
     try await waitUntil { transcriptionProvider.startCount == 1 }
     #expect(model.transcriptionLifecycleState == .starting)
     #expect(!model.canRequestTranscriptionStart)
@@ -1750,14 +1811,15 @@ struct AppSlideIdentityIntegrationTests {
     slideCanvasConfirmationMode: SlideCanvasConfirmationMode =
       .testOnlyUseFullCapturedFrame,
     timeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
-      TaskSlideIdentityFrameTimeoutWaiter()
+      TaskSlideIdentityFrameTimeoutWaiter(),
+    scanner: any PowerPointWindowScanning = EmptySlideIdentityWindowScanner()
   ) -> AppModel {
     let model = AppModel(
       permissionService: PermissionService(
         screenCaptureClient: SlideIdentityAuthorizedPermissionClient()
       ),
       windowCapture: capture,
-      scanner: EmptySlideIdentityWindowScanner(),
+      scanner: scanner,
       transcriptionProvider: transcriptionProvider,
       slideIdentityProvider: provider,
       slideVisionAnalyzer: analyzer,
@@ -2284,6 +2346,20 @@ private actor SuspendedSlideIdentityAnalyzer: SlideVisualAnalyzing {
 
 private struct EmptySlideIdentityWindowScanner: PowerPointWindowScanning {
   func scan() async throws -> [PowerPointWindowDescriptor] { [] }
+}
+
+private struct FailingSlideIdentityWindowScanner: PowerPointWindowScanning {
+  func scan() async throws -> [PowerPointWindowDescriptor] {
+    throw SlideIdentityWindowScanError.controlled
+  }
+}
+
+private enum SlideIdentityWindowScanError: LocalizedError {
+  case controlled
+
+  var errorDescription: String? {
+    "Controlled PowerPoint scan failure"
+  }
 }
 
 @MainActor

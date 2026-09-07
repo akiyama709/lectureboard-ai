@@ -32,6 +32,134 @@ struct AppSlideCanvasIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func userTranscriptionStartWaitsForVisualContextWithoutStartingProvider() async throws {
+    let capture = ManualCanvasCapture()
+    let transcription = RetainingCanvasTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      analyzer: RecordingCanvasAnalyzer(),
+      transcriptionProvider: transcription,
+      slideCanvasConfirmationMode: .testOnlyUseFullCapturedFrame
+    )
+    let image = try #require(makeImage(width: 80, height: 40))
+
+    await model.startVisualWindowCapture()
+    await capture.emit(frame(sequenceNumber: 1, image: image))
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    await model.requestTranscriptionStart()
+
+    #expect(transcription.retainedObservationCount == 0)
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(model.canRequestTranscriptionStop)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func queuedUserTranscriptionStartsWhenVisualContextBecomesReady() async throws {
+    let capture = ManualCanvasCapture()
+    let transcription = RetainingCanvasTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      analyzer: RecordingCanvasAnalyzer(
+        occupiedRegions: boardProposalOccupiedRegions()
+      ),
+      transcriptionProvider: transcription,
+      slideCanvasConfirmationMode: .testOnlyUseFullCapturedFrame
+    )
+    let image = try #require(makeImage(width: 80, height: 40))
+
+    await model.startVisualWindowCapture()
+    await capture.emit(frame(sequenceNumber: 1, image: image))
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    await model.requestTranscriptionStart()
+    #expect(transcription.retainedObservationCount == 0)
+
+    for sequenceNumber in 2...4 {
+      await capture.emit(frame(sequenceNumber: UInt64(sequenceNumber), image: image))
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil { transcription.retainedObservationCount == 1 }
+
+    #expect(model.transcriptionLifecycleState == .listening)
+    #expect(model.status == .listening)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func queuedUserTranscriptionSurvivesProductionCanvasSetup() async throws {
+    let capture = ManualCanvasCapture()
+    let transcription = RetainingCanvasTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      analyzer: RecordingCanvasAnalyzer(
+        occupiedRegions: boardProposalOccupiedRegions()
+      ),
+      transcriptionProvider: transcription
+    )
+    let image = try #require(makeImage(width: 80, height: 40))
+    let fullFrame = try #require(
+      SlideCanvasRegion(NormalizedRect(x: 0, y: 0, width: 1, height: 1))
+    )
+
+    await model.requestTranscriptionStart()
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(transcription.retainedObservationCount == 0)
+
+    await model.startVisualWindowCapture()
+    await capture.emit(frame(sequenceNumber: 1, image: image))
+    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
+
+    model.beginSlideCanvasSelection()
+    #expect(model.slideCanvasStatus == .selecting)
+    #expect(model.confirmSlideCanvasSelection(fullFrame))
+    #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(transcription.retainedObservationCount == 0)
+
+    for sequenceNumber in 2...4 {
+      await capture.emit(frame(sequenceNumber: UInt64(sequenceNumber), image: image))
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil { transcription.retainedObservationCount == 1 }
+
+    #expect(model.transcriptionLifecycleState == .listening)
+    #expect(model.status == .listening)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func stoppingQueuedUserTranscriptionPreventsLaterAutomaticStart() async throws {
+    let capture = ManualCanvasCapture()
+    let transcription = RetainingCanvasTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      analyzer: RecordingCanvasAnalyzer(),
+      transcriptionProvider: transcription,
+      slideCanvasConfirmationMode: .testOnlyUseFullCapturedFrame
+    )
+    let image = try #require(makeImage(width: 80, height: 40))
+
+    await model.startVisualWindowCapture()
+    await capture.emit(frame(sequenceNumber: 1, image: image))
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    await model.requestTranscriptionStart()
+    model.requestTranscriptionStop()
+
+    #expect(model.transcriptionLifecycleState == .idle)
+    #expect(!model.canRequestTranscriptionStop)
+
+    for sequenceNumber in 2...4 {
+      await capture.emit(frame(sequenceNumber: UInt64(sequenceNumber), image: image))
+    }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+
+    #expect(transcription.retainedObservationCount == 0)
+    #expect(model.transcriptionLifecycleState == .idle)
+
+    await model.stopWindowCapture()
+  }
+
   @Test func visualModeBoardsWithoutSemanticPowerPointIdentity() async throws {
     let capture = ManualCanvasCapture()
     let analyzer = RecordingCanvasAnalyzer(
