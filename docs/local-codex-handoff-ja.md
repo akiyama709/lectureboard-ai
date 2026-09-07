@@ -225,3 +225,11 @@ make verify
 　秋山さんの明示許可に基づき，画面収録設定に存在した有効な`LectureBoard AI.app`行1件を選択して削除し，固定identifierの再照会で行が消えたことを確認した．その後の正規設定windowが保持されず，Apple純正System Settings実行fileを直接起動した経路はmacOSのlaunch constraintにより`Code Signing Invalid`で拒否された．この直接起動経路は廃止し，再試行しない．問題report画像は`Mock-Lecture-c525ee4/system-settings-direct-launch-rejected-20260907.png`へ保存し，SHA-256は`421ce0ba2ca5ef29ea51bb11dd68753a419b43407cfdafd400458659aee0a169`である．System Settingsの失敗であり，LectureBoard AI又は設定dataを破損した証拠ではない．
 
 　行削除後にApp本来の画面収録要求を1回だけ実行したが，設定windowは保持されなかった．秋山さんから反復する画面収録作業をskipする指示があったため，固定Appを正常終了して打ち切り，再起動しなかった．`c525ee4`固定Appは不完全な履歴証拠として保持し，受入候補には使わない．次は文書を同期したclean exact commitから最終候補を新しいpathへ1回だけ固定し，自動evidence，5 asset生成及びlocal verifyへ進む．本人がcore lecture受入を行う場合だけ，その最終候補へ画面収録を1回許可する．これをskipする場合，capture又は本人受入を成功扱いにせず，GitHub公開完了とも記録しない．
+
+## 9．2026-09-07 exact-commit evidence固定失敗と修正
+
+　clean commit `ac81e0da02a0fe4e3ddd0a34103ea1663897ad7c`に対するisolated `evidence` transactionは，全26段階，Core 250件・19 suite及びApp 480件・41 suiteへ合格した．しかし，authoritative `.xcresult`の固定時に2候補が`pairDigestMismatch`で安全側に棄却され，旧上限2回のため3回目のcopy前に`copyAttemptsExhausted`で停止した．指定したevidence directoryは作成されず，asset，tag，push及びGitHub Releaseも作成していない．これはApp test失敗ではなく，exact-commit release evidence成功でもない．
+
+　履歴上の実在`.xcresult`及び新規に生成した480件test resultを原本として確認すると，`ditto --rsrc --extattr --acl`によるcopyは，内容，mode，所有者，group，flag，ACL及び拡張属性を含むcanonical tree manifestで原本と一致した．したがって，一般的なcopy破損ではなく，長いmanifest監査中にXcode result serviceの遅延更新が複数回発生した場合へ旧上限が対応できなかったものと限定した．
+
+　修正は600秒のdeadline及び全TOCTOU検査を維持し，不一致候補を必ず棄却した上でcopy候補の上限を4回へ拡張する．新しい回帰testは，1回目及び2回目のcopy直後にsourceを更新し，両候補を拒否・削除し，2回目の更新を含む3回目だけを受理することを確認した．連続改変，期限超過，final seal改変，source／candidate改変，root／parent／path差替え及びquery分離の既存否定testも維持し，no-fee release tool suite全体へ合格した．次はこの修正と記録をclean commitへ固定し，その正確なcommitに対して`evidence`を再実行する．

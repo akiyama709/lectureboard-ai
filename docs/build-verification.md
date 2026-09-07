@@ -2195,3 +2195,28 @@ candidate. Future release work must use one newly frozen exact final candidate; 
 to run the core lecture acceptance, Screen Recording must be granted once to that exact candidate.
 Skipping that grant is allowed operationally, but cannot be recorded as successful capture or a
 completed owner acceptance.
+
+### 2026-09-07 exact-commit evidence freeze retry correction
+
+Clean commit `ac81e0da02a0fe4e3ddd0a34103ea1663897ad7c` was passed to the isolated
+`evidence` transaction. All 26 prepublication stages passed, including 250 Core tests in 19 suites
+and 480 native App tests in 41 suites. The transaction then failed closed while freezing the
+authoritative `.xcresult`: two copied candidates were rejected as `pairDigestMismatch`, and the
+third attempt was stopped by the former two-copy limit. The requested evidence directory was not
+published and no release asset, tag, push, or GitHub Release was created. This is a failed evidence
+transaction, not exact-commit release evidence and not an application-test failure.
+
+The copy boundary was checked against both the historical 2026-09-07 `.xcresult` and a newly
+generated 480-test result. For each, a `ditto --rsrc --extattr --acl` copy produced the same
+canonical tree manifest as its source. This excluded a generally corrupt copy method. The observed
+failure is consistent with more than one delayed Xcode result-service update during the long
+canonical manifest pass. The release tool continues to reject every inconsistent pair and keeps
+the existing 600-second deadline, but permits at most four copy candidates instead of two.
+
+A regression fixture now mutates the source after each of the first two copies. Both candidates
+must be rejected and deleted, and only a third copy containing the second settled update may pass.
+The existing continuous-mutation, deadline, final-seal mutation, source and candidate mutation,
+root replacement, parent replacement, path-swap, query-isolation, and digest guards remain active;
+the final-seal fixture now exhausts all four bounded candidates. Shell syntax, `git diff --check`,
+and the complete no-fee release-tool boundary suite passed. A new clean exact-commit `evidence`
+transaction is still required; these targeted results do not create or verify release assets.

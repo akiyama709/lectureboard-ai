@@ -1014,7 +1014,7 @@ freeze_result_bundle_when_stable() {
   local pair_digest_matches=0 final_seal_failure=''
   local stable_since=0 started_at=0 deadline=0
   local required_stable_observations=6 quiet_nanoseconds=5000000000
-  local maximum_observations=600 maximum_copy_attempts=2 deadline_nanoseconds=600000000000
+  local maximum_observations=600 maximum_copy_attempts=4 deadline_nanoseconds=600000000000
   [[ "$result_bundle" == /* && -d "$result_bundle" && ! -L "$result_bundle" ]] \
     || return 1
   frozen_result_bundle_digest=''
