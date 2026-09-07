@@ -40,6 +40,16 @@ struct TaskFreshContentSampleWaiter: FreshContentSampleWaiting {
   }
 }
 
+protocol StablePartialTranscriptPauseWaiting: Sendable {
+  func wait(for duration: Duration) async
+}
+
+struct TaskStablePartialTranscriptPauseWaiter: StablePartialTranscriptPauseWaiting {
+  func wait(for duration: Duration) async {
+    try? await Task.sleep(for: duration)
+  }
+}
+
 private enum FreshContentSampleCandidateToken: Equatable, Sendable {
   case coarse(StableFrameCandidateToken)
   case dense(StableContentChangeCandidateToken)
@@ -90,6 +100,20 @@ private struct BoardCandidateContext {
   mutating func reset() {
     transcriptSegments.removeAll(keepingCapacity: true)
     intents.removeAll(keepingCapacity: true)
+  }
+}
+
+private struct PendingStablePartialTranscriptCommit: Equatable {
+  let operationID: TranscriptionOperationID
+  let observation: TranscriptionObservation
+
+  static func == (
+    lhs: PendingStablePartialTranscriptCommit,
+    rhs: PendingStablePartialTranscriptCommit
+  ) -> Bool {
+    lhs.operationID == rhs.operationID
+      && lhs.observation.segment == rhs.observation.segment
+      && lhs.observation.sourceMachTime == rhs.observation.sourceMachTime
   }
 }
 
@@ -225,6 +249,8 @@ final class AppModel: ObservableObject {
   private let slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting
   private let freshContentSampleDelay: Duration
   private let freshContentSampleWaiter: any FreshContentSampleWaiting
+  private let stablePartialTranscriptPauseDelay: Duration
+  private let stablePartialTranscriptPauseWaiter: any StablePartialTranscriptPauseWaiting
   private let boardEngine = ContextualBoardEngine()
   private let sceneComposer = BoardSceneComposer()
   private var stableFrameDetector = StableFrameDetector()
@@ -266,6 +292,8 @@ final class AppModel: ObservableObject {
   private var boardCandidateContext = BoardCandidateContext()
   private var boardSceneAnalysisGeneration: Int?
   private var stablePartialTranscriptCommitter = StablePartialTranscriptCommitter()
+  private var stablePartialTranscriptPauseTask: Task<Void, Never>?
+  private var pendingStablePartialTranscriptCommit: PendingStablePartialTranscriptCommit?
   private var transcriptionOperationGate = TranscriptionOperationGate()
   private var transcriptionRequestedByUser = false
   private var automaticTranscriptionResumeTask: Task<Void, Never>?
@@ -296,6 +324,9 @@ final class AppModel: ObservableObject {
     freshContentSampleDelay: Duration = .milliseconds(100),
     freshContentSampleWaiter: any FreshContentSampleWaiting =
       TaskFreshContentSampleWaiter(),
+    stablePartialTranscriptPauseDelay: Duration = .milliseconds(700),
+    stablePartialTranscriptPauseWaiter: any StablePartialTranscriptPauseWaiting =
+      TaskStablePartialTranscriptPauseWaiter(),
     overlayController: any OverlayWindowControlling = OverlayWindowController(),
     displayCoordinateSnapshotProvider: any DisplayCoordinateSnapshotProviding =
       SystemDisplayCoordinateSnapshotProvider(),
@@ -318,6 +349,8 @@ final class AppModel: ObservableObject {
     self.slideIdentityFrameTimeoutWaiter = slideIdentityFrameTimeoutWaiter
     self.freshContentSampleDelay = max(freshContentSampleDelay, .zero)
     self.freshContentSampleWaiter = freshContentSampleWaiter
+    self.stablePartialTranscriptPauseDelay = max(stablePartialTranscriptPauseDelay, .zero)
+    self.stablePartialTranscriptPauseWaiter = stablePartialTranscriptPauseWaiter
     self.overlayController = overlayController
     self.displayCoordinateSnapshotProvider = displayCoordinateSnapshotProvider
     self.productionOverlayEligibilityProvider = productionOverlayEligibilityProvider
@@ -331,6 +364,7 @@ final class AppModel: ObservableObject {
 
   deinit {
     freshContentSampleTask?.cancel()
+    stablePartialTranscriptPauseTask?.cancel()
     managedSlideShowTransactionReleaseTask?.cancel()
     automaticTranscriptionResumeTask?.cancel()
     let leaseScheduler = productionOverlayLeaseScheduler
@@ -1057,6 +1091,7 @@ final class AppModel: ObservableObject {
     transcriptionRequestedByUser = false
     automaticTranscriptionResumeTask?.cancel()
     automaticTranscriptionResumeTask = nil
+    cancelPendingStablePartialTranscriptCommit()
     guard let operationID = transcriptionOperationGate.activeOperationID else {
       status = .ready
       transcriptionLifecycleState = .idle
@@ -1077,7 +1112,7 @@ final class AppModel: ObservableObject {
   }
 
   func receive(_ observation: TranscriptionObservation) {
-    receiveAcceptedTranscriptionObservation(observation)
+    receiveAcceptedTranscriptionObservation(observation, transcriptionOperationID: nil)
   }
 
   private func receive(
@@ -1085,7 +1120,10 @@ final class AppModel: ObservableObject {
     transcriptionOperationID: TranscriptionOperationID
   ) {
     guard transcriptionOperationGate.accepts(transcriptionOperationID) else { return }
-    receiveAcceptedTranscriptionObservation(observation)
+    receiveAcceptedTranscriptionObservation(
+      observation,
+      transcriptionOperationID: transcriptionOperationID
+    )
   }
 
   private func receive(
@@ -1112,9 +1150,11 @@ final class AppModel: ObservableObject {
   }
 
   private func receiveAcceptedTranscriptionObservation(
-    _ observation: TranscriptionObservation
+    _ observation: TranscriptionObservation,
+    transcriptionOperationID: TranscriptionOperationID?
   ) {
     let segment = observation.segment
+    cancelPendingStablePartialTranscriptCommit()
     liveTranscript = segment.text
     if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       liveTranscriptPhase = .empty
@@ -1123,7 +1163,28 @@ final class AppModel: ObservableObject {
     }
     if segment.isFinal {
       _ = stablePartialTranscriptCommitter.observe(segment)
+      processBoardSegment(segment, sourceMachTime: observation.sourceMachTime)
+      return
     }
+
+    if let committedPartial = stablePartialTranscriptCommitter.observe(segment) {
+      processBoardSegment(committedPartial, sourceMachTime: observation.sourceMachTime)
+      return
+    }
+
+    if let transcriptionOperationID {
+      scheduleStablePartialTranscriptCommit(
+        observation,
+        transcriptionOperationID: transcriptionOperationID
+      )
+    }
+  }
+
+  private func processBoardSegment(
+    _ segment: TranscriptSegment,
+    sourceMachTime: UInt64
+  ) {
+    guard segment.isFinal else { return }
     guard
       slideCanvasStatus == .confirmed,
       slideAnalysisStatus == .ready,
@@ -1135,15 +1196,15 @@ final class AppModel: ObservableObject {
     }
     guard
       SlideIdentityTranscriptBoundary.accepts(
-        sourceMachTime: observation.sourceMachTime,
+        sourceMachTime: sourceMachTime,
         after: latestSlideIdentityBoundaryMachTime
       ),
       SlideIdentityTranscriptBoundary.accepts(
-        sourceMachTime: observation.sourceMachTime,
+        sourceMachTime: sourceMachTime,
         after: latestSlideIdentityFrameSynchronizationMachTime
       ),
       SlideIdentityTranscriptBoundary.accepts(
-        sourceMachTime: observation.sourceMachTime,
+        sourceMachTime: sourceMachTime,
         after: latestVisualFreshnessBoundaryMachTime
       )
     else { return }
@@ -1155,17 +1216,7 @@ final class AppModel: ObservableObject {
       return
     }
 
-    let boardSegment: TranscriptSegment
-    if segment.isFinal {
-      boardSegment = segment
-    } else {
-      guard let committedPartial = stablePartialTranscriptCommitter.observe(segment) else {
-        return
-      }
-      boardSegment = committedPartial
-    }
-
-    boardCandidateContext.transcriptSegments.append(boardSegment)
+    boardCandidateContext.transcriptSegments.append(segment)
     let fallbackTitle =
       selectedLanguage.rawValue.hasPrefix("ja") ? "現在のスライド" : "Current slide"
     let analysisTitle = slideAnalysis.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1198,6 +1249,46 @@ final class AppModel: ObservableObject {
     boardScene = nextBoardScene
     boardSceneAnalysisGeneration = analysisGeneration
     renderAlignedOverlayIfPossible()
+  }
+
+  private func scheduleStablePartialTranscriptCommit(
+    _ observation: TranscriptionObservation,
+    transcriptionOperationID: TranscriptionOperationID
+  ) {
+    let pending = PendingStablePartialTranscriptCommit(
+      operationID: transcriptionOperationID,
+      observation: observation
+    )
+    pendingStablePartialTranscriptCommit = pending
+    let delay = stablePartialTranscriptPauseDelay
+    let waiter = stablePartialTranscriptPauseWaiter
+    stablePartialTranscriptPauseTask = Task { @MainActor [weak self] in
+      await waiter.wait(for: delay)
+      guard !Task.isCancelled, let self,
+        self.pendingStablePartialTranscriptCommit == pending,
+        self.transcriptionOperationGate.accepts(transcriptionOperationID),
+        self.liveTranscriptPhase == .partial,
+        self.liveTranscript == observation.segment.text
+      else {
+        return
+      }
+      self.stablePartialTranscriptPauseTask = nil
+      self.pendingStablePartialTranscriptCommit = nil
+      guard
+        let committed = self.stablePartialTranscriptCommitter.commitAfterPause(
+          observation.segment
+        )
+      else {
+        return
+      }
+      self.processBoardSegment(committed, sourceMachTime: observation.sourceMachTime)
+    }
+  }
+
+  private func cancelPendingStablePartialTranscriptCommit() {
+    stablePartialTranscriptPauseTask?.cancel()
+    stablePartialTranscriptPauseTask = nil
+    pendingStablePartialTranscriptCommit = nil
   }
 
   private func receive(_ frame: CapturedPowerPointFrame, sessionID: CaptureOperationID) {
@@ -2776,6 +2867,7 @@ final class AppModel: ObservableObject {
   }
 
   private func clearLiveTranscript() {
+    cancelPendingStablePartialTranscriptCommit()
     stablePartialTranscriptCommitter.reset()
     liveTranscript = ""
     liveTranscriptPhase = .empty

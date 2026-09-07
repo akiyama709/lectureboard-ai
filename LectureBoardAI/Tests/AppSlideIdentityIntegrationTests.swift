@@ -823,6 +823,210 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func punctuationFreeJapaneseImportancePartialReachesPublicSceneAfterPause() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let text = "ここで重要なのはテストです"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: text,
+          startTime: 0,
+          endTime: 3,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await pauseWaiter.waitForInvocationCount(1)
+    #expect(model.liveTranscript == text)
+    #expect(model.liveTranscriptPhase == .partial)
+    #expect(model.boardScene.elements.isEmpty)
+
+    await pauseWaiter.resume(invocation: 0)
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    #expect(!model.lectureSessionScenes.isEmpty)
+    #expect(model.liveTranscriptPhase == .partial)
+    await model.stopWindowCapture()
+  }
+
+  @Test func supersededPauseCannotCommitAnOlderImportancePartial() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let segmentID = UUID()
+
+    func observation(text: String, endTime: TimeInterval) -> TranscriptionObservation {
+      TranscriptionObservation(
+        segment: TranscriptSegment(
+          id: segmentID,
+          text: text,
+          startTime: 0,
+          endTime: endTime,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(text: "ここで重要なのはテストです", endTime: 2)
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(text: "ここで重要なのはテストですが", endTime: 3)
+    )
+    try await pauseWaiter.waitForInvocationCount(2)
+
+    await pauseWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.boardScene.elements.isEmpty)
+
+    await pauseWaiter.resume(invocation: 1)
+    await drainMainActorQueue()
+    #expect(model.boardScene.elements.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func manualStopCancelsPendingImportancePartial() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    transcriptionProvider.automaticallyCompletesGracefulStop = false
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: "ここで重要なのはテストです",
+          startTime: 0,
+          endTime: 3,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+
+    model.stopTranscription()
+    await pauseWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+
+    #expect(model.transcriptionLifecycleState == .finalizing)
+    #expect(model.boardScene.elements.isEmpty)
+    transcriptionProvider.emitGracefulCompletion(startIndex: 0)
+    await model.stopWindowCapture()
+  }
+
+  @Test func finalObservationSupersedesItsPendingPartialPause() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let segmentID = UUID()
+    let text = "ここで重要なのはテストです"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          id: segmentID,
+          text: text,
+          startTime: 0,
+          endTime: 2,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          id: segmentID,
+          text: text,
+          startTime: 0,
+          endTime: 2,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: true,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    let elementsAfterFinal = model.boardScene.elements
+
+    await pauseWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.boardScene.elements == elementsAfterFinal)
+    await model.stopWindowCapture()
+  }
+
+  @Test func captureBoundaryCancelsPendingImportancePartial() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: "ここで重要なのはテストです",
+          startTime: 0,
+          endTime: 3,
+          language: .japanese,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+
+    await model.stopWindowCapture()
+    await pauseWaiter.resume(invocation: 0)
+    await drainMainActorQueue()
+    #expect(model.boardScene.elements.isEmpty)
+  }
+
   @Test func groundedProviderStrengthDefinitionQuestionRemainsInternal() async throws {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let model = try await makeGroundedDefinitionModel(
@@ -1812,6 +2016,8 @@ struct AppSlideIdentityIntegrationTests {
       .testOnlyUseFullCapturedFrame,
     timeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
       TaskSlideIdentityFrameTimeoutWaiter(),
+    stablePartialTranscriptPauseWaiter: any StablePartialTranscriptPauseWaiting =
+      TaskStablePartialTranscriptPauseWaiter(),
     scanner: any PowerPointWindowScanning = EmptySlideIdentityWindowScanner()
   ) -> AppModel {
     let model = AppModel(
@@ -1825,7 +2031,8 @@ struct AppSlideIdentityIntegrationTests {
       slideVisionAnalyzer: analyzer,
       slideCanvasConfirmationMode: slideCanvasConfirmationMode,
       slideIdentityFrameTimeout: .seconds(2),
-      slideIdentityFrameTimeoutWaiter: timeoutWaiter
+      slideIdentityFrameTimeoutWaiter: timeoutWaiter,
+      stablePartialTranscriptPauseWaiter: stablePartialTranscriptPauseWaiter
     )
     model.powerPointWindows = [
       PowerPointWindowDescriptor(
@@ -1842,7 +2049,9 @@ struct AppSlideIdentityIntegrationTests {
   }
 
   private func makeGroundedDefinitionModel(
-    transcriptionProvider: ControllableTranscriptionProvider
+    transcriptionProvider: ControllableTranscriptionProvider,
+    stablePartialTranscriptPauseWaiter: any StablePartialTranscriptPauseWaiting =
+      TaskStablePartialTranscriptPauseWaiter()
   ) async throws -> AppModel {
     let capture = SlideIdentityFrameCapture()
     let identityProvider = ControllableSlideIdentityProvider()
@@ -1854,7 +2063,8 @@ struct AppSlideIdentityIntegrationTests {
       capture: capture,
       provider: identityProvider,
       analyzer: analyzer,
-      transcriptionProvider: transcriptionProvider
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: stablePartialTranscriptPauseWaiter
     )
     let slide = try sample(slideID: 101, slideIndex: 1)
     let image = try #require(makeImage())
@@ -2197,6 +2407,33 @@ private actor ControllableSlideIdentityFrameTimeoutWaiter:
   private var nextInvocation = 0
 
   var invocationCount: Int { nextInvocation }
+
+  func wait(for duration: Duration) async {
+    let invocation = nextInvocation
+    nextInvocation += 1
+    await withCheckedContinuation { continuation in
+      continuations[invocation] = continuation
+    }
+  }
+
+  func waitForInvocationCount(_ expectedCount: Int) async throws {
+    for _ in 0..<10_000 {
+      if nextInvocation >= expectedCount { return }
+      await Task.yield()
+    }
+    throw AppSlideIdentityIntegrationTestError.timedOut
+  }
+
+  func resume(invocation: Int) {
+    continuations.removeValue(forKey: invocation)?.resume()
+  }
+}
+
+private actor ControllableStablePartialTranscriptPauseWaiter:
+  StablePartialTranscriptPauseWaiting
+{
+  private var continuations: [Int: CheckedContinuation<Void, Never>] = [:]
+  private var nextInvocation = 0
 
   func wait(for duration: Duration) async {
     let invocation = nextInvocation

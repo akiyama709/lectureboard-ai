@@ -113,6 +113,148 @@ struct StablePartialTranscriptCommitterTests {
     #expect(committer.observe(segment(id: id, text: completed, endTime: 6)) != nil)
   }
 
+  @Test func pausedUnpunctuatedJapaneseImportanceStatementCommitsExactlyOnce() throws {
+    let id = UUID()
+    let partial = segment(id: id, text: "ここで重要なのはテストです", endTime: 1)
+    var committer = StablePartialTranscriptCommitter()
+
+    #expect(committer.observe(partial) == nil)
+    let pausedCommit = committer.commitAfterPause(partial)
+    let committed = try #require(pausedCommit)
+
+    #expect(committed.id == id)
+    #expect(committed.text == "ここで重要なのはテストです")
+    #expect(committed.isFinal)
+    #expect(committed.confidence == partial.confidence)
+    #expect(committed.emphasis == partial.emphasis)
+    #expect(committer.commitAfterPause(partial) == nil)
+  }
+
+  @Test func pauseFallbackDoesNotWeakenOrdinaryReliabilityThresholds() {
+    let id = UUID()
+    let text = "ここで重要なのはテストです"
+
+    for confidence in [0.0, 0.49] {
+      var committer = StablePartialTranscriptCommitter()
+      let partial = segment(id: id, text: text, endTime: 1, confidence: confidence)
+      #expect(committer.observe(partial) == nil)
+      #expect(committer.commitAfterPause(partial) == nil)
+
+      var ordinary = StablePartialTranscriptCommitter()
+      let punctuated = segment(id: id, text: text + "．", endTime: 1, confidence: confidence)
+      #expect(ordinary.observe(punctuated) == nil)
+      #expect(
+        ordinary.observe(
+          segment(id: id, text: punctuated.text, endTime: 2, confidence: confidence)
+        ) == nil
+      )
+    }
+  }
+
+  @Test func pauseFallbackRejectsStaleUnsafeOrUnreliablePartials() {
+    let id = UUID()
+
+    func isRejected(
+      _ observed: TranscriptSegment,
+      candidate: TranscriptSegment? = nil
+    ) -> Bool {
+      var committer = StablePartialTranscriptCommitter()
+      _ = committer.observe(observed)
+      return committer.commitAfterPause(candidate ?? observed) == nil
+    }
+
+    let complete = segment(id: id, text: "ここで重要なのはテストです", endTime: 1)
+    #expect(isRejected(complete, candidate: segment(id: id, text: complete.text, endTime: 2)))
+    #expect(isRejected(segment(id: id, text: "ここで重要なのはテストですか", endTime: 1)))
+    #expect(isRejected(segment(id: id, text: "ここで重要なのはテストですが", endTime: 1)))
+    #expect(isRejected(segment(id: id, text: "重要なのはテストです", endTime: 1)))
+    #expect(isRejected(segment(id: id, text: "ここで重要なのはまだ", endTime: 1)))
+    #expect(
+      isRejected(
+        segment(
+          id: id,
+          text: "ここで重要なのはテストです",
+          endTime: 1,
+          emphasis: .nan
+        )
+      )
+    )
+    #expect(
+      isRejected(
+        segment(id: id, text: "ここで重要なのはテストです", endTime: 1, confidence: .nan)
+      )
+    )
+    #expect(
+      isRejected(
+        segment(id: id, text: "ここで重要なのはテストです", endTime: 1, confidence: -0.01)
+      )
+    )
+    #expect(
+      isRejected(
+        segment(id: id, text: "ここで重要なのはテストです", endTime: 1, confidence: 1.01)
+      )
+    )
+    #expect(
+      isRejected(
+        segment(id: id, text: "ここで重要なのはテストです", endTime: 1, emphasis: 1.01)
+      )
+    )
+    #expect(
+      isRejected(
+        TranscriptSegment(
+          id: id,
+          text: "ここで重要なのはテストです",
+          startTime: .nan,
+          endTime: 1,
+          language: .japanese,
+          confidence: 0,
+          isFinal: false,
+          emphasis: 0.8
+        )
+      )
+    )
+    #expect(
+      isRejected(
+        TranscriptSegment(
+          id: id,
+          text: "ここで重要なのはテストです",
+          startTime: 2,
+          endTime: 1,
+          language: .japanese,
+          confidence: 0,
+          isFinal: false,
+          emphasis: 0.8
+        )
+      )
+    )
+    #expect(
+      isRejected(
+        TranscriptSegment(
+          id: id,
+          text: "The key point is that this is a complete test",
+          startTime: 0,
+          endTime: 1,
+          language: .englishUS,
+          confidence: 0.95,
+          isFinal: false,
+          emphasis: 0.8
+        )
+      )
+    )
+  }
+
+  @Test func pauseFallbackRequiresAPriorObservationAndRejectsPunctuatedSingleRevision() {
+    let id = UUID()
+    var committer = StablePartialTranscriptCommitter()
+    let unpunctuated = segment(id: id, text: "ここで重要なのはテストです", endTime: 1)
+    #expect(committer.commitAfterPause(unpunctuated) == nil)
+
+    let punctuated = segment(id: id, text: "ここで重要なのはテストです．", endTime: 2)
+    #expect(committer.observe(punctuated) == nil)
+    #expect(committer.commitAfterPause(punctuated) == nil)
+    #expect(committer.observe(segment(id: id, text: punctuated.text, endTime: 3)) != nil)
+  }
+
   private func segment(
     id: UUID,
     text: String,

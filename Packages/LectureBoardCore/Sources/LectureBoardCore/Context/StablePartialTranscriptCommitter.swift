@@ -2,10 +2,12 @@ import Foundation
 
 /// Promotes one stable, complete declarative unit from a stream of partial speech hypotheses.
 ///
-/// The committer never publishes the newest hypothesis by itself. The same text must survive in
-/// two consecutive revisions of one provider-owned segment, and a sentence boundary must already
-/// be present. The contextual board engine remains responsible for grounding, importance, and the
-/// final public-state decision.
+/// The ordinary path never publishes the newest hypothesis by itself. The same text must survive
+/// in two consecutive revisions of one provider-owned segment, and a sentence boundary must
+/// already be present. A caller may separately invoke ``commitAfterPause(_:)`` after a bounded
+/// no-update interval; that path is limited to an unchanged, reliable Japanese partial with an
+/// explicit importance cue and a conservative declarative ending. The contextual board engine
+/// remains responsible for grounding, importance, and the final public-state decision.
 public struct StablePartialTranscriptCommitter: Sendable {
   private var previousPartial: TranscriptSegment?
   private var committedSegmentID: UUID?
@@ -45,6 +47,49 @@ public struct StablePartialTranscriptCommitter: Sendable {
       confidence: min(previousPartial.confidence, segment.confidence),
       isFinal: true,
       emphasis: min(previousPartial.emphasis, segment.emphasis)
+    )
+  }
+
+  /// Promotes the most recently observed partial after the caller has measured a bounded pause.
+  ///
+  /// The argument must exactly equal the last value passed to ``observe(_:)``. This makes a stale
+  /// timer fail closed when any provider field changes before it fires. Unlike the ordinary
+  /// two-revision path, this narrow fallback accepts a punctuation-free Japanese statement, but
+  /// only when it is substantive, explicitly marks importance, and has a conservative complete
+  /// declarative ending.
+  public mutating func commitAfterPause(_ segment: TranscriptSegment) -> TranscriptSegment? {
+    guard !segment.isFinal,
+      committedSegmentID != segment.id,
+      let previousPartial,
+      previousPartial == segment,
+      isReliable(previousPartial),
+      isReliable(segment),
+      segment.language == .japanese
+    else {
+      return nil
+    }
+
+    let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard firstCompleteDeclarativeUnit(in: text) == nil,
+      !text.contains("?"),
+      !text.contains("？"),
+      isSubstantive(text),
+      ImportanceScorer.containsExplicitImportanceCue(text),
+      hasConservativeJapaneseDeclarativeEnding(text)
+    else {
+      return nil
+    }
+
+    committedSegmentID = segment.id
+    return TranscriptSegment(
+      id: segment.id,
+      text: text,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      language: segment.language,
+      confidence: segment.confidence,
+      isFinal: true,
+      emphasis: segment.emphasis
     )
   }
 
@@ -97,6 +142,13 @@ public struct StablePartialTranscriptCommitter: Sendable {
       if !character.isWhitespace { count += 1 }
     }
     return nonWhitespaceCount >= 12 && nonWhitespaceCount <= 240
+  }
+
+  private func hasConservativeJapaneseDeclarativeEnding(_ text: String) -> Bool {
+    [
+      "ではありませんでした", "ではありません", "ではなかった", "ませんでした", "であります", "ではない",
+      "でした", "ました", "ません", "である", "だった", "です", "ます",
+    ].contains { text.hasSuffix($0) }
   }
 }
 
