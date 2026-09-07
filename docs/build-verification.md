@@ -2416,3 +2416,42 @@ The replacement app has not yet passed owner microphone-to-board use. Visible pr
 PowerPoint overlay output, latency, slide changes, mouse priority, export, source-file invariance,
 the complete exact-commit gate, Gatekeeper, GitHub publication, and public re-download remain open
 and must not be inferred from the build or deterministic tests.
+
+### 2026-09-07 punctuation-free partial owner-trial correction
+
+The owner trial of the fixed `e2c66af09c716ccbbffa3623350497bbf6355e66` app established that
+capture, the user-confirmed canvas, and Vision analysis were active. The live diagnostics reached
+2,576 frames, one stable snapshot, 17 text regions, 6 rectangle regions, 52 stroke candidates, and
+10 occupied regions. Apple Speech displayed the exact Japanese partial
+`ここで重要なのはテストです`, but the public board count remained zero. The frontmost-app overlay
+eligibility rejection was downstream and did not explain the empty public scene.
+
+Review found that the UI displayed each accepted partial before board classification, while the
+stable-partial committer required two same-ID revisions and a punctuation boundary. A single
+punctuation-free partial therefore never entered the contextual engine. Commit
+`926be0855b3e96cb288aa7b0fc60602a4bc9543e` adds a 700-millisecond no-update fallback limited to
+an exactly unchanged Japanese partial with an explicit importance cue, confidence of at least
+0.5, valid finite timing and emphasis, substantive length, and a conservative declarative ending.
+It retains the original source time and operation identity. Any newer observation, final result,
+manual stop, capture change, or context boundary cancels the pending work. Questions, incomplete
+forms, low confidence, invalid metadata, and suffix false positives such as
+`ここで重要なのはまだ` remain closed.
+
+The final Core suite passed 267 tests in 19 suites. The directly affected native suite passed 43
+tests at `DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_19-56-28-+0900.xcresult`.
+An earlier version of the same path passed all 512 App tests in 41 suites at
+`Test-LectureBoardAI-2026.09.07_19-46-42-+0900.xcresult`; because stop-race and ending hardening
+followed that run, it is not claimed as the complete native result for the exact final commit.
+Strict formatting and diff checks passed, and independent re-review found no remaining P0 or P1
+issue. The 26-stage publication gate was deliberately not run for this bounded owner retry.
+
+An isolated Git archive of that exact commit was built once as an arm64 Release 1.0.0 build 1 app
+with ad hoc signing and Hardened Runtime. It is frozen without replacing older candidates at
+`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-926be08/LectureBoard AI.app`.
+The executable SHA-256 is `0c1c1fe2b7e9a1d169bba3b8fefe5bba1524fd4e6491893adc32340eec5d24a2`,
+the CDHash is `3bc46e781ebef14e21ea2f4e3026ac11a1dcc258`, and the complete tree-manifest
+SHA-256 is `3a31c5f5b709ddd9d08d2e41fb7f97d32ee81ed47c025bb3369431e23c2a3afa`.
+The bundle is thin arm64, reports `adhoc,runtime`, contains only the audio-input entitlement, has no
+TeamIdentifier, passes strict deep verification, and exactly matches the archived build product.
+It has not yet passed the repeated owner utterance, visible preview or PowerPoint overlay checks,
+so acceptance and publication remain open.

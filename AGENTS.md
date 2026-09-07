@@ -156,6 +156,22 @@ Implemented:
   microphone-to-preview and PowerPoint-visible board output, export, original-file preservation,
   the complete exact-commit gate, and public release remain unverified.
 
+- The subsequent `e2c66af09c716ccbbffa3623350497bbf6355e66` owner trial proved live capture,
+  user-confirmed canvas analysis, and partial transcription, but the punctuation-free Japanese
+  partial `ここで重要なのはテストです` never reached board classification and the confirmed board
+  count remained zero. Commit `926be0855b3e96cb288aa7b0fc60602a4bc9543e` adds a narrowly bounded
+  700-millisecond no-update path for an unchanged, reliable Japanese partial with an explicit
+  importance cue and conservative declarative ending. New partials, finals, manual stop, capture
+  changes, and context boundaries cancel it; stale operations and source times remain rejected.
+  Core 267 tests and the 43 directly affected App tests passed, strict formatting and diff checks
+  passed, and independent review found no remaining P0 or P1 issue. The exact Git-archive owner
+  build is frozen at `/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-926be08/LectureBoard AI.app`.
+  Its arm64 ad hoc Hardened Runtime executable SHA-256 is
+  `0c1c1fe2b7e9a1d169bba3b8fefe5bba1524fd4e6491893adc32340eec5d24a2`, CDHash is
+  `3bc46e781ebef14e21ea2f4e3026ac11a1dcc258`, and strict deep signature and full tree identity
+  passed. Real microphone-to-visible-board success, export, owner acceptance, the complete
+  exact-commit gate, and public release remain unverified.
+
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
