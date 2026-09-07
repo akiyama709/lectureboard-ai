@@ -2,7 +2,19 @@
 
 更新日：2026年9月7日
 
-## 最新の再開点（2026年9月7日10時台）
+## 最新の再開点（2026年9月7日11–12時台）
+
+　本人試用後，PowerPointのDock表示が2個に見え，通常の「PowerPointを終了」が無効になった事象を調査した．読取りだけの観測では，実在するPowerPoint processは1件，子process及びhelperは0件，編集windowは1件，slide-show windowは0件であり，presentationは保存済みだった．PowerPointのQuit commandは2経路ともdisabledで，対象processへの標準AppleScript quitはerror `-128`を返した．Dock重複表示と`-128`の根本原因は確定しておらず，LectureBoard AI又は今回の反復Apple Event試験との因果も断定しない．
+
+　保存済みpresentationを保存ありで閉じ，PowerPoint placeholderだけになったことを再確認した．placeholderを文書として閉じる危険な操作は実行環境に拒否され，実行されていない．その後，照合済みのPowerPoint PID 1件だけへgraceful `SIGTERM`を送り，process不在，LectureBoard process不在及びDock上のPowerPoint項目1件への回復を確認した．PowerPoint資料のdata lossは確認されていない．新しい候補ができるまでPowerPointを自動起動せず，画面収録設定又はSystem Settingsの再試験も行わない．
+
+　sourceでは，通常App終了をAppKitの`terminateLater` handshakeへ変更し，exact PowerPoint cleanupを確認できた場合だけ終了を許可する．runtime verificationは自身が停止をawaitした後に即時終了する．exact retained-object receiptはexit失敗後もclientとともに保持し，同一descriptorへの再試行をsingle-flight化した．managed startはAutomation許可待ちより前に所有状態を登録し，許可後及びcapture anchor取得後に取消しとtokenを再確認する．stop tombstoneはwork成功とfinishの競合にも勝ち，cleanup前の成功公開を防ぐ．App終了latchは新規capture／managed開始を遮断し，scene activationのPowerPoint refreshはepoch及びawait後の所有検査によって進行中sessionへ干渉しない．
+
+	限定回帰証拠は，関連4 suiteのfocused 76件，最新coordinator 15件及びanchor最終修正前のcoordinator 14件×10反復＝140件の合格である．最終post-anchor sourceでは，`make doctor`，Core 250件・19 suiteを含む`make local-setup`，`make build-runtime`及び画面収録要求を行わないruntime launch smokeが合格した．全App testもauthoritative 498件，device run 561件，parameterized test 15件・78 run，失敗・skip・expected failure 0件で合格した．497件の旧全App結果はpost-anchor取消しguardより前のtreeに対する履歴であり，現行sourceの最終証拠には使わない．同じpost-anchor working treeの全26段階`make verify`も合格し，native resultは`Test-LectureBoardAI-2026.09.07_12-23-44-+0900.xcresult`である．その後，非失敗のline-length warning 1件をtest行の折返しだけで除去した．clean exact commitのisolated evidenceはまだ実行しておらず，合格扱いにしない．
+
+　commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab`のisolated evidence，5 asset，local tag及びowner展開物は，当時の自動検証履歴として固定保存するが，後続のlifecycle defectにより公開候補として却下した．`Release-Evidence-e32917e`，`Approved-Release-e32917e`及び`Owner-Acceptance-e32917e`の内容を変更せず，旧tag又はZIPをpush／公開しない．次は現行修正のreviewと最終gateを完了し，新しいclean exact commitからevidence，5 asset及び1件のowner候補を作り直す．production PowerPointの正常終了・取消し・中断，owner PPTX，実microphoneから可視板書，遅延，mouse優先，export，原本不変，Gatekeeper，GitHub Actions，公開及びpublic再downloadは未検証又は未完了である．
+
+## 直前の履歴（2026年9月7日10時台，e329候補は後続不具合により却下）
 
 　clean exact commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab`に対するisolated `evidence` transactionは，全26段階，Core 250件・19 suite及びnative App 480件へ失敗・skipなしで合格した．authoritative result bundleは`Test-LectureBoardAI-2026.09.07_10-02-17-+0900.xcresult`であり，private evidenceは`/Users/akiyama/Documents/LectureBoard AI Verification/Release-Evidence-e32917e`へ固定した．result bundleのcopyは，所有者・groupだけを正規化する修正後，最初の候補で完全照合及びfinal sealへ合格した．画面収録許可は要求も再確認もしていない．
 

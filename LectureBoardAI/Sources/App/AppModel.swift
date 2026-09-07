@@ -268,6 +268,7 @@ final class AppModel: ObservableObject {
   private var productionOverlayLeaseIsValid = false
   private var managedSlideShowTransaction: ManagedSlideShowTransactionCoordinator?
   private var managedSlideShowTransactionReleaseTask: Task<Void, Never>?
+  private var applicationTerminationCleanupInProgress = false
   private var sessionSceneRecordingEnabled = false
 
   init(
@@ -497,6 +498,69 @@ final class AppModel: ObservableObject {
     objectWillChange.send()
   }
 
+  /// Returning from System Settings may make ScreenCaptureKit enumeration newly available.
+  /// Never rescan during a capture or retained managed transaction: the editor-window inventory
+  /// is not the managed slide-show inventory and must not be allowed to tear down that session.
+  func refreshPowerPointWindowsAfterSceneActivation() async {
+    guard
+      activeCaptureSessionID == nil,
+      managedSlideShowTransaction == nil,
+      CaptureControlPolicy.canRefreshPowerPointWindows(
+        screenCaptureAccessGranted: permissionService.screenCaptureAccessGranted
+      )
+    else { return }
+
+    let captureEpoch = nextCaptureOperationRawValue
+    let statusBeforeRefresh = status
+    status = .scanning
+    precondition(refreshGeneration < UInt64.max, "Window refresh generation exhausted.")
+    refreshGeneration += 1
+    let generation = refreshGeneration
+    do {
+      let windows = try await scanner.scan()
+      guard generation == refreshGeneration else { return }
+      guard
+        captureEpoch == nextCaptureOperationRawValue,
+        activeCaptureSessionID == nil,
+        managedSlideShowTransaction == nil
+      else {
+        if status == .scanning { status = statusBeforeRefresh }
+        return
+      }
+
+      let previousSelection = selectedPowerPointWindowID
+      powerPointWindows = windows
+      if let previousSelection,
+        PowerPointWindowIdentityResolver.uniqueDescriptor(
+          windowID: previousSelection,
+          in: windows
+        ) != nil
+      {
+        selectedPowerPointWindowID = previousSelection
+      } else {
+        selectedPowerPointWindowID =
+          windows.first { window in
+            PowerPointWindowIdentityResolver.uniqueDescriptor(
+              windowID: window.id,
+              in: windows
+            ) != nil
+          }?.id
+      }
+      status = .ready
+    } catch {
+      guard generation == refreshGeneration else { return }
+      guard
+        captureEpoch == nextCaptureOperationRawValue,
+        activeCaptureSessionID == nil,
+        managedSlideShowTransaction == nil
+      else {
+        if status == .scanning { status = statusBeforeRefresh }
+        return
+      }
+      status = .error(error.localizedDescription)
+    }
+  }
+
   func refreshPowerPointWindows() async {
     guard
       CaptureControlPolicy.canRefreshPowerPointWindows(
@@ -547,6 +611,7 @@ final class AppModel: ObservableObject {
   }
 
   func startWindowCapture() async {
+    guard !applicationTerminationCleanupInProgress else { return }
     guard let selectedWindow, let selectedIdentity = selectedWindow.identity else {
       let event = CaptureFailureEventFactory.unclassified(
         message: NSLocalizedString("error.captureWindowUnavailable", comment: "")
@@ -672,6 +737,7 @@ final class AppModel: ObservableObject {
   /// object returned by PowerPoint.  Passive refresh and the existing diagnostic start remain
   /// Automation-free.
   func startManagedSlideShowCapture() async {
+    guard !applicationTerminationCleanupInProgress else { return }
     guard let selectedIdentity = selectedWindow?.identity else { return }
     guard
       CaptureControlPolicy.canStart(
@@ -767,6 +833,48 @@ final class AppModel: ObservableObject {
 
   func stopWindowCapture() async {
     _ = await stopWindowCaptureForOperation()
+  }
+
+  /// Called only from the application-delegate termination handshake.  Ordinary UI stops stay
+  /// bounded, while application termination waits for any retained managed-start task to drain
+  /// and refuses termination if exact PowerPoint rollback is still unconfirmed.  A later quit
+  /// request can therefore retry the same retained receipt.
+  func prepareForApplicationTermination() async -> Bool {
+    // Set before the first suspension point. Both start entry points reject while termination is
+    // pending, so a queued user action cannot create a new capture or transaction behind the
+    // cleanup snapshot. If exact rollback fails, the latch deliberately remains set; a later
+    // termination request may retry the retained receipt, but no new ownership can interleave.
+    applicationTerminationCleanupInProgress = true
+
+    // UI status can intentionally remain `.error` after provider ownership has already been
+    // released. It is not cleanup evidence. Join a real in-flight stop without issuing another.
+    while inFlightCaptureStopCount > 0 {
+      await Task.yield()
+    }
+
+    if activeCaptureSessionID != nil || managedSlideShowTransaction != nil {
+      _ = await stopWindowCaptureForOperation()
+    }
+    while inFlightCaptureStopCount > 0 {
+      await Task.yield()
+    }
+    guard activeCaptureSessionID == nil else { return false }
+
+    if let transaction = managedSlideShowTransaction {
+      let safe = await transaction.waitUntilReplacementIsSafe()
+      guard safe else { return false }
+      if managedSlideShowTransaction === transaction {
+        managedSlideShowTransactionReleaseTask?.cancel()
+        managedSlideShowTransactionReleaseTask = nil
+        managedSlideShowTransaction = nil
+      } else if managedSlideShowTransaction != nil {
+        return false
+      }
+    }
+
+    return activeCaptureSessionID == nil
+      && managedSlideShowTransaction == nil
+      && inFlightCaptureStopCount == 0
   }
 
   func activeCaptureSessionID(for windowID: CGWindowID?) -> CaptureOperationID? {
@@ -2028,10 +2136,15 @@ final class AppModel: ObservableObject {
   ) {
     managedSlideShowTransactionReleaseTask?.cancel()
     managedSlideShowTransactionReleaseTask = Task { @MainActor [weak self] in
-      await transaction.waitUntilReplacementIsSafe()
-      guard !Task.isCancelled, let self,
+      let safe = await transaction.waitUntilReplacementIsSafe()
+      guard safe, !Task.isCancelled, let self,
         self.managedSlideShowTransaction === transaction
-      else { return }
+      else {
+        if let self, self.managedSlideShowTransaction === transaction {
+          self.managedSlideShowTransactionReleaseTask = nil
+        }
+        return
+      }
       self.managedSlideShowTransaction = nil
       self.managedSlideShowTransactionReleaseTask = nil
     }

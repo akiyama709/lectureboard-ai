@@ -27,6 +27,149 @@ struct ManagedSlideShowTransactionCoordinatorTests {
     #expect(await rig.exact.exited == [rig.receipt])
     #expect(await rig.exact.released == [rig.receipt])
     #expect(await rig.coordinator.currentState == .idle)
+    #expect(await rig.coordinator.stop())
+    #expect(await rig.exact.exited == [rig.receipt])
+  }
+
+  @Test func failedExitRetainsTheExactReceiptForAnExplicitRetry() async throws {
+    let exact = TransactionExactObjectFake(exitMode: .failsOnce)
+    let rig = try Rig(stageB: .succeeds, exact: exact)
+    #expect((await rig.start()).binding != nil)
+
+    #expect(await rig.coordinator.stop() == false)
+    #expect(await exact.exitAttempts == [rig.receipt])
+    #expect(await exact.released.isEmpty)
+    #expect(await rig.coordinator.currentState == .draining)
+    #expect((await rig.start()).failure == .alreadyActiveOrDraining)
+
+    #expect(await rig.coordinator.stop() == true)
+    #expect(await exact.exitAttempts == [rig.receipt, rig.receipt])
+    #expect(await exact.released == [rig.receipt])
+    #expect(await rig.coordinator.currentState == .idle)
+    #expect(await rig.coordinator.waitUntilReplacementIsSafe())
+  }
+
+  @Test func concurrentRepeatedStopsShareOneExactObjectExit() async throws {
+    let exact = TransactionExactObjectFake(exitMode: .suspends)
+    let rig = try Rig(stageB: .succeeds, exact: exact)
+    #expect((await rig.start()).binding != nil)
+
+    let first = Task { await rig.coordinator.stop() }
+    try await waitUntil { await exact.exitAttempts.count == 1 }
+    let second = Task { await rig.coordinator.stop() }
+    try await waitUntil { await rig.coordinator.currentStopWaiterCount == 2 }
+    #expect(await rig.capture.stopped == 1)
+    #expect(await exact.exitAttempts == [rig.receipt])
+
+    await exact.resumeExit()
+    #expect(await first.value)
+    #expect(await second.value)
+    #expect(await exact.exitAttempts == [rig.receipt])
+    #expect(await exact.released == [rig.receipt])
+    #expect(await rig.coordinator.currentState == .idle)
+  }
+
+  @Test func staleSharedStopFailureCannotRevertALaterSuccessfulRetry() async throws {
+    let exact = TransactionExactObjectFake(exitMode: .suspendsThenFailsOnce)
+    let rig = try Rig(stageB: .succeeds, exact: exact)
+    #expect((await rig.start()).binding != nil)
+
+    let first = Task { await rig.coordinator.stop() }
+    try await waitUntil { await exact.exitAttempts.count == 1 }
+    let olderWaiter = Task { await rig.coordinator.stop() }
+    try await waitUntil { await rig.coordinator.currentStopWaiterCount == 2 }
+    await exact.resumeExit(failing: true)
+    #expect(await first.value == false)
+
+    #expect(await rig.coordinator.stop())
+    #expect(await rig.coordinator.currentState == .idle)
+    #expect(await olderWaiter.value == false)
+    #expect(await rig.coordinator.currentState == .idle)
+    #expect(await exact.exitAttempts == [rig.receipt, rig.receipt])
+    #expect((await rig.start()).binding != nil)
+    #expect(await rig.coordinator.stop())
+  }
+
+  @Test func stopDuringSuspendedPermissionPreventsStageAAfterAuthorization() async throws {
+    let permission = ControllableTransactionPermission()
+    let stageA = TransactionStageAFake(result: .success(try Rig.candidate()))
+    let rig = try Rig(
+      permissionRequester: permission,
+      stageA: stageA,
+      stageB: .succeeds
+    )
+
+    let start = Task { await rig.start() }
+    try await waitUntil { await permission.calls == 1 }
+    #expect(await rig.coordinator.currentState == .starting)
+    #expect(await rig.coordinator.stop() == false)
+    let safetyProbe = TransactionSafetyProbe()
+    let safety = Task {
+      await safetyProbe.markStarted()
+      let result = await rig.coordinator.waitUntilReplacementIsSafe()
+      await safetyProbe.complete(with: result)
+    }
+    try await waitUntil { await safetyProbe.started }
+    #expect(await rig.coordinator.currentState == .draining)
+    #expect(await safetyProbe.result == nil)
+
+    await permission.resume(.authorized)
+
+    #expect((await start.value).failure == .cancelled)
+    await safety.value
+    #expect(await safetyProbe.result == true)
+    #expect(await stageA.calls == 0)
+    #expect(await rig.capture.started == 0)
+    #expect(await rig.coordinator.currentState == .idle)
+  }
+
+  @Test func stopBetweenSuccessfulWorkAndFinishCleansTheEntireTransaction() async throws {
+    let finishBarrier = ControllableTransactionFinishBarrier()
+    let rig = try Rig(
+      stageB: .succeeds,
+      beforeFinishingStart: { await finishBarrier.wait() }
+    )
+
+    let start = Task { await rig.start() }
+    try await waitUntil { await finishBarrier.calls == 1 }
+    #expect(await rig.capture.started == 1)
+    #expect(await rig.identity.started == 1)
+
+    // The retained work has already returned success, so cancellation alone cannot change its
+    // value.  The coordinator's stop tombstone must prevent that value becoming active.
+    #expect(await rig.coordinator.stop() == false)
+    await finishBarrier.resume()
+
+    #expect((await start.value).failure == .cancelled)
+    #expect(await rig.coordinator.waitUntilReplacementIsSafe())
+    #expect(await rig.capture.stopped == 1)
+    #expect(await rig.identity.stopped == 1)
+    #expect(await rig.exact.exitAttempts == [rig.receipt])
+    #expect(await rig.exact.released == [rig.receipt])
+    #expect(await rig.coordinator.currentState == .idle)
+  }
+
+  @Test func stopDuringSuspendedAnchorNeverBeginsStageB() async throws {
+    let anchorBarrier = ControllableTransactionAnchor()
+    let stageB = TransactionStageBInvocationFake()
+    let rig = try Rig(
+      anchorBarrier: anchorBarrier,
+      stageB: .tracked(stageB)
+    )
+
+    let start = Task { await rig.start() }
+    try await waitUntil { await anchorBarrier.calls == 1 }
+    #expect(await rig.coordinator.stop() == false)
+    await anchorBarrier.resume()
+
+    #expect((await start.value).failure == .cancelled)
+    #expect(await rig.coordinator.waitUntilReplacementIsSafe())
+    #expect(await stageB.calls == 0)
+    #expect(await rig.capture.stopped == 1)
+    #expect(await rig.identity.stopped == 1)
+    #expect(await rig.exact.exitAttempts == [rig.receipt])
+    #expect(await rig.exact.released == [rig.receipt])
+    #expect(await rig.coordinator.currentState == .idle)
   }
 
   @Test func firstTimePermissionDenialStopsBeforeStageA() async throws {
@@ -142,6 +285,7 @@ extension ManagedSlideShowTransactionCoordinatorTests {
   fileprivate enum StageBMode {
     case succeeds, failsImmediately
     case draining(DrainingTransactionStageB)
+    case tracked(TransactionStageBInvocationFake)
   }
   fileprivate enum CaptureMode { case succeeds, startFails, anchorFails }
 
@@ -156,20 +300,25 @@ extension ManagedSlideShowTransactionCoordinatorTests {
 
     init(
       permission: PowerPointAutomationPermissionState = .authorized,
+      permissionRequester injectedPermissionRequester:
+        (any ManagedSlideShowTransactionPermissionRequesting)? = nil,
       stageAResult: ManagedSlideShowBindingCoordinator.CandidateResult? = nil,
       stageA: (any ManagedSlideShowTransactionCandidateCorrelating)? = nil,
       captureMode: CaptureMode = .succeeds,
+      anchorBarrier: ControllableTransactionAnchor? = nil,
       stageB: StageBMode,
-      identityResult: ExactPowerPointSlideIdentityProviderStartResult = .started
+      identityResult: ExactPowerPointSlideIdentityProviderStartResult = .started,
+      exact injectedExact: TransactionExactObjectFake? = nil,
+      beforeFinishingStart: @escaping @Sendable () async -> Void = {}
     ) throws {
       let candidate = try Self.candidate()
       let receipt = try Self.receipt()
       let candidateStageA =
         stageA ?? TransactionStageAFake(result: stageAResult ?? .success(candidate))
-      let capture = TransactionCaptureFake(mode: captureMode)
+      let capture = TransactionCaptureFake(mode: captureMode, anchorBarrier: anchorBarrier)
       let activation = TransactionBindingActivation()
       let identity = TransactionIdentityFake(result: identityResult, activation: activation)
-      let exact = TransactionExactObjectFake()
+      let exact = injectedExact ?? TransactionExactObjectFake()
       let frozen = try #require(
         PowerPointWindowIdentity(
           windowID: 10, ownerProcessID: 700,
@@ -183,12 +332,15 @@ extension ManagedSlideShowTransactionCoordinatorTests {
           switch stageB {
           case .failsImmediately: TransactionStageBFailureFake()
           case .draining(let value): value
+          case .tracked(let value): value
           case .succeeds:
             TransactionSuccessfulStageB()
           }
         },
         capture: capture, identityProvider: identity, exactObject: exact,
-        permissionRequester: TransactionPermissionFake(result: permission)
+        permissionRequester: injectedPermissionRequester
+          ?? TransactionPermissionFake(result: permission),
+        beforeFinishingStart: beforeFinishingStart
       )
       self.capture = capture
       self.identity = identity
@@ -229,9 +381,9 @@ extension ManagedSlideShowTransactionCoordinatorTests {
   fileprivate func waitUntil(
     _ predicate: @escaping @Sendable () async -> Bool
   ) async throws {
-    for _ in 0..<200 {
+    for _ in 0..<2_000 {
       if await predicate() { return }
-      await Task.yield()
+      try await Task.sleep(for: .milliseconds(1))
     }
     Issue.record("Timed out waiting for fake boundary")
     throw CancellationError()
@@ -244,6 +396,48 @@ private actor TransactionPermissionFake: ManagedSlideShowTransactionPermissionRe
   func requestFromExplicitUserAction(target _: PowerPointAutomationPermissionTarget) async
     -> PowerPointAutomationPermissionState
   { result }
+}
+
+private actor ControllableTransactionPermission:
+  ManagedSlideShowTransactionPermissionRequesting
+{
+  private var continuation: CheckedContinuation<PowerPointAutomationPermissionState, Never>?
+  private(set) var calls = 0
+
+  func requestFromExplicitUserAction(target _: PowerPointAutomationPermissionTarget) async
+    -> PowerPointAutomationPermissionState
+  {
+    calls += 1
+    return await withCheckedContinuation { continuation = $0 }
+  }
+
+  func resume(_ result: PowerPointAutomationPermissionState) {
+    continuation?.resume(returning: result)
+    continuation = nil
+  }
+}
+
+private actor TransactionSafetyProbe {
+  private(set) var started = false
+  private(set) var result: Bool?
+
+  func markStarted() { started = true }
+  func complete(with result: Bool) { self.result = result }
+}
+
+private actor ControllableTransactionFinishBarrier {
+  private var continuation: CheckedContinuation<Void, Never>?
+  private(set) var calls = 0
+
+  func wait() async {
+    calls += 1
+    await withCheckedContinuation { continuation = $0 }
+  }
+
+  func resume() {
+    continuation?.resume()
+    continuation = nil
+  }
 }
 
 private actor TransactionStageAFake: ManagedSlideShowTransactionCandidateCorrelating {
@@ -278,9 +472,16 @@ private actor ControllableTransactionStageA: ManagedSlideShowTransactionCandidat
 
 private actor TransactionCaptureFake: ManagedSlideShowTransactionCapturing {
   let mode: ManagedSlideShowTransactionCoordinatorTests.CaptureMode
+  let anchorBarrier: ControllableTransactionAnchor?
   private(set) var started = 0
   private(set) var stopped = 0
-  init(mode: ManagedSlideShowTransactionCoordinatorTests.CaptureMode) { self.mode = mode }
+  init(
+    mode: ManagedSlideShowTransactionCoordinatorTests.CaptureMode,
+    anchorBarrier: ControllableTransactionAnchor? = nil
+  ) {
+    self.mode = mode
+    self.anchorBarrier = anchorBarrier
+  }
   func startCapture(
     operationID: CaptureOperationID, identity _: PowerPointWindowIdentity,
     onFrame _: @escaping CaptureFrameHandler,
@@ -289,7 +490,11 @@ private actor TransactionCaptureFake: ManagedSlideShowTransactionCapturing {
   ) async throws -> any ManagedSlideShowTransactionCaptureLease {
     started += 1
     if mode == .startFails { throw CancellationError() }
-    return TransactionLease(operationID: operationID, anchorFails: mode == .anchorFails)
+    return TransactionLease(
+      operationID: operationID,
+      anchorFails: mode == .anchorFails,
+      anchorBarrier: anchorBarrier
+    )
   }
   func stopCapture(operationID _: CaptureOperationID) async { stopped += 1 }
 }
@@ -298,17 +503,59 @@ private actor TransactionLease: ManagedSlideShowTransactionCaptureLease {
   let captureOperationID: CaptureOperationID
   let captureGeneration: UInt64 = 9
   let anchorFails: Bool
-  init(operationID: CaptureOperationID, anchorFails: Bool) {
+  let anchorBarrier: ControllableTransactionAnchor?
+  init(
+    operationID: CaptureOperationID,
+    anchorFails: Bool,
+    anchorBarrier: ControllableTransactionAnchor? = nil
+  ) {
     captureOperationID = operationID
     self.anchorFails = anchorFails
+    self.anchorBarrier = anchorBarrier
   }
   func captureAnchor() async throws -> ManagedSlideShowRoleChallengeCaptureAnchor {
     if anchorFails { throw CancellationError() }
+    if let anchorBarrier { await anchorBarrier.wait() }
     return ManagedSlideShowRoleChallengeCaptureAnchor(
       candidateStreamMemberToken: "candidate-member",
       candidateContinuityToken: "candidate-continuity",
       minimumCandidateDeliverySequenceExclusive: 79)
   }
+}
+
+private actor ControllableTransactionAnchor {
+  private var continuation: CheckedContinuation<Void, Never>?
+  private(set) var calls = 0
+
+  func wait() async {
+    calls += 1
+    await withCheckedContinuation { continuation = $0 }
+  }
+
+  func resume() {
+    continuation?.resume()
+    continuation = nil
+  }
+}
+
+private actor TransactionStageBInvocationFake:
+  ManagedSlideShowTransactionRoleChallenging
+{
+  private(set) var calls = 0
+
+  func challenge(
+    candidate _: ManagedSlideShowRuntimeCandidate,
+    captureOperationID _: CaptureOperationID,
+    captureGeneration _: UInt64,
+    captureAnchor _: ManagedSlideShowRoleChallengeCaptureAnchor
+  ) async -> ManagedSlideShowRoleChallengeCoordinator.ChallengeResult {
+    calls += 1
+    return .failure(.clientFailed)
+  }
+
+  func requestCancellation() async {}
+  func waitForDrain() async {}
+  var isDrained: Bool { true }
 }
 
 private actor TransactionBindingActivation {
@@ -348,17 +595,48 @@ private actor TransactionIdentityFake: ManagedSlideShowTransactionIdentityProvid
 }
 
 private actor TransactionExactObjectFake: ManagedSlideShowTransactionExactObjectRecovering {
-  private(set) var exited: [ManagedSlideShowStartReceipt] = []
+  enum ExitMode { case succeeds, failsOnce, suspends, suspendsThenFailsOnce }
+  private let exitMode: ExitMode
+  private var hasFailed = false
+  private var exitContinuation:
+    CheckedContinuation<Result<Void, TransactionExactObjectFailure>, Never>?
+  private(set) var exitAttempts: [ManagedSlideShowStartReceipt] = []
   private(set) var released: [ManagedSlideShowStartReceipt] = []
+  init(exitMode: ExitMode = .succeeds) { self.exitMode = exitMode }
   func exitRetainedSlideShowObject(_ receipt: ManagedSlideShowStartReceipt) async throws {
-    exited.append(receipt)
+    exitAttempts.append(receipt)
+    switch exitMode {
+    case .succeeds:
+      return
+    case .failsOnce where !hasFailed:
+      hasFailed = true
+      throw TransactionExactObjectFailure.controlled
+    case .failsOnce:
+      return
+    case .suspends:
+      try await withCheckedContinuation { exitContinuation = $0 }.get()
+    case .suspendsThenFailsOnce where !hasFailed:
+      hasFailed = true
+      try await withCheckedContinuation { exitContinuation = $0 }.get()
+    case .suspendsThenFailsOnce:
+      return
+    }
   }
   func releaseRetainedSlideShowObject(_ receipt: ManagedSlideShowStartReceipt) async -> Bool {
     released.append(receipt)
     return true
   }
+  var exited: [ManagedSlideShowStartReceipt] { exitAttempts }
+  func resumeExit(failing: Bool = false) {
+    exitContinuation?.resume(
+      returning: failing ? .failure(.controlled) : .success(())
+    )
+    exitContinuation = nil
+  }
   nonisolated func cancelCurrentOperation() {}
 }
+
+private enum TransactionExactObjectFailure: Error { case controlled }
 
 private actor TransactionStageBFailureFake: ManagedSlideShowTransactionRoleChallenging {
   func challenge(

@@ -29,6 +29,19 @@ struct ScreenCaptureSetupPolicyTests {
     )
   }
 
+  @Test func returningActiveRefreshesOnlyAfterPreflightIsGranted() {
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(preflightGranted: true)
+      ) == .refreshPowerPointWindowsAfterSceneActivation
+    )
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(preflightGranted: false)
+      ) == .none
+    )
+  }
+
   @Test func manualRefreshScansWhenPreflightIsGranted() {
     #expect(
       ScreenCaptureSetupPolicy.action(

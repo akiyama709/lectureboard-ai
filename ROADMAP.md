@@ -16,18 +16,25 @@ The historical milestone evidence and final publication requirements below remai
 
 Project completion means publishing a public, immutable, non-prerelease `v1.0.0` GitHub Release with exactly five attached assets: `LectureBoard-AI-v1.0.0-arm64.zip`, `LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json`. They must bind the verified arm64 application archive to the exact source commit and pass unauthenticated public re-download verification. Release notes belong in the Release body, not a sixth asset. The project will not purchase an Apple Developer Program membership or publish under an institution, so the archive will be ad hoc signed and explicitly not Developer ID signed or Apple notarized. Creating the public source repository did not complete the product. No alpha, beta, or release-candidate GitHub Release will be published.
 
-Current status: the repository contains a pre-release development tree. Commit
-`fa62c73eada6d94daf094ac92c8032135fdd1e72` passed 250 Core tests in 19 suites, 480
-authoritative native App tests, and all 26 `make verify` stages. A bounded diagnostic build with
-the same final role-evidence policy completed one generated single-document windowed PowerPoint
-session through exact binding, explicit canvas confirmation, two semantic slide transitions, and
-normal cleanup. An exact Hardened Runtime, arm64, ad hoc-signed owner-trial app was subsequently
-frozen from code-bearing commit `c525ee468283bee333166cb301a3c9570fae0086`; ordinary
-LaunchServices launch and fail-closed behavior without Screen Recording authorization passed.
-That exact app still requires one owner-mediated authorization and has not completed its live
-trial. Real microphone input, stable-partial timing, visible automatic board content, human-input
-priority, live export, representative PPTX use, owner acceptance, installation, and public release
-remain unverified. No application GitHub Release has been published.
+Current status: the repository contains a pre-release development tree. Historical commit
+`e32917e66be3a9ef4091b8ec7035d90afd8113ab` passed an isolated 26-stage evidence transaction
+and produced five locally verified assets, but a later owner-path investigation exposed a
+release-blocking managed-lifecycle defect. That commit, its unpushed local tag, application, ZIP,
+and other assets remain fixed historical evidence and are rejected as the publication candidate.
+The current working tree adds asynchronous application-termination cleanup, exact-receipt retry
+and stop single-flight, cancellation guards across permission and capture-anchor suspensions, a
+stop-wins completion tombstone, an application-termination latch, and a scene-activation refresh
+epoch guard. Focused tests, a 15-test coordinator run, and an earlier 14-test suite repeated ten
+times passed. On the final post-anchor source, `make doctor`, `make local-setup` with 250 Core tests
+in 19 suites, the runtime build/smoke check, and the complete App run with 498 authoritative tests,
+561 device runs, 15 parameterized tests and 78 parameterized runs all passed with zero failures,
+skips, or expected failures. The earlier 497-test App run predates the final guard. The same
+post-anchor working tree then passed all 26 `make verify` stages; a later formatting-only test-line
+wrap removed its sole non-failing line-length warning. Exact-commit evidence remains pending.
+Live normal-stop, cancellation and interruption cleanup, real microphone input, stable-partial
+timing, visible automatic board content,
+human-input priority, live export, representative PPTX use, owner acceptance, installation, and
+public release remain unverified. No application GitHub Release has been published.
 
 ## Milestone 0 — Public repository foundation
 
@@ -64,7 +71,7 @@ remain unverified. No application GitHub Release has been published.
 
 **Exit criterion:** a ten-minute Japanese or English lecture can run without overlap on a controlled slide deck.
 
-**Next implementation and live checkpoint:** preserve all historical fixed apps and evidence without replacing or reinterpreting them. Clean commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab` passed the isolated evidence transaction with all 26 stages, 250 Core tests and 480 native App tests. The annotated local `v1.0.0` tag points to that commit, and `prepare` plus a separate `verify` produced and accepted exactly five local assets. The ZIP SHA-256 is `048f6afdc8d4f8798659e0d01c757b09810b518cc2c307e6c6fcd9191d7d337d`; no tag or release asset has been pushed. The byte-identical owner candidate is frozen at `/Users/akiyama/Documents/LectureBoard AI Verification/Owner-Acceptance-e32917e/LectureBoard AI.app` and has not been launched. Repeated Screen Recording permission work and System Settings automation are stopped. The next gate is one owner-run mock lecture with this exact App and a working copy of a self-selected PPTX, observing ordinary launch, real microphone partials, conservative pre-final promotion, actual visible board output and latency, exact managed binding, owner-confirmed canvas, mouse-input priority, overlay alignment and click-through behavior, JSON/SVG export, normal stop, and original-file immutability. A permission already shown as enabled is not requested again; if this exact candidate is not enabled, at most one owner-mediated grant and same-path relaunch are allowed before stopping. Cancellation, permission denial, window closure and interruption cleanup remain separate supported-path checks. Full-screen, Presenter View, multiple displays, code switching, a physical pen tablet, speaker-note import, and cloud adapters are explicit post-v1 work and must not be inferred from this gate. Owner acceptance, clean-install Gatekeeper, GitHub Actions, explicit publication approval, tag push, immutable Release creation, and public re-download verification remain incomplete.
+**Next implementation and live checkpoint:** preserve all historical fixed apps and evidence without replacing or reinterpreting them. The `e32917e` evidence transaction and five assets remain valid only as evidence for that rejected historical candidate; its tag and assets must not be pushed or published. The final post-anchor source now has passing 498-test App and 26-stage working-tree results. Freeze one new clean exact commit, rerun `evidence`, generate and independently verify five new assets, and create one newly frozen owner candidate. Repeated Screen Recording permission work and System Settings automation remain stopped. If the owner elects to perform the core lecture acceptance, grant that exact new candidate at most once and use a working copy of a self-selected PPTX to observe ordinary launch, real microphone partials, conservative pre-final promotion, actual visible board output and latency, exact managed binding, owner-confirmed canvas, mouse-input priority, overlay alignment and click-through behavior, JSON/SVG export, normal stop, cancellation/interruption recovery, and original-file immutability. Full-screen, Presenter View, multiple displays, code switching, a physical pen tablet, speaker-note import, and cloud adapters are explicit post-v1 work and must not be inferred from this gate. Owner acceptance, clean-install Gatekeeper, GitHub Actions, explicit publication approval, a new exact tag, immutable Release creation, and public re-download verification remain incomplete.
 
 ## Milestone 2 — Contextual board quality
 
@@ -115,8 +122,8 @@ remain unverified. No application GitHub Release has been published.
 - [ ] Resolve all release-blocking defects and triage every remaining known issue
 - [ ] Produce a reproducible distribution build
 - [ ] Apply the hardened runtime and an ad hoc signature without expanding the entitlement allowlist
-- [x] Run `evidence` against the clean exact commit, retain its private gate log and frozen `.xcresult`, and publish only its content-free JSON test evidence
-- [x] Produce the application ZIP, SHA-256 checksum manifest, content-free test evidence, SBOM, and commit-bound provenance without claiming Developer ID or notarization
+- [ ] Run `evidence` against the new clean exact commit, retain its private gate log and frozen `.xcresult`, and publish only its content-free JSON test evidence — the historical `e32917e` transaction passed, but that candidate was rejected after a later lifecycle defect and cannot satisfy this item for the replacement candidate
+- [ ] Produce the replacement application ZIP, SHA-256 checksum manifest, content-free test evidence, SBOM, and commit-bound provenance without claiming Developer ID or notarization — preserve the five historical `e32917e` assets, but do not publish or reuse them as the replacement candidate
 - [ ] Verify the expected Gatekeeper warning, Apple's per-application Open Anyway path, installation, first launch, permissions, and core lecture flow on a clean supported Mac
 - [ ] Complete release notes, installation, privacy, security, troubleshooting, and fallback documentation
 

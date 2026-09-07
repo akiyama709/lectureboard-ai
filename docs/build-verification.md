@@ -1,6 +1,6 @@
 # Build and verification status
 
-Updated: 2026-09-02
+Updated: 2026-09-07
 
 ## Verified in the preparation environment
 
@@ -2289,3 +2289,96 @@ candidate. They do not establish real microphone recognition, pre-final visible 
 owner-PPTX acceptance, representative or ten-minute use, clean-Mac Gatekeeper installation,
 GitHub Actions for this commit, publication, immutability, or public re-download. Those remain
 release gates and must not be described as passed.
+
+### 2026-09-07 PowerPoint termination incident, safe recovery, and lifecycle correction
+
+After the owner-path trial, PowerPoint appeared twice in the Dock and its ordinary Quit command
+could not be selected. Read-only process, window, and application-state checks established the
+following bounded facts at that moment:
+
+- Exactly one real Microsoft PowerPoint process was running.
+- No PowerPoint child process, helper process, or LectureBoard AI process was running.
+- PowerPoint exposed one editing window and zero slide-show windows.
+- The open presentation reported that it was saved.
+- Two accessible Quit-command paths were disabled.
+- A standard AppleScript quit request addressed to that process returned error `-128`.
+
+These observations do not establish the root cause of either the duplicate Dock appearance or
+error `-128`. In particular, they do not prove whether the cause was PowerPoint itself, macOS,
+the preceding LectureBoard transaction, or the repeated local Apple Event diagnostics. The
+incident is therefore recorded as an observed lifecycle failure without a stronger causal claim.
+
+Recovery preserved the document boundary. The saved presentation was closed with saving enabled,
+after which a read-only inventory found no real presentation or slide show, only PowerPoint's
+application placeholder. A proposed attempt to close that placeholder as though it were a
+document was rejected by the execution safety boundary and did not run. Only after the real
+document was closed was a graceful `SIGTERM` sent to the single previously verified PowerPoint
+PID. Subsequent checks found no PowerPoint or LectureBoard AI process and exactly one PowerPoint
+Dock item. No Dock restart, force kill, screen-recording change, or System Settings automation was
+used. No presentation data loss was observed.
+
+The source review found several application-lifecycle gaps that could leave retained PowerPoint
+ownership or race with cleanup. The current working tree makes the following corrections:
+
+- Standard application Quit enters AppKit's asynchronous `terminateLater` handshake, waits for
+  managed cleanup, and replies that termination may proceed only after exact cleanup succeeds. A
+  failed or uncertain exact exit leaves the app and receipt available for a later explicit retry.
+- Runtime-verification launch modes use immediate AppKit termination because their runner already
+  awaits capture cleanup; entering AppKit's nested termination loop had prevented a newly created
+  MainActor cleanup task from running and left the no-match smoke process alive.
+- The exact retained-object receipt and concrete client survive an exit failure. Exact exit is
+  single-flight, concurrent stop callers join one operation, and a later stop retries the same
+  descriptor rather than abandoning it.
+- Managed-start ownership is registered before the Automation-permission suspension. The task
+  rechecks cancellation, attempt token, and capture operation after permission and after the
+  capture-anchor suspension, before creating the Stage B role challenge.
+- A stop tombstone wins the race in which work has produced a successful binding but the outer
+  start continuation has not committed it. Local consumers and the exact retained object are
+  cleaned before success can be published.
+- An application-termination latch is set before suspension and rejects both ordinary and managed
+  capture starts while termination cleanup is pending.
+- Returning from System Settings may request a PowerPoint-window refresh, but that refresh freezes
+  a capture epoch and rechecks ownership after its scanner await. It cannot replace or tear down a
+  capture or managed transaction that began concurrently.
+
+Verification is deliberately recorded in layers. The related four-suite focused selection passed
+76 tests. The coordinator suite passed 15 tests after adding the post-anchor cancellation
+regression. Before that final regression, the then-14-test coordinator suite completed ten
+repetitions, 140 runs total, with zero failures in
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_12-03-45-+0900.xcresult`.
+`make build-runtime` passed, and `scripts/test-runtime-launch-smoke.sh` passed its invalid-argument
+and valid impossible-title/no-match cases without requesting Screen Recording permission. An
+earlier full App run passed 497 authoritative tests, but it predates the final post-anchor guard
+and is not used as the current result. On the final post-anchor source, `make doctor` passed and
+`make local-setup` passed with 250 Core tests in 19 suites. The complete native result
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_12-11-16-+0900.xcresult`
+reports 498 authoritative tests, 561 device runs, 15 parameterized tests and 78 parameterized
+runs, with zero failures, zero skips, and zero expected failures. The same post-anchor working tree
+then passed all 26 `make verify` stages. That gate's native result is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_12-23-44-+0900.xcresult` and again
+reports 498 authoritative tests in 41 suites. A single non-failing line-length warning was then
+removed by wrapping one test declaration; no executable behavior or assertion changed.
+
+Two incomplete integrated attempts remain negative evidence. The first `make verify` invocation
+stopped because the restricted execution environment could not write Xcode's user cache; it is not
+counted as a pass. A later normal-access invocation reached the valid no-match runtime smoke but
+the process remained alive in the nested termination loop described above; that invocation is
+also not counted as a pass. The runtime termination correction passed its later build and smoke
+checks. The complete later working-tree gate above is the first 26-stage pass after that
+correction. It is not clean exact-commit evidence; the isolated `evidence` transaction for a new
+commit remains pending as of this entry.
+
+The earlier exact evidence and five local assets for commit
+`e32917e66be3a9ef4091b8ec7035d90afd8113ab` remain valid historical evidence for those exact
+bytes. The later lifecycle defect rejects that commit, its local unpushed tag, owner extraction,
+ZIP, and other assets as the publication candidate. The fixed `Release-Evidence-e32917e`,
+`Approved-Release-e32917e`, and `Owner-Acceptance-e32917e` directories must be preserved unchanged,
+but none of those artifacts may be pushed or published as `v1.0.0`. A new clean exact commit,
+evidence transaction, five-asset set, and owner candidate are required after the current gate.
+
+The deterministic tests above do not verify production PowerPoint normal-stop, cancellation,
+interruption, failed-exit retry, or application-Quit behavior. Owner-selected PPTX capture, a real
+microphone-to-visible-board path, pre-final latency, owner-confirmed canvas, overlay alignment and
+click-through behavior, mouse-input priority, live JSON/SVG export, original-file immutability,
+clean-Mac Gatekeeper installation, GitHub Actions for the replacement commit, public Release, and
+unauthenticated public re-download all remain unverified or incomplete.

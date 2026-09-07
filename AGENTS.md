@@ -112,17 +112,47 @@ Implemented:
   generated-deck evidence only, not owner-PPTX, microphone, visible-board, distributed-production,
   Gatekeeper, or public-release evidence. See the latest handoff and verification entry.
 
-- The exact production owner-trial app is frozen from code-bearing commit
-  `c525ee468283bee333166cb301a3c9570fae0086` at
-  `/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/LectureBoard AI.app`.
-  Its executable SHA-256 is `f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c`
+- The app frozen from code-bearing commit `c525ee468283bee333166cb301a3c9570fae0086`
+  at `/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/LectureBoard AI.app`
+  remains historical failed/incomplete trial evidence, not a current acceptance candidate. Its
+  executable SHA-256 is `f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c`
   and its ad hoc Hardened Runtime CDHash is `ad850f341f0fb45ddafde45ec074801a8dfdedf6`.
-  Strict deep signature and byte identity passed. An ordinary LaunchServices launch opened one
-  ready app window and exited normally, but Screen Recording preflight was false for this new
-  ad hoc privacy identity, so capture and managed start correctly remained disabled. Do not
-  rebuild, replace, move, or repeatedly launch this app before the owner grants that exact path
-  Screen Recording once. Microphone, visible board, owner PPTX, export and acceptance remain
-  unverified.
+  Strict deep signature, byte identity, ordinary LaunchServices launch, and fail-closed behavior
+  without Screen Recording authorization passed. A later bounded permission attempt did not
+  complete capture or owner acceptance, and its Screen Recording row was removed. Do not relaunch
+  it or repeat permission work; microphone recognition, visible board output, owner PPTX behavior,
+  export, and acceptance remain unverified.
+
+- Clean commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab` historically passed its isolated
+  26-stage evidence transaction and produced five locally verified assets under the fixed
+  `Release-Evidence-e32917e`, `Approved-Release-e32917e`, and `Owner-Acceptance-e32917e`
+  directories. A later owner-path investigation exposed a release-blocking managed-lifecycle
+  defect, so that commit, its unpushed local tag, application, ZIP, and other assets are rejected
+  as the publication candidate. Preserve them unchanged as historical evidence and never push or
+  publish them as `v1.0.0`.
+
+- The current working tree strengthens managed and application shutdown without claiming live
+  success. Standard app termination uses AppKit's asynchronous terminate-later handshake and
+  keeps the app alive if exact PowerPoint cleanup cannot be confirmed; bounded runtime-verification
+  launches terminate immediately after their own awaited cleanup. Exact retained-object receipts
+  survive failed exits and are retried through one single-flight cleanup. Start ownership is
+  registered before the Automation-permission suspension, cancellation is rechecked after both
+  permission and capture-anchor suspension, and a stop tombstone wins the race against a completed
+  start before success can be published. An application-termination latch blocks new work, while
+  a scene-activation refresh uses an epoch and post-await ownership checks so it cannot replace an
+  active capture. Deterministic focused tests, a 15-test coordinator run, and an earlier 14-test
+  suite repeated ten times passed. On the final post-anchor source, `make doctor`, `make local-setup`
+  with 250 Core tests in 19 suites, the runtime build/smoke check, and the complete App run with
+  498 authoritative tests, 561 device runs, 15 parameterized tests and 78 parameterized runs all
+  passed with zero failures, skips, or expected failures. The earlier complete 497-test App result
+  predates the final post-anchor guard. The same post-anchor working tree then passed all 26
+  `make verify` stages; its native result is
+  `DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.07_12-23-44-+0900.xcresult`.
+  A subsequent formatting-only test-line wrap removed the sole non-failing line-length warning;
+  exact-commit evidence remains pending. Live PowerPoint cancellation, interruption, normal
+  termination, owner-PPTX behavior,
+  microphone-to-visible-board output, export, Gatekeeper installation, CI, and public release
+  remain unverified.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
@@ -176,7 +206,7 @@ Not yet implemented or verified:
 
 ## Immediate next milestone
 
-Keep every historical verification app and evidence file fixed; never substitute it for current-source evidence. The exact production owner-trial app is already frozen at the `Mock-Lecture-c525ee4` path above. The next unavoidable human boundary is one Screen Recording authorization for that exact app, followed by validation of the remaining narrow contract in `docs/supported-environment.md`: real microphone-to-board output, owner-confirmed canvas, visible alignment, click-through mouse priority, JSON/SVG export, original-file immutability, and bounded cleanup/recovery on a working copy of an owner-selected PPTX. Do not rebuild the app while waiting for that authorization. Full-screen, Presenter View, multiple displays, code switching, physical pen tablets, speaker-note import, and cloud adapters are post-v1 work. After the live gate, run one final integrated automated gate, produce and verify the no-fee release archive, and obtain explicit publication approval naming the exact commit and ZIP SHA-256.
+Keep every historical verification app and evidence file fixed; never substitute it for current-source evidence. The `c525ee4` and `e32917e` apps and the five `e32917e` assets are historical rejected candidates and must not be relaunched, retagged, pushed, or published. The final post-anchor source has passing 498-test App and 26-stage working-tree results. Freeze a new clean exact commit and run fresh exact-commit evidence before creating five assets and one new candidate path. Then validate the remaining narrow contract in `docs/supported-environment.md`: real microphone-to-board output, owner-confirmed canvas, visible alignment, click-through mouse priority, JSON/SVG export, original-file immutability, and bounded cleanup/recovery on a working copy of an owner-selected PPTX. Do not repeat Screen Recording settings work; if the owner chooses the core lecture acceptance, grant that newly frozen exact candidate at most once. Full-screen, Presenter View, multiple displays, code switching, physical pen tablets, speaker-note import, and cloud adapters are post-v1 work. After owner acceptance, complete Gatekeeper and CI checks and obtain explicit publication approval naming the exact commit and ZIP SHA-256.
 
 Implement and validate the observable lecture path in this order:
 

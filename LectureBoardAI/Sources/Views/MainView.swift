@@ -47,7 +47,16 @@ struct MainView: View {
     }
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
-      model.recheckScreenCapturePermission()
+      Task { @MainActor in
+        model.recheckScreenCapturePermission()
+        await performScreenCaptureSetupAction(
+          ScreenCaptureSetupPolicy.action(
+            for: .sceneBecameActive(
+              preflightGranted: model.permissionService.screenCaptureAccessGranted
+            )
+          )
+        )
+      }
     }
     .onDisappear {
       Task { await model.stopWindowCapture() }
@@ -76,6 +85,8 @@ struct MainView: View {
       )
     case .refreshPowerPointWindows:
       await model.refreshPowerPointWindows()
+    case .refreshPowerPointWindowsAfterSceneActivation:
+      await model.refreshPowerPointWindowsAfterSceneActivation()
     }
   }
 

@@ -5,11 +5,10 @@ import SwiftUI
 @MainActor
 struct LectureBoardAIApp: App {
   @StateObject private var model: AppModel
+  @NSApplicationDelegateAdaptor(RuntimeVerificationApplicationDelegate.self)
+  private var applicationDelegate
 
   #if DEBUG
-    @NSApplicationDelegateAdaptor(RuntimeVerificationApplicationDelegate.self)
-    private var applicationDelegate
-
     private enum LaunchMode {
       case standard
       case runtimeVerification(RuntimeVerificationConfiguration)
@@ -36,6 +35,9 @@ struct LectureBoardAIApp: App {
         resolvedLaunchMode = .invalidRuntimeVerification(String(describing: error))
       }
       launchMode = resolvedLaunchMode
+      applicationDelegate.configureTerminationCleanup {
+        await appModel.prepareForApplicationTermination()
+      }
 
       switch resolvedLaunchMode {
       case .standard:
@@ -52,7 +54,11 @@ struct LectureBoardAIApp: App {
     }
   #else
     init() {
-      _model = StateObject(wrappedValue: AppModel())
+      let appModel = AppModel()
+      _model = StateObject(wrappedValue: appModel)
+      applicationDelegate.configureTerminationCleanup {
+        await appModel.prepareForApplicationTermination()
+      }
     }
   #endif
 

@@ -339,6 +339,56 @@ struct PowerPointManagedSlideShowAppleEventClientTests {
     )
   }
 
+  @Test(arguments: [
+    ManagedExitReplyMode.transportFailureOnce,
+    .malformedReplyOnce,
+  ])
+  func failedExitRetainsTheSameExactDescriptorForRetry(
+    mode: ManagedExitReplyMode
+  ) async throws {
+    let sender = FakeManagedAppleEventSender(exitReplyMode: mode)
+    let client = makeClient(sender: sender, objectToken: "retry-exact-object")
+    let receipt = try await client.startManagedSlideShow(startRequest())
+
+    let expectedFailure: PowerPointManagedSlideShowAppleEventClientFailure =
+      switch mode {
+      case .transportFailureOnce: .recoveryCommandDeliveryUnknown
+      case .malformedReplyOnce: .recoveryCommandReplyMalformedPossiblyDelivered
+      case .valid: .staleCompletion
+      }
+    #expect(
+      await capturedFailure {
+        try await client.exitRetainedSlideShowObject(receipt)
+      } == expectedFailure
+    )
+    #expect(
+      await client.ownsRetainedSlideShowObject(
+        bindingSessionToken: receipt.bindingSessionToken,
+        slideShowObjectToken: receipt.slideShowObjectToken
+      )
+    )
+    #expect(sender.exitRootObjectIndices == [1])
+    #expect(sender.exitRootObjectKeyData == [Data([1, 0, 0, 0, 0, 0, 0, 0])])
+
+    try await client.exitRetainedSlideShowObject(receipt)
+
+    #expect(sender.exitSlideShowSendCount == 2)
+    #expect(sender.exitRootObjectIndices == [1, 1])
+    #expect(
+      sender.exitRootObjectKeyData
+        == [
+          Data([1, 0, 0, 0, 0, 0, 0, 0]),
+          Data([1, 0, 0, 0, 0, 0, 0, 0]),
+        ]
+    )
+    #expect(
+      !(await client.ownsRetainedSlideShowObject(
+        bindingSessionToken: receipt.bindingSessionToken,
+        slideShowObjectToken: receipt.slideShowObjectToken
+      ))
+    )
+  }
+
   @Test func malformedExactObjectReplyFailsClosedAndRetainsRecoveryOwnership() async throws {
     let sender = FakeManagedAppleEventSender(exactReplyMode: .malformedGet)
     let client = makeClient(sender: sender, objectToken: "malformed-reply-object")
@@ -1299,6 +1349,12 @@ private enum ManagedExactObjectReplyMode: Sendable {
   case malformedGeometry
 }
 
+enum ManagedExitReplyMode: Sendable {
+  case valid
+  case transportFailureOnce
+  case malformedReplyOnce
+}
+
 private enum ManagedFakeTransportError: Error {
   case controlled
 }
@@ -1332,6 +1388,7 @@ private final class FakeManagedAppleEventSender:
   private let runReplyMode: ManagedRunReplyMode
   private let runSendGate: ControllableManagedRunSendGate?
   private let exactReplyMode: ManagedExactObjectReplyMode
+  private let exitReplyMode: ManagedExitReplyMode
   private var _exactVisibility: Bool
   private var _exactViewState: PowerPointSlideShowState
   private let exactSlideID: Int32
@@ -1359,6 +1416,7 @@ private final class FakeManagedAppleEventSender:
     runReplyMode: ManagedRunReplyMode = .valid,
     runSendGate: ControllableManagedRunSendGate? = nil,
     exactReplyMode: ManagedExactObjectReplyMode = .valid,
+    exitReplyMode: ManagedExitReplyMode = .valid,
     exactVisibility: Bool = true,
     exactViewState: PowerPointSlideShowState = .running,
     exactSlideID: Int32 = 50,
@@ -1372,6 +1430,7 @@ private final class FakeManagedAppleEventSender:
     self.runReplyMode = runReplyMode
     self.runSendGate = runSendGate
     self.exactReplyMode = exactReplyMode
+    self.exitReplyMode = exitReplyMode
     _exactVisibility = exactVisibility
     _exactViewState = exactViewState
     self.exactSlideID = exactSlideID
@@ -1445,7 +1504,7 @@ private final class FakeManagedAppleEventSender:
       }
     }
 
-    return lock.withLock {
+    return try lock.withLock {
       recordSend(event, options: options)
 
       if event.eventClass == AEEventClass(PowerPointAppleEventCode.powerPointSuite),
@@ -1458,6 +1517,16 @@ private final class FakeManagedAppleEventSender:
         }
         if let keyData = managedClientRootObjectKeyData(direct) {
           _exitRootObjectKeyData.append(keyData)
+        }
+        if _exitSlideShowSendCount == 1 {
+          switch exitReplyMode {
+          case .valid:
+            break
+          case .transportFailureOnce:
+            throw ManagedFakeTransportError.controlled
+          case .malformedReplyOnce:
+            return NSAppleEventDescriptor(string: "malformed")
+          }
         }
         return managedClientReply(direct: nil)
       }

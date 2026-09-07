@@ -1,6 +1,7 @@
 enum ScreenCaptureSetupPolicy {
   enum Event: Equatable {
     case viewAppeared(preflightGranted: Bool)
+    case sceneBecameActive(preflightGranted: Bool)
     case refreshButtonPressed(preflightGranted: Bool)
     case permissionButtonPressed
     case permissionRequestCompleted(granted: Bool)
@@ -10,6 +11,7 @@ enum ScreenCaptureSetupPolicy {
     case none
     case requestScreenCapturePermission
     case refreshPowerPointWindows
+    case refreshPowerPointWindowsAfterSceneActivation
   }
 
   static func showsPermissionButton(preflightGranted: Bool) -> Bool {
@@ -25,6 +27,10 @@ enum ScreenCaptureSetupPolicy {
     case .viewAppeared(preflightGranted: true):
       .refreshPowerPointWindows
     case .viewAppeared(preflightGranted: false):
+      .none
+    case .sceneBecameActive(preflightGranted: true):
+      .refreshPowerPointWindowsAfterSceneActivation
+    case .sceneBecameActive(preflightGranted: false):
       .none
     case .refreshButtonPressed(preflightGranted: true):
       .refreshPowerPointWindows

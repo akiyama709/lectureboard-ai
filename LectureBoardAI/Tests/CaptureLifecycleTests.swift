@@ -567,6 +567,56 @@ private func makeFingerprintPixelBuffer(
 
 @MainActor
 struct AppModelCaptureLifecycleTests {
+  @Test func terminationCleanupDoesNotStopProvidersAgainWhenAlreadyStopped() async {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let model = makeModel(capture: capture)
+
+    #expect(await model.prepareForApplicationTermination())
+    let stopInvocationCount = await capture.stopInvocationCount
+    #expect(stopInvocationCount == 0)
+    #expect(model.captureStatus == .stopped)
+  }
+
+  @Test func terminationCleanupDoesNotRepeatProviderStopForCleanedErrorState() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let model = makeModel(capture: capture)
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.failStart(start.operationID)
+    await startTask.value
+
+    guard case .error = model.captureStatus else {
+      Issue.record("Expected a provider-cleaned capture error state")
+      return
+    }
+    let stopsBeforeTermination = await capture.stopInvocationCount
+    #expect(stopsBeforeTermination == 1)
+
+    #expect(await model.prepareForApplicationTermination())
+    let stopsAfterTermination = await capture.stopInvocationCount
+    #expect(stopsAfterTermination == stopsBeforeTermination)
+  }
+
+  @Test func terminationLatchRejectsAQueuedStartWhileProviderStopIsSuspended() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: true)
+    let model = makeModel(capture: capture)
+    let initialStartTask = Task { await model.startWindowCapture() }
+    let initialStart = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(initialStart.operationID)
+    await initialStartTask.value
+
+    let terminationTask = Task { await model.prepareForApplicationTermination() }
+    let terminatingStop = try await capture.stopInvocation(at: 0)
+    let queuedStart = Task { await model.startWindowCapture() }
+    await queuedStart.value
+
+    let startsWhileTerminationIsSuspended = await capture.startInvocationCount
+    #expect(startsWhileTerminationIsSuspended == 1)
+    await capture.resumeStop(terminatingStop)
+    #expect(await terminationTask.value)
+    #expect(await capture.startInvocationCount == 1)
+  }
+
   @Test func supersededStartCannotStopOrOverwriteTheNewCapture() async throws {
     let capture = ControllableWindowCapture(suspendsStops: false)
     let model = makeModel(capture: capture)
@@ -687,6 +737,56 @@ struct AppModelCaptureLifecycleTests {
     #expect(model.captureStatus == .capturing)
     #expect(model.activeCaptureSessionID(for: 42) == sessionBeforeRefresh)
     #expect(stopInvocationCount == 0)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func sceneActivationRefreshDoesNotScanOrStopAnActiveCapture() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let scanner = ControllableWindowScanner()
+    let model = makeModel(capture: capture, scanner: scanner)
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+    #expect(model.captureStatus == .capturing)
+
+    await model.refreshPowerPointWindowsAfterSceneActivation()
+
+    let scanInvocationCount = await scanner.invocationCount
+    let stopInvocationCount = await capture.stopInvocationCount
+    #expect(scanInvocationCount == 0)
+    #expect(stopInvocationCount == 0)
+    #expect(model.captureStatus == .capturing)
+    #expect(model.activeCaptureSessionID(for: 42) == start.operationID)
+
+    await model.stopWindowCapture()
+  }
+
+  @Test func sceneActivationRefreshCannotMutateOrStopACaptureStartedDuringScan() async throws {
+    let capture = ControllableWindowCapture(suspendsStops: false)
+    let scanner = ControllableWindowScanner()
+    let model = makeModel(capture: capture, scanner: scanner)
+
+    let refreshTask = Task { await model.refreshPowerPointWindowsAfterSceneActivation() }
+    try await scanner.waitForInvocationCount(1)
+
+    let startTask = Task { await model.startWindowCapture() }
+    let start = try await capture.startInvocation(at: 0)
+    await capture.resumeStart(start.operationID)
+    await startTask.value
+    #expect(model.captureStatus == .capturing)
+
+    await scanner.resumeScan(at: 0, with: [makeWindow(id: 43, ownerProcessID: 701)])
+    await refreshTask.value
+
+    let stopInvocationCount = await capture.stopInvocationCount
+    #expect(stopInvocationCount == 0)
+    #expect(model.powerPointWindows.map(\.id) == [42])
+    #expect(model.selectedPowerPointWindowID == 42)
+    #expect(model.captureStatus == .capturing)
+    #expect(model.activeCaptureSessionID(for: 42) == start.operationID)
 
     await model.stopWindowCapture()
   }
@@ -1039,6 +1139,7 @@ private enum CaptureLifecycleTestError: Error {
   case timedOutWaitingForStop(Int)
   case timedOutWaitingForScan(Int)
   case controlledScanFailure
+  case controlledStartFailure
 }
 
 private actor ControllableWindowCapture: PowerPointWindowCapturing {
@@ -1125,6 +1226,12 @@ private actor ControllableWindowCapture: PowerPointWindowCapturing {
     pendingStarts.removeValue(forKey: operationID)?.resume(returning: ())
   }
 
+  func failStart(_ operationID: CaptureOperationID) {
+    pendingStarts.removeValue(forKey: operationID)?.resume(
+      throwing: CaptureLifecycleTestError.controlledStartFailure
+    )
+  }
+
   func resumeStop(_ operationID: CaptureOperationID) {
     pendingStops.removeValue(forKey: operationID)?.resume()
   }
@@ -1152,6 +1259,8 @@ private struct FixedWindowScanner: PowerPointWindowScanning {
 
 private actor ControllableWindowScanner: PowerPointWindowScanning {
   private var pendingScans: [CheckedContinuation<[PowerPointWindowDescriptor], any Error>] = []
+
+  var invocationCount: Int { pendingScans.count }
 
   func scan() async throws -> [PowerPointWindowDescriptor] {
     try await withCheckedThrowingContinuation { continuation in
