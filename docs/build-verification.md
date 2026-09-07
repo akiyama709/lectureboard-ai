@@ -2231,3 +2231,61 @@ to be rejected. The existing two-copy limit, 600-second deadline, continuous-mut
 source and candidate mutation, root, parent and path-swap, query-isolation, and digest guards remain
 active. A new clean exact-commit `evidence` transaction is still required; these targeted results
 do not create or verify release assets.
+
+### 2026-09-07 exact-commit evidence and five-asset preparation
+
+Clean commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab` contains the ownership-normalization
+correction above. Its isolated `evidence` transaction passed all 26 prepublication stages, 250
+Core tests in 19 suites, and 480 authoritative native App tests with zero failures, skips, or
+expected failures. The native result also records 542 device runs, 14 parameterized tests, and 76
+parameterized runs. The formerly failing result-bundle copy passed the complete pair digest and
+final seal on its first candidate. This verifies the correction against a fresh Xcode result rather
+than only against fixtures.
+
+The private evidence directory is
+`/Users/akiyama/Documents/LectureBoard AI Verification/Release-Evidence-e32917e`. It contains
+exactly the public content-free test JSON, private prepublication gate log, and one frozen
+authoritative result bundle named
+`Test-LectureBoardAI-2026.09.07_10-02-17-+0900.xcresult`. The test JSON SHA-256 is
+`afe4e988181aa61e2dd830ce97171177e30ad51f7b64741080d9b91c7423290f`, the gate-log
+SHA-256 is `cef49ce1cbd0ea0517919c45da17f91d7d9cd8e742d62990e0cf6e1c3c5bc5b6`, and
+the normalized result-bundle tree SHA-256 recorded by the evidence is
+`1422e40d8b1b69a8aef37d3f3a5020a584d798072dbd6aea644fafe58b9ab544`. The public
+JSON's claim boundary explicitly excludes live PowerPoint, user acceptance, installation,
+publication, and public re-download.
+
+The previous unpushed local `v1.0.0` candidate tag was confirmed absent from the remote and was
+replaced locally by annotated tag object `e376efcc1d6193a51da7df5b1dfacb82645d307e`, peeled to
+the same exact commit. No tag or asset was pushed. `prepare` then consumed the exact three evidence
+outputs, built an isolated arm64 Release application with Hardened Runtime and the reviewed ad hoc
+entitlements, and published exactly five local files at
+`/Users/akiyama/Documents/LectureBoard AI Verification/Approved-Release-e32917e`. Its internal
+verification and a separate subsequent `verify` invocation both passed, including strict signature
+verification after both `ditto` and `unzip` extraction.
+
+The approved local asset SHA-256 values are:
+
+- `LectureBoard-AI-v1.0.0-arm64.zip` —
+  `048f6afdc8d4f8798659e0d01c757b09810b518cc2c307e6c6fcd9191d7d337d`
+- `LectureBoard-AI-v1.0.0-test-results.json` —
+  `afe4e988181aa61e2dd830ce97171177e30ad51f7b64741080d9b91c7423290f`
+- `SBOM.spdx.json` — `0080746ee14fff1b78f8cf7a455a2f74e62b6e6bc7f2a29a6a346ba4ae6d9690`
+- `SHA256SUMS` — `629fb5edda527d37b5611fe4ea2e845accedb82c4e097c7f0f5a32a76bb97696`
+- `provenance.json` — `50875c415ec833d798f718f264498582cb189ecdb5e8fba82ca91a34a0e97cd6`
+
+The provenance records executable SHA-256
+`eeacd1da0aaab106dcfae964bcbafcf5a0667c7a3de63c531a89f5fbefc1c8a3`, Xcode 26.6 build
+17F113, version 1.0.0, arm64, ad hoc signature, Hardened Runtime, and the exact commit and tag
+object. The ZIP contains only the application bundle and has 13 directory or regular-file entries.
+The exact App was extracted once to the fixed owner-acceptance path
+`/Users/akiyama/Documents/LectureBoard AI Verification/Owner-Acceptance-e32917e/LectureBoard AI.app`;
+its executable hash matches the provenance and strict deep signature verification passed. It has
+not been launched, and no Screen Recording permission test or System Settings automation was
+performed. The owner-directed skip of repeated permission work is therefore respected, but it is
+not evidence of capture authorization or acceptance.
+
+These results establish automated exact-commit evidence and a locally verified five-asset Release
+candidate. They do not establish real microphone recognition, pre-final visible board output,
+owner-PPTX acceptance, representative or ten-minute use, clean-Mac Gatekeeper installation,
+GitHub Actions for this commit, publication, immutability, or public re-download. Those remain
+release gates and must not be described as passed.

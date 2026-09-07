@@ -2,7 +2,15 @@
 
 更新日：2026年9月7日
 
-## 最新の再開点（2026年9月7日3時台）
+## 最新の再開点（2026年9月7日10時台）
+
+　clean exact commit `e32917e66be3a9ef4091b8ec7035d90afd8113ab`に対するisolated `evidence` transactionは，全26段階，Core 250件・19 suite及びnative App 480件へ失敗・skipなしで合格した．authoritative result bundleは`Test-LectureBoardAI-2026.09.07_10-02-17-+0900.xcresult`であり，private evidenceは`/Users/akiyama/Documents/LectureBoard AI Verification/Release-Evidence-e32917e`へ固定した．result bundleのcopyは，所有者・groupだけを正規化する修正後，最初の候補で完全照合及びfinal sealへ合格した．画面収録許可は要求も再確認もしていない．
+
+　remoteに`v1.0.0` tag又はReleaseがないことを確認し，local annotated tag object `e376efcc1d6193a51da7df5b1dfacb82645d307e`を上記commitへ結合した．tagは未pushである．同じcommit，tag及びexact evidence 3点から`prepare`を実行し，`/Users/akiyama/Documents/LectureBoard AI Verification/Approved-Release-e32917e`へ正確な5 assetだけを生成した．内部検査と別実行の`verify`はいずれも合格した．ZIP SHA-256は`048f6afdc8d4f8798659e0d01c757b09810b518cc2c307e6c6fcd9191d7d337d`，App executable SHA-256は`eeacd1da0aaab106dcfae964bcbafcf5a0667c7a3de63c531a89f5fbefc1c8a3`である．Hardened Runtime付きad hoc署名であり，Developer ID署名及びnotarizationは行っていない．
+
+　exact ZIPは一度だけ`/Users/akiyama/Documents/LectureBoard AI Verification/Owner-Acceptance-e32917e/LectureBoard AI.app`へ展開し，strict deep署名及び実行file hash一致を確認した．Appはまだ起動していない．反復する画面収録許可試験及びSystem Settings操作は行わない．次は秋山さんがこの固定Appと自選PPTXの作業用copyを用いて，managed開始，canvas，実発話partial，final前の可視板書，遅延，mouse優先，export，正常停止及び原本不変を確認する．画面収録が本Appに既に有効なら許可buttonを押さず，無効表示なら同じAppへ1回だけ許可して再起動し，それでも無効なら反復せず不合格として停止する．owner受入，clean-Mac Gatekeeper，GitHub Actions，公開承認，tag push，Release作成及びpublic再downloadは未完了である．
+
+## 直前の再開点（2026年9月7日3時台）
 
 　本人試用に使用するproduction Appは，exact code-bearing commit `c525ee468283bee333166cb301a3c9570fae0086`から，arm64 Release，version 1.0.0 build 1，Hardened Runtime，ad hoc署名として作成し，`/Users/akiyama/Documents/LectureBoard AI Verification/Mock-Lecture-c525ee4/LectureBoard AI.app`へ固定した．executable SHA-256は`f86d6cd09ae571ac896880c95ca1e09f08ccaa978cc6d9c5912d1a71c211073c`，CDHashは`ad850f341f0fb45ddafde45ec074801a8dfdedf6`であり，build元とのbyte同一性とstrict deep署名を確認した．このAppは本人試用中に再build・置換・移動しない．
 
