@@ -270,6 +270,7 @@ required_files=(
   docs/adr/0011-bound-dense-change-fresh-samples.md
   docs/adr/0012-causal-managed-slideshow-binding.md
   docs/adr/0013-no-fee-public-v1-distribution.md
+  docs/adr/0014-visual-observation-workflow.md
   scripts/check-permission-contract.sh
   scripts/test-check-permission-contract.sh
   scripts/prepublish-check.sh
@@ -453,11 +454,11 @@ require_text .github/workflows/ci.yml 'git diff --exit-code -- LectureBoardAI.xc
 reject_text .github/workflows/ci.yml 'runs-on: macos-15'
 
 require_text project.yml 'INFOPLIST_FILE: LectureBoardAI/Config/Info.plist'
-require_text LectureBoardAI/Config/Info.plist '<key>NSAppleEventsUsageDescription</key>'
+reject_text LectureBoardAI/Config/Info.plist '<key>NSAppleEventsUsageDescription</key>'
 require_text LectureBoardAI/Config/Info.plist '<key>LectureBoardReleaseCommit</key>'
 require_text LectureBoardAI/Config/Info.plist '<key>LectureBoardReleaseTagObject</key>'
 require_text project.yml 'CODE_SIGN_ENTITLEMENTS: LectureBoardAI/Config/LectureBoardAI.entitlements'
-require_text LectureBoardAI/Config/LectureBoardAI.entitlements 'com.apple.security.automation.apple-events'
+reject_text LectureBoardAI/Config/LectureBoardAI.entitlements 'com.apple.security.automation.apple-events'
 require_text LectureBoardAI/Config/LectureBoardAI.entitlements 'com.apple.security.device.audio-input'
 reject_text LectureBoardAI/Config/LectureBoardAI.entitlements 'com.apple.security.get-task-allow'
 require_text scripts/release-preflight.sh "expected_tag='v1.0.0'"
@@ -466,7 +467,7 @@ require_text scripts/release-preflight.sh 'the worktree contains tracked or untr
 require_text scripts/release-preflight.sh 'no fetch or remote freshness proof occurred'
 require_text scripts/verify-release-code.sh 'ad hoc signatures are not release signatures'
 require_text scripts/verify-release-code.sh 'the hardened-runtime code-directory flag is required'
-require_text scripts/verify-release-code.sh 'the embedded entitlements differ from the exact two-key allowlist'
+require_text scripts/verify-release-code.sh 'the embedded entitlements differ from the exact one-key allowlist'
 
 require_text ROADMAP.md 'Project completion means publishing a public, immutable, non-prerelease `v1.0.0` GitHub Release'
 require_text ROADMAP.md 'No alpha, beta, or release-candidate GitHub Release will be published'
@@ -484,16 +485,18 @@ require_text README.md 'No alpha, beta, or release-candidate application Release
 require_text README.md '[English user guide](docs/user-guide.md)'
 require_text README.md '[公開前ユーザー受入](docs/user-acceptance-ja.md)'
 require_text README.md 'Status: **pre-release development**'
-require_text README.md 'The current source implements a managed, windowed PowerPoint workflow'
-require_text README.md 'They have not yet completed the release-artifact live workflow'
-require_text README.md 'Earlier schema-11 diagnostics are preserved as build-specific historical evidence and must not be generalized to this source'
+require_text README.md 'the lecturer starts a normal full-screen or windowed slide show, selects its exact view'
+require_text README.md "the exact production candidate still requires the owner's live PowerPoint, microphone, visible-board, export, and file-integrity acceptance test"
+require_text README.md 'ADR 0014 supersedes that Apple Event path for public v1'
 require_text README.md 'A shared bounded one-shot fresh-sample path for either an exact post-baseline coarse candidate or a pending dense candidate'
 require_text README.md 'negative, malformed, unknown, missing, or inconsistent schema-11 evidence fails decoding'
 require_text AGENTS.md 'DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_23-50-45-+0900.xcresult'
 require_text AGENTS.md 'The paired operator-captured helper sidecar'
 require_text ROADMAP.md 'DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_23-50-45-+0900.xcresult'
 require_text ROADMAP.md 'supports input-window attribution for those events under the controlled eight-second schedule'
-require_text README.md 'this implementation has deterministic tests but no successful live managed-session evidence yet'
+require_text README.md 'each confirmed significant visual change starts a new local slide epoch'
+require_text README.md 'it neither sends Apple Events nor starts, edits, saves, or closes PowerPoint'
+require_text README.md 'it does not claim exact PowerPoint slide IDs or speaker notes'
 require_text README.md 'a live release-artifact export remains unverified'
 require_text README.md 'sidecarはruntime reportへ暗号的に結合されておらず，release-grade provenanceではありません'
 require_text README.md 'c7a73f7cb1bdcaa46ec216218883872d480630f7cf4ff177170f8d1906c14a3c'
@@ -502,8 +505,8 @@ require_text README.md '`boundedFreshSample` was not exercised'
 require_text README.md 'two aggregate visual revision events in separate ink and erase phases'
 require_text README.md 'Successful live `boundedFreshSample` confirmation through the shared exact-post-baseline-coarse or pending-dense one-shot path'
 require_text README.md '現段階は公開前の開発中です'
-require_text README.md '現行release artifactによるmanaged PowerPoint遷移，microphone，canvas精度，可視alignment，板書の有用性及びexportの一連の実機動作はまだ未検証です'
-require_text README.md 'managed production identity providerは実装済みであり，合成資料の固定診断Appではexact結合と2回の意味的切替を確認しましたが，production配布App及び本人資料は未検証です．'
+require_text README.md '講師がPowerPointの通常の全画面又はwindow表示slide showを開始し'
+require_text README.md 'Apple Events又はPowerPoint内部のslide IDに依存せず'
 require_text README.md '現行continuous経路では別個の消去phase revisionを確認しましたが'
 require_text docs/architecture.md 'The earlier schema-9 live erase candidates did not receive the third qualifying observation'
 require_text docs/architecture.md 'DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.01_23-50-45-+0900.xcresult'
@@ -515,6 +518,7 @@ require_text docs/development-plan.md 'image differences and content revisions a
 require_text docs/development-plan.md 'a live current-build event sourced from `boundedFreshSample` has not yet been observed'
 require_text docs/README.md 'ADR 0011 — Bound one-shot samples to the current visual-change candidate'
 require_text docs/README.md 'ADR 0012 — Managed slide-show candidate and role challenge'
+require_text docs/README.md 'ADR 0014 — Visual-only observation workflow for public v1'
 require_text docs/README.md 'Versioning'
 require_text docs/README.md 'No-fee v1 distribution process'
 require_text docs/release-process.md 'On the development Mac audited on 2026-09-02, no valid code-signing identity was available'
@@ -529,7 +533,7 @@ require_text docs/technical-design-detailed-ja.md '同一のpost-baseline coarse
 require_text docs/technical-design-detailed-ja.md '`boundedFreshSample`は発生しなかった'
 require_text CHANGELOG.md 'Deterministic stable-frame and significant visual/content-change classification with unit tests'
 require_text CHANGELOG.md 'Build-specific historical synthetic PowerPoint evidence for static frame delivery, Vision execution, and pre-semantic dynamic calibration; not evidence for the current semantic build'
-require_text CHANGELOG.md 'Live validation of the implemented exact-window-bound managed PowerPoint slide-identity provider before actual slide transitions are claimed'
+require_text CHANGELOG.md 'Owner validation of the visual-only workflow with an exact audience-facing PowerPoint slide-show window and natural lecture speech'
 require_text CHANGELOG.md 'A privacy-bounded JSON and SVG session exporter containing only confirmed or pinned public board scenes'
 require_text CHANGELOG.md 'An authoritative no-fee `v1.0.0` evidence, build, packaging, and public-verification path'
 require_text CHANGELOG.md 'Metadata-only schema-11 latest-content-revision evidence with exact ordinal'
@@ -580,6 +584,11 @@ require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `LectureBoard-AI-
 require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `SBOM.spdx.json`;'
 require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `SHA256SUMS`; and'
 require_text docs/adr/0013-no-fee-public-v1-distribution.md '- `provenance.json`.'
+require_text docs/adr/0014-visual-observation-workflow.md 'Public v1 will use a visual-only workflow'
+require_text docs/adr/0014-visual-observation-workflow.md 'The user starts a normal full-screen or windowed PowerPoint slide show'
+require_text docs/adr/0014-visual-observation-workflow.md 'will not send Apple Events, request'
+require_text docs/adr/0014-visual-observation-workflow.md 'It will not claim'
+require_text docs/adr/0014-visual-observation-workflow.md 'A local slide epoch is a visual continuity boundary, not a PowerPoint slide identity'
 require_text AGENTS.md 'Project completion means a public, immutable, non-prerelease `v1.0.0` GitHub Release with exactly five attached assets'
 require_text docs/no-fee-release-process.md 'This is the authoritative distribution path for the public `v1.0.0` release'
 require_text docs/no-fee-release-process.md 'Never disable Gatekeeper globally or remove quarantine'
@@ -604,9 +613,13 @@ require_text docs/user-acceptance-ja.md '元PPTX及び受入用複製物のbyte 
 require_text docs/user-acceptance-ja.md 'この受入は，公開の承認とは別である'
 require_text docs/user-acceptance-ja.md '少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する'
 require_text docs/user-acceptance-ja.md '診断値にかかわらず不合格とする'
+require_text docs/user-acceptance-ja.md 'slide showはLectureBoard AIより先に開いていてもよい'
+require_text docs/user-acceptance-ja.md '受講者に見せる正確なslide-show画面を1件選び，「この画面で板書を開始」'
+require_text docs/user-acceptance-ja.md 'local visual epoch，visual analysis及びoverlayの追従を観察する'
+require_text docs/user-acceptance-ja.md '画面選択・板書開始：未実施／合格／不合格'
 require_ordered_text docs/user-acceptance-ja.md \
   '9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．' \
-  '10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．' \
+  '10. Appの取得を停止し，PowerPoint slide showが開いたまま通常操作できることを確認する．' \
   '11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．'
 require_text docs/user-guide.md 'Status: procedural draft'
 require_text docs/user-guide.md 'Never disable Gatekeeper globally and never remove quarantine metadata'

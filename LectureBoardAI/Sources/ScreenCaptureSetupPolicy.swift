@@ -1,7 +1,10 @@
 enum ScreenCaptureSetupPolicy {
   enum Event: Equatable {
     case viewAppeared(preflightGranted: Bool)
-    case sceneBecameActive(preflightGranted: Bool)
+    case sceneBecameActive(
+      previousPreflightGranted: Bool?,
+      preflightGranted: Bool
+    )
     case refreshButtonPressed(preflightGranted: Bool)
     case permissionButtonPressed
     case permissionRequestCompleted(granted: Bool)
@@ -28,9 +31,12 @@ enum ScreenCaptureSetupPolicy {
       .refreshPowerPointWindows
     case .viewAppeared(preflightGranted: false):
       .none
-    case .sceneBecameActive(preflightGranted: true):
+    case .sceneBecameActive(
+      previousPreflightGranted: .some(false),
+      preflightGranted: true
+    ):
       .refreshPowerPointWindowsAfterSceneActivation
-    case .sceneBecameActive(preflightGranted: false):
+    case .sceneBecameActive:
       .none
     case .refreshButtonPressed(preflightGranted: true):
       .refreshPowerPointWindows

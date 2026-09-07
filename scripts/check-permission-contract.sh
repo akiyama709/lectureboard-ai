@@ -63,9 +63,9 @@ require_plist_string() {
     || fail "Unexpected application property-list value: $key"
 }
 
-require_plist_string \
-  "NSAppleEventsUsageDescription" \
-  "LectureBoard AI uses Automation only after you explicitly start a managed PowerPoint slide show, to read its current slide identity and perform a brief reversible role check."
+if plutil -extract NSAppleEventsUsageDescription raw -o - "$info_plist_file" >/dev/null 2>&1; then
+  fail "NSAppleEventsUsageDescription must be absent from the visual-only application."
+fi
 require_plist_string \
   "NSMicrophoneUsageDescription" \
   "LectureBoard AI uses the microphone to transcribe the lecturer and identify material that may be useful to place on the board."
@@ -95,11 +95,15 @@ require_true_entitlement() {
     || fail "The entitlement must be true: $entitlement_key"
 }
 
-require_true_entitlement "com.apple.security.automation.apple-events"
 require_true_entitlement "com.apple.security.device.audio-input"
 
+if grep -Fq '<key>com.apple.security.automation.apple-events</key>' \
+  "$entitlements_file"; then
+  fail "The Apple Events entitlement must be absent from the visual-only application."
+fi
+
 entitlement_key_count="$(grep -Ec '^[[:space:]]*<key>[^<]+</key>[[:space:]]*$' "$entitlements_file")"
-[[ "$entitlement_key_count" == "2" ]] \
-  || fail "The entitlement allowlist must contain exactly the two approved keys."
+[[ "$entitlement_key_count" == "1" ]] \
+  || fail "The entitlement allowlist must contain exactly the approved audio-input key."
 
 printf 'Permission and hardened-runtime entitlement contract passed.\n'

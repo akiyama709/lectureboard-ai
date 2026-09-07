@@ -14,8 +14,8 @@ Every item below must be evaluated against the exact release commit and exact ca
 
 ## 1. Controlled end-to-end gate
 
-- [ ] From one explicitly selected editing window, the current build starts one new windowed PowerPoint slide show, causally binds its returned scripting object to one exact ScreenCaptureKit window, and continuously captures only that window.
-- [ ] Stable visual updates and PowerPoint's exact slide ID and index are verified together without treating image difference as slide identity.
+- [ ] From one explicitly selected, user-started PowerPoint presentation or slide-show view, the current build continuously captures only that exact ScreenCaptureKit window without sending Apple Events or starting, editing, saving, or closing PowerPoint.
+- [ ] Stable visual updates establish local slide epochs without claiming PowerPoint's exact slide ID, index, or speaker notes; representative visually distinct transitions are verified and known visual-equivalence limits are documented.
 - [ ] OCR, geometry, user-confirmed slide-canvas cropping, visual stroke occupancy, and coordinate mapping are verified on controlled fixtures and live synthetic slides.
 - [ ] Final transcript segments and real `SlideContext` data reach the contextual board engine with source evidence identifiers.
 - [ ] Stable text, boxes, arrows, and simple diagrams render without covering occupied regions or interfering with human input.
@@ -28,12 +28,12 @@ Passing this gate establishes the controlled core workflow only; it does not aut
 ## 2. Representative and repeated-use gate
 
 - [ ] At least one representative Japanese deck and one representative English deck have documented results in separate sessions.
-- [ ] Repeated managed start, normal stop, cancellation, window closure, permission denial, and capture interruption have documented results on the supported single-display configuration.
+- [ ] Repeated refresh, view selection, board start, normal stop, cancellation, window closure, permission denial, and capture interruption have documented results on the supported single-display configuration.
 - [ ] OCR correctness, title selection, coordinates, occupancy, overlap avoidance, and board usefulness have stated acceptance observations for the two representative decks.
 - [ ] Microphone transcription, transparent-overlay alignment, click-through behavior, mouse-ink non-interference, and human-input priority are verified.
 - [ ] Recovery and data-integrity behavior are verified after the in-scope application, PowerPoint-window, capture, and permission failures.
 - [ ] Privacy, accessibility, research-data boundaries, third-party licenses, and notices are reviewed for the supported use cases.
-- [ ] The exact support contract in `supported-environment.md`, known limitations, user instructions, and fallback procedures are complete; full-screen, Presenter View, multi-display, online-sharing composition, code switching, and physical pen tablets remain explicit post-v1 work rather than inferred successes.
+- [ ] The exact support contract in `supported-environment.md`, known limitations, user instructions, and fallback procedures are complete; Presenter View, multi-display, online-sharing composition, code switching, and physical pen tablets remain explicit post-v1 work rather than inferred successes.
 
 Passing this gate establishes representative-use evidence only; it does not authorize publication.
 
@@ -41,7 +41,7 @@ Passing this gate establishes representative-use evidence only; it does not auth
 
 ### Scope and quality
 
-- [ ] The `v1.0.0` feature set, supported macOS version, Apple-silicon hardware class, PowerPoint version, windowed single-display mode, and explicit exclusions are frozen in `supported-environment.md`.
+- [ ] The `v1.0.0` feature set, supported macOS version, Apple-silicon hardware class, PowerPoint version, standard full-screen or windowed single-display mode, and explicit exclusions are frozen in `supported-environment.md`.
 - [ ] All release-blocking defects are resolved, and every remaining known issue is triaged and documented.
 - [ ] Required Core, native-app, integration, regression, and release tests pass on the exact release commit.
 - [ ] The exact candidate completes the supported lecture path and recovery scenarios from a clean verification location on the supported Mac.
@@ -123,7 +123,7 @@ following occurs:
   core lecture path fails on a clean supported Mac;
 - the application modifies an original PowerPoint file, exposes lecture content unexpectedly,
   accepts ungrounded output, or renders while an identity, canvas, capture, or human-input safety
-  boundary is unavailable;
+  visual-epoch, canvas, capture, or human-input safety boundary is unavailable;
 - a release-blocking crash, data-integrity failure, permission loop, security issue, or materially
   misleading capability statement is found after publication.
 

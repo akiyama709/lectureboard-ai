@@ -73,7 +73,12 @@ final class OverlayWindowController: OverlayWindowControlling {
       panel.hasShadow = false
       panel.ignoresMouseEvents = true
       panel.level = .floating
-      panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+      panel.collectionBehavior = [
+        .canJoinAllApplications,
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+        .ignoresCycle,
+      ]
       panel.isReleasedWhenClosed = false
       self.panel = panel
     }

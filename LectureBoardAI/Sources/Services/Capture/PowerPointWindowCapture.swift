@@ -923,9 +923,11 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
 
     let content: SCShareableContent
     do {
+      // Re-resolve the already selected exact identity across Spaces. This does not broaden the
+      // capture filter: the stream below still uses only the one retained SCWindow.
       content = try await SCShareableContent.excludingDesktopWindows(
         true,
-        onScreenWindowsOnly: true
+        onScreenWindowsOnly: false
       )
     } catch {
       lifecycle.finishFailedStart(operationID)
@@ -1136,9 +1138,11 @@ actor PowerPointWindowCapture: PowerPointWindowCapturing {
   private func reenumeratedWindow(
     for identity: PowerPointWindowIdentity
   ) async throws -> SCWindow {
+    // A fullscreen PowerPoint surface can leave the active Space while the controller app is
+    // foreground. Re-resolve only the exact bound ID/PID/bundle, then capture that one window.
     let content = try await SCShareableContent.excludingDesktopWindows(
       true,
-      onScreenWindowsOnly: true
+      onScreenWindowsOnly: false
     )
     let candidates = content.windows.map { window in
       ReenumeratedPowerPointWindowCandidate(

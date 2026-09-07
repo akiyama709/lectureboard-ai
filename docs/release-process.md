@@ -22,7 +22,8 @@ controls:
 - `scripts/verify-release-code.sh` validates already-produced app or DMG signature evidence. For an
   app, it also checks the exact bundle identifier, version, build, arm64 architecture, hardened
   runtime, secure timestamp, Developer ID requirements, certificate fingerprint, team, and the
-  two-key entitlement allowlist. It does not build, sign, notarize, staple, package, or publish.
+  one-key audio-input entitlement allowlist. It does not build, sign, notarize, staple, package,
+  or publish.
 - `scripts/build-release-app.sh`, together with `scripts/release-artifact-tools.sh`, reconstructs
   and verifies the exact approved Git tree, constrains the generated Xcode project and package
   manifest, builds from isolated source, and commits an app and dSYM only after all required checks

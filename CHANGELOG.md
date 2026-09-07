@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Planned
 
 - Runtime calibration of PowerPoint capture and slide-state tracking with real presentations
-- Live validation of the implemented exact-window-bound managed PowerPoint slide-identity provider before actual slide transitions are claimed
+- Owner validation of the visual-only workflow with an exact audience-facing PowerPoint slide-show window and natural lecture speech
 - Exact-window fresh-frame acquisition and live timeout calibration for a static slide after an identity boundary
 - Live PowerPoint validation of `boundedFreshSample` itself through the shared exact-post-baseline-coarse or pending-dense path, including a controlled post-erase candidate confirmed by that source without weakening detector thresholds
 - Runtime calibration of Vision recognition and occupied regions with real presentations
@@ -17,6 +17,14 @@ All notable changes to this project will be documented in this file.
 - Japanese–English code-switching transcription
 - Contextual AI-provider adapters
 - A public immutable, non-prerelease `v1.0.0` GitHub Release with exactly five attached assets—`LectureBoard-AI-v1.0.0-arm64.zip`, `LectureBoard-AI-v1.0.0-test-results.json`, `SBOM.spdx.json`, `SHA256SUMS`, and `provenance.json`—and unauthenticated public-download verification; no Developer ID or Apple-notarization claim
+
+### Changed
+
+- The public workflow is visual-only: the lecturer starts a normal full-screen or windowed PowerPoint slide show, then selects the exact audience-facing view in LectureBoard AI. The app does not start, edit, save, close, or send Apple Events to PowerPoint.
+- Confirmed stable visual changes now advance a local visual epoch and invalidate stale speech and board context without claiming an internal PowerPoint slide ID.
+- PowerPoint targets are presented as stable per-window buttons, including eligible full-screen Spaces, avoiding the dynamic menu path that could crash while window inventory changed.
+- Screen Recording settings are reopened only after an actual unavailable-to-authorized transition; the app no longer repeats permission-setting loops once access is already granted.
+- The Apple Events usage description and Automation entitlement were removed. The release entitlement contract now contains only local audio input.
 
 ## [1.0.0] - 2026-09-06
 

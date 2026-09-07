@@ -4,6 +4,11 @@ import Testing
 @testable import LectureBoard_AI
 
 struct PowerPointWindowIdentityTests {
+  @Test func scanScopeSeparatesVisibleChooserFromCompleteInventory() {
+    #expect(PowerPointWindowScanScope.visibleOnly.onScreenWindowsOnly)
+    #expect(!PowerPointWindowScanScope.completeInventory.onScreenWindowsOnly)
+  }
+
   @Test func resolvesOneExactWindowIDProcessAndBundleMatch() {
     let expected = identity(windowID: 42, ownerProcessID: 700)
     let candidates = [

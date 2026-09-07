@@ -9,7 +9,9 @@ struct LocalizationResourceTests {
       "en": [
         "app.title": "LectureBoard AI",
         "status.supportedWorkflow":
-          "Supported workflow: one PowerPoint presentation, a windowed slide show, one display, and one lecture language. Confirm the visible slide area before starting transcription.",
+          "LectureBoard observes the selected PowerPoint view and speech without controlling PowerPoint. Standard full-screen and windowed slide shows are supported.",
+        "capture.visualStart": "Start board on this view",
+        "capture.visualTracking": "Tracking slides from stable visual changes",
         "diagnostics.title": "Runtime diagnostics",
         "diagnostics.lifecycle": "Application / transcription",
         "diagnostics.applicationLifecycle": "Application",
@@ -80,7 +82,9 @@ struct LocalizationResourceTests {
       "ja": [
         "app.title": "LectureBoard AI",
         "status.supportedWorkflow":
-          "対応する利用方法：PowerPoint資料1件，ウィンドウ表示のスライドショー，ディスプレイ1台，講義言語1種類．文字起こしを始める前に，表示中のスライド面を確定してください．",
+          "PowerPointを操作せず，選択した画面の変化と発話から板書します．通常の全画面又はウィンドウ表示で利用できます．",
+        "capture.visualStart": "この画面で板書を開始",
+        "capture.visualTracking": "画面変化によるスライド追跡を使用しています",
         "diagnostics.title": "実行時診断",
         "diagnostics.lifecycle": "アプリ／文字起こし",
         "diagnostics.applicationLifecycle": "アプリ",

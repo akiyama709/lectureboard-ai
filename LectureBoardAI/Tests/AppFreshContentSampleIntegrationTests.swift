@@ -194,6 +194,49 @@ struct AppFreshContentSampleIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func boundedFreshCoarseTransitionAdvancesVisualSlideEpoch() async throws {
+    let capture = ControllableFreshSampleCapture()
+    let analyzer = FreshSampleRecordingAnalyzer()
+    let model = makeModel(capture: capture, analyzer: analyzer)
+    let images = try makeImages()
+    let changedContent = try #require(
+      CGImageRasterizer.makeContentFingerprint(from: images.coarseMismatch)
+    )
+
+    try await establishBaseline(
+      model: model,
+      capture: capture,
+      analyzer: analyzer,
+      images: images,
+      usesVisualGrounding: true
+    )
+    #expect(model.boardScene.slideNumber == 1)
+    await capture.emit(
+      streamFrame(
+        sequenceNumber: 4,
+        image: images.coarseMismatch,
+        content: changedContent
+      )
+    )
+    try await waitForFreshInvocationCount(capture, expected: 1)
+    try await capture.succeedFresh(
+      at: 0,
+      image: images.coarseMismatch,
+      geometry: captureGeometry(for: images.coarseMismatch)
+    )
+    try await waitForFreshInvocationCount(capture, expected: 2)
+    try await capture.succeedFresh(
+      at: 1,
+      image: images.coarseMismatch,
+      geometry: captureGeometry(for: images.coarseMismatch)
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+
+    #expect(model.slideChangeCount == 1)
+    #expect(model.boardScene.slideNumber == 2)
+    await model.stopWindowCapture()
+  }
+
   @Test func staleCoarseResultsAfterCandidateReplacementAndResetRecordNoRevision()
     async throws
   {
@@ -854,9 +897,14 @@ struct AppFreshContentSampleIntegrationTests {
     model: AppModel,
     capture: ControllableFreshSampleCapture,
     analyzer: FreshSampleRecordingAnalyzer,
-    images: FreshSampleImages
+    images: FreshSampleImages,
+    usesVisualGrounding: Bool = false
   ) async throws {
-    await model.startWindowCapture()
+    if usesVisualGrounding {
+      await model.startVisualWindowCapture()
+    } else {
+      await model.startWindowCapture()
+    }
     try await waitUntil { model.captureStatus == .capturing }
     for sequenceNumber in 1...3 {
       await capture.emit(

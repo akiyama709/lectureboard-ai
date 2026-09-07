@@ -2,6 +2,17 @@ import CoreGraphics
 import Foundation
 import ScreenCaptureKit
 
+enum PowerPointWindowScanScope: Equatable, Sendable {
+  /// Human-facing inventory of windows currently visible in the active Space.
+  case visibleOnly
+  /// Identity inventory which also retains a confirmed slide-show window in another Space.
+  case completeInventory
+
+  var onScreenWindowsOnly: Bool {
+    self == .visibleOnly
+  }
+}
+
 struct PowerPointWindowIdentity: Hashable, Sendable {
   static let expectedBundleIdentifier = "com.microsoft.Powerpoint"
 
@@ -77,10 +88,16 @@ enum PowerPointWindowIdentityResolver {
 }
 
 struct PowerPointWindowScanner: Sendable {
+  private let scope: PowerPointWindowScanScope
+
+  init(scope: PowerPointWindowScanScope = .visibleOnly) {
+    self.scope = scope
+  }
+
   func scan() async throws -> [PowerPointWindowDescriptor] {
     let content = try await SCShareableContent.excludingDesktopWindows(
       true,
-      onScreenWindowsOnly: true
+      onScreenWindowsOnly: scope.onScreenWindowsOnly
     )
 
     return content.windows

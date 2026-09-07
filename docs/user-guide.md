@@ -8,8 +8,8 @@
 
 Use LectureBoard AI only in the narrow configuration in
 [`supported-environment.md`](supported-environment.md): an Apple-silicon Mac, one local display,
-one PowerPoint presentation, no existing slide show, PowerPoint's windowed slide-show mode, and
-one lecture language per session.
+one PowerPoint presentation, a standard full-screen or windowed slide show, and one lecture
+language per session.
 
 The no-fee release is hardened and ad hoc signed, but it is not Developer ID signed or Apple
 notarized. Apple therefore cannot identify its publisher or perform the notarization trust check.
@@ -49,8 +49,8 @@ different App.
   PowerPoint window. It does not request system-audio capture. Apple documents the controls under
   [Privacy & Security → Screen & System Audio
   Recording](https://support.apple.com/en-ie/guide/mac-help/mchld6aa7d23/mac).
-- **Automation → Microsoft PowerPoint:** managed start needs explicit permission to create and
-  read one exact PowerPoint slide-show object. It does not adopt an existing slide show.
+- **Automation → Microsoft PowerPoint:** not required. The supported workflow does not send
+  Apple Events to PowerPoint and does not start, edit, save, or close a presentation.
 - **Microphone** and **Speech Recognition:** requested only when transcription starts. Apple Speech
   is configured to require on-device recognition. If the selected locale cannot recognize on the
   device, transcription fails closed instead of using a network fallback. Recognition uses bounded
@@ -66,12 +66,10 @@ and reopen the same path. If it is still denied, stop instead of repeating the r
 
 ## Prepare PowerPoint
 
-1. Close other presentations and any running PowerPoint slide show.
-2. Open exactly one presentation in its normal editing window.
-3. In PowerPoint, select **Slide Show → Set Up Slide Show → Browsed by an individual (window)**.
-   Microsoft describes this show type in [Create a self-running
-   presentation](https://support.microsoft.com/en-US/PowerPoint/training/create-a-self-running-presentation).
-4. For a first or pre-release test, work from a local copy and keep the source file closed. Follow
+1. Close other presentations and open exactly one local test copy of the presentation.
+2. Start PowerPoint's normal full-screen or windowed slide show. It may already be running when
+   LectureBoard AI opens. Presenter View and multi-display arrangements are outside v1.0.0 scope.
+3. For a first or pre-release test, keep the source file closed. Follow
    [`user-acceptance-ja.md`](user-acceptance-ja.md) for the required before-and-after integrity
    checks.
 
@@ -83,30 +81,30 @@ safe test procedure.
 
 1. Open LectureBoard AI and select Japanese or English for the session.
 2. Confirm that Screen Recording is granted, then choose **Refresh PowerPoint windows**.
-3. Select the exact PowerPoint editing window.
-4. Choose **Start managed slide show** once. PowerPoint may present its Automation consent on the
-   first use.
-5. Wait for the newly created windowed slide show and capture status. The App must stop rather than
-   continue if it cannot bind the returned PowerPoint object to one exact captured window.
-6. On the frozen preview, drag around only the visible slide, excluding PowerPoint controls and
+3. Select the exact PowerPoint slide-show or presentation view that the audience sees. If the slide
+   show was opened afterward, refresh and select its new view.
+4. Choose **Start board on this view**.
+5. On the frozen preview, drag around only the visible slide, excluding PowerPoint controls and
    surrounding UI, then confirm the slide area.
-7. Start transcription only after the current slide identity, fresh frame, and visual analysis are
-   ready.
+6. Start transcription after the visual baseline and analysis are ready, then return to PowerPoint
+   and speak naturally.
 
 The runtime diagnostics show application state and transcription state separately. `Waiting for
-current slide context` means that output is intentionally closed until the current identity, canvas,
-fresh frame, and analysis are ready. `Render requested` proves only that the renderer was invoked;
+current slide context` means that output is intentionally closed until the current visual slide
+epoch, canvas, and analysis are ready. `Render requested` proves only that the renderer was invoked;
 the presenter must still confirm that the board is visibly over PowerPoint. The production element
 count excludes demo content.
 
 During a lecture, use PowerPoint normally. Human mouse or pen input has priority. **Hide board**
 immediately hides LectureBoard AI output. If slide identity, canvas, current analysis, focus, or
-window geometry becomes uncertain, the overlay is expected to hide rather than guess.
+window geometry becomes uncertain, the overlay is expected to hide rather than guess. Stable visual
+changes establish local slide epochs; this is deliberately not a claim to know PowerPoint's internal
+slide ID.
 
 ## Stop and export
 
 1. Stop transcription, then stop capture.
-2. Confirm that the managed slide show is closed and the PowerPoint editing window remains.
+2. End the PowerPoint slide show normally when desired. LectureBoard AI does not close it.
 3. Use **Export session** only after capture has stopped. Selecting a JSON filename also writes an
    SVG with the same basename beside it.
 4. Treat both files as lecture data. They contain the confirmed or pinned public board scene and
@@ -120,10 +118,11 @@ window geometry becomes uncertain, the overlay is expected to hide rather than g
 - **Repeated Screen Recording prompt:** verify that only the exact installed candidate is being
   used. Quit and reopen that same App once. Do not authorize multiple DerivedData copies and do not
   keep pressing the request button.
-- **No PowerPoint window:** confirm Screen Recording permission, keep one normal editing window
-  visible, stop any existing slide show, then refresh once.
-- **Managed start fails:** confirm the supported PowerPoint version and the windowed show type. Do
-  not switch to full screen, Presenter View, or kiosk mode as a workaround.
+- **No PowerPoint window:** confirm Screen Recording permission, keep one presentation or slide-show
+  view available, then refresh once. If PowerPoint created a new slide-show surface, select it.
+- **A slide change is missed:** pause briefly on the new slide. Visually indistinguishable changes
+  and rapid animations may not create a new visual epoch; do not rely on the app for time-critical
+  content in that session.
 - **On-device speech unavailable:** continue without transcription or stop the session. The App
   deliberately has no network fallback.
 - **Overlay disappears:** restore PowerPoint to the front, avoid moving or resizing either window,
@@ -149,5 +148,5 @@ separate files and are not deleted automatically.
 Report ordinary defects through GitHub Issues without attaching private slides, screenshots,
 audio, transcripts, exports, credentials, or absolute local paths. Follow [`SECURITY.md`](../SECURITY.md)
 for security or privacy vulnerabilities. Keyboard-only use, VoiceOver, physical pen tablets,
-multi-display arrangements, full-screen modes, mixed-language recognition, and online-meeting
+Presenter View, multi-display arrangements, mixed-language recognition, and online-meeting
 composition are not verified for v1.0.0 unless a later release document explicitly says otherwise.

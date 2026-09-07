@@ -30,8 +30,6 @@
 	<string>public.app-category.education</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>LectureBoard AI uses Automation only after you explicitly start a managed PowerPoint slide show, to read its current slide identity and perform a brief reversible role check.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

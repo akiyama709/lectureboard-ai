@@ -62,6 +62,8 @@ cp "$script_directory/../docs/adr/0012-causal-managed-slideshow-binding.md" \
   "$fixture_root/docs/adr/0012-causal-managed-slideshow-binding.md"
 cp "$script_directory/../docs/adr/0013-no-fee-public-v1-distribution.md" \
   "$fixture_root/docs/adr/0013-no-fee-public-v1-distribution.md"
+cp "$script_directory/../docs/adr/0014-visual-observation-workflow.md" \
+  "$fixture_root/docs/adr/0014-visual-observation-workflow.md"
 cp "$script_directory/../scripts/check-permission-contract.sh" "$fixture_root/scripts/"
 cp "$script_directory/../scripts/test-check-permission-contract.sh" "$fixture_root/scripts/"
 cp "$script_directory/../scripts/prepublish-check.sh" "$fixture_root/scripts/"
@@ -458,7 +460,7 @@ import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
-stop = "10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．"
+stop = "10. Appの取得を停止し，PowerPoint slide showが開いたまま通常操作できることを確認する．"
 export = "11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．"
 lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
 if sum(line.rstrip("\r\n") == stop for line in lines) != 1:
@@ -471,7 +473,7 @@ lines[stop_index], lines[export_index] = lines[export_index], lines[stop_index]
 path.write_text("".join(lines), encoding="utf-8")
 PY
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
-  printf 'The release-definition check accepted session export before capture stop and managed cleanup.\n' >&2
+  printf 'The release-definition check accepted session export before capture stop and PowerPoint handback.\n' >&2
   exit 1
 fi
 mv "$fixture_root/docs/user-acceptance-ja.backup" "$fixture_root/docs/user-acceptance-ja.md"
@@ -540,6 +542,34 @@ fi
 mv "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements.backup" \
   "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
 
+cp "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements" \
+  "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements.backup"
+sed '/<\/dict>/i\
+\t<key>com.apple.security.automation.apple-events</key>\
+\t<true\/>' \
+  "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements.backup" \
+  >"$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted the Automation entitlement.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements.backup" \
+  "$fixture_root/LectureBoardAI/Config/LectureBoardAI.entitlements"
+
+cp "$fixture_root/LectureBoardAI/Config/Info.plist" \
+  "$fixture_root/LectureBoardAI/Config/Info.plist.backup"
+sed '/<\/dict>/i\
+\t<key>NSAppleEventsUsageDescription</key>\
+\t<string>Unexpected Automation request<\/string>' \
+  "$fixture_root/LectureBoardAI/Config/Info.plist.backup" \
+  >"$fixture_root/LectureBoardAI/Config/Info.plist"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted an Apple Events usage description.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/LectureBoardAI/Config/Info.plist.backup" \
+  "$fixture_root/LectureBoardAI/Config/Info.plist"
+
 mv "$fixture_root/scripts/release-preflight.sh" "$fixture_root/scripts/release-preflight.backup"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted a missing release preflight.\n' >&2
@@ -573,6 +603,15 @@ if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
 fi
 mv "$fixture_root/docs/adr/0013-no-fee-public-v1-distribution.backup" \
   "$fixture_root/docs/adr/0013-no-fee-public-v1-distribution.md"
+
+mv "$fixture_root/docs/adr/0014-visual-observation-workflow.md" \
+  "$fixture_root/docs/adr/0014-visual-observation-workflow.backup"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted a missing ADR 0014.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/adr/0014-visual-observation-workflow.backup" \
+  "$fixture_root/docs/adr/0014-visual-observation-workflow.md"
 
 cp "$fixture_root/ROADMAP.md" "$fixture_root/ROADMAP.backup"
 sed 's/## Milestone 7 — Public v1.0.0 GitHub Release/## Milestone 7 — Removed/' \
@@ -620,10 +659,10 @@ fi
 mv "$fixture_root/README.backup" "$fixture_root/README.md"
 
 cp "$fixture_root/README.md" "$fixture_root/README.backup"
-sed 's/this implementation has deterministic tests but no successful live managed-session evidence yet/this implementation has completed a successful live managed session/' \
+sed 's/each confirmed significant visual change starts a new local slide epoch/visual change handling removed/' \
   "$fixture_root/README.backup" >"$fixture_root/README.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
-  printf 'The release-definition check accepted a false live managed-session claim.\n' >&2
+  printf 'The release-definition check accepted removal of the local visual-epoch invariant.\n' >&2
   exit 1
 fi
 mv "$fixture_root/README.backup" "$fixture_root/README.md"
@@ -696,6 +735,15 @@ sed 's/ADR 0011 — Bound one-shot samples to the current visual-change candidat
   "$fixture_root/docs/README.backup" >"$fixture_root/docs/README.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted the stale ADR 0011 display title.\n' >&2
+  exit 1
+fi
+mv "$fixture_root/docs/README.backup" "$fixture_root/docs/README.md"
+
+cp "$fixture_root/docs/README.md" "$fixture_root/docs/README.backup"
+sed '/ADR 0014 — Visual-only observation workflow for public v1/d' \
+  "$fixture_root/docs/README.backup" >"$fixture_root/docs/README.md"
+if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
+  printf 'The release-definition check accepted a missing ADR 0014 index link.\n' >&2
   exit 1
 fi
 mv "$fixture_root/docs/README.backup" "$fixture_root/docs/README.md"
@@ -965,7 +1013,7 @@ fi
 mv "$fixture_root/CHANGELOG.backup" "$fixture_root/CHANGELOG.md"
 
 cp "$fixture_root/CHANGELOG.md" "$fixture_root/CHANGELOG.backup"
-sed 's/Live validation of the implemented exact-window-bound managed PowerPoint slide-identity provider before actual slide transitions are claimed/PowerPoint slide identity is complete/' \
+sed 's/Owner validation of the visual-only workflow with an exact audience-facing PowerPoint slide-show window and natural lecture speech/Owner visual-only validation is complete/' \
   "$fixture_root/CHANGELOG.backup" >"$fixture_root/CHANGELOG.md"
 if "$fixture_root/scripts/check-release-definition.sh" >/dev/null 2>&1; then
   printf 'The release-definition check accepted removal of the unverified production identity-provider gate.\n' >&2

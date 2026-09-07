@@ -142,7 +142,7 @@ sed -i '' '/<\/dict>/i\
   <key>com.apple.security.get-task-allow</key>\
   <true/>\
 ' "$debug_entitlement/entitlements.plist"
-expect_failure "$debug_entitlement" 'a debug entitlement' 'exact two-key allowlist'
+expect_failure "$debug_entitlement" 'a debug entitlement' 'exact one-key allowlist'
 
 wrong_version="$fixture_root/wrong-version"
 clone_fixture "$baseline" "$wrong_version"

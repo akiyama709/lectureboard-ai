@@ -32,11 +32,11 @@ valid_fixture="$fixture_parent/valid"
 make_fixture "$valid_fixture"
 "$valid_fixture/scripts/check-permission-contract.sh" >/dev/null
 
-missing_description="$fixture_parent/missing-description"
-make_fixture "$missing_description"
-plutil -remove NSAppleEventsUsageDescription \
-  "$missing_description/LectureBoardAI/Config/Info.plist"
-expect_failure "$missing_description" "a missing Apple Events usage description"
+added_description="$fixture_parent/added-apple-events-description"
+make_fixture "$added_description"
+plutil -insert NSAppleEventsUsageDescription -string "Unexpected Automation request" \
+  "$added_description/LectureBoardAI/Config/Info.plist"
+expect_failure "$added_description" "an Apple Events usage description"
 
 for provenance_key in \
   LectureBoardReleaseCommit \
@@ -63,11 +63,25 @@ sed -i '' \
   "$wrong_entitlement_path/project.yml"
 expect_failure "$wrong_entitlement_path" "an unexpected code-signing entitlement path"
 
-disabled_automation="$fixture_parent/disabled-automation"
-make_fixture "$disabled_automation"
-sed -i '' '/com.apple.security.automation.apple-events/{n;s#<true/>#<false/>#;}' \
-  "$disabled_automation/LectureBoardAI/Config/LectureBoardAI.entitlements"
-expect_failure "$disabled_automation" "a disabled Apple Events entitlement"
+added_automation="$fixture_parent/added-automation"
+make_fixture "$added_automation"
+sed -i '' '/<\/dict>/i\
+  <key>com.apple.security.automation.apple-events</key>\
+  <true/>\
+' "$added_automation/LectureBoardAI/Config/LectureBoardAI.entitlements"
+expect_failure "$added_automation" "an Apple Events entitlement"
+
+missing_audio="$fixture_parent/missing-audio"
+make_fixture "$missing_audio"
+sed -i '' '/com.apple.security.device.audio-input/{N;d;}' \
+  "$missing_audio/LectureBoardAI/Config/LectureBoardAI.entitlements"
+expect_failure "$missing_audio" "a missing audio-input entitlement"
+
+disabled_audio="$fixture_parent/disabled-audio"
+make_fixture "$disabled_audio"
+sed -i '' '/com.apple.security.device.audio-input/{n;s#<true/>#<false/>#;}' \
+  "$disabled_audio/LectureBoardAI/Config/LectureBoardAI.entitlements"
+expect_failure "$disabled_audio" "a disabled audio-input entitlement"
 
 extra_entitlement="$fixture_parent/extra-entitlement"
 make_fixture "$extra_entitlement"

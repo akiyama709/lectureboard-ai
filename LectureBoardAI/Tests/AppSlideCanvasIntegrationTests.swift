@@ -32,6 +32,205 @@ struct AppSlideCanvasIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func visualModeBoardsWithoutSemanticPowerPointIdentity() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let transcription = RetainingCanvasTranscriptionProvider()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display],
+      transcriptionProvider: transcription
+    )
+    let baselineImage = try #require(
+      makeSolidImage(width: 200, height: 120, red: 128, green: 128, blue: 128)
+    )
+    let changedImage = try #require(
+      makeSolidImage(width: 200, height: 120, red: 224, green: 224, blue: 224)
+    )
+    await model.startVisualWindowCapture()
+    #expect(model.captureStatus == .capturing)
+    #expect(model.visualSlideTrackingActive)
+    #expect(model.slideIdentityState == .unavailable)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 1,
+        image: baselineImage,
+        captureSurfaceGeometry: geometry.surface,
+        captureScreenGeometry: geometry.initialScreen,
+        contentCell: RGBContentCell(red: 128, green: 128, blue: 128),
+        fingerprint: FrameFingerprint(
+          sampleColumns: 32,
+          sampleRows: 18,
+          luminance: Array(repeating: 128, count: 32 * 18)
+        )
+      )
+    )
+    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
+    model.beginSlideCanvasSelection()
+    #expect(model.confirmSlideCanvasSelection(geometry.region))
+
+    for sequenceNumber in 2...3 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: baselineImage,
+          captureSurfaceGeometry: geometry.surface,
+          captureScreenGeometry: geometry.initialScreen,
+          contentCell: RGBContentCell(red: 128, green: 128, blue: 128),
+          fingerprint: FrameFingerprint(
+            sampleColumns: 32,
+            sampleRows: 18,
+            luminance: Array(repeating: 128, count: 32 * 18)
+          )
+        )
+      )
+    }
+    await capture.emit(
+      frame(
+        sequenceNumber: 4,
+        image: baselineImage,
+        captureSurfaceGeometry: geometry.surface,
+        captureScreenGeometry: geometry.initialScreen,
+        contentCell: RGBContentCell(red: 128, green: 128, blue: 128),
+        fingerprint: FrameFingerprint(
+          sampleColumns: 32,
+          sampleRows: 18,
+          luminance: Array(repeating: 128, count: 32 * 18)
+        )
+      )
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await capture.emit(
+      frame(
+        sequenceNumber: 5,
+        image: baselineImage,
+        captureSurfaceGeometry: geometry.surface,
+        captureScreenGeometry: geometry.initialScreen,
+        contentCell: RGBContentCell(red: 128, green: 128, blue: 128),
+        fingerprint: FrameFingerprint(
+          sampleColumns: 32,
+          sampleRows: 18,
+          luminance: Array(repeating: 128, count: 32 * 18)
+        )
+      )
+    )
+    try await waitUntil { model.capturedFrameCount == 5 }
+    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
+    #expect(model.boardScene.slideNumber == 1)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(overlay.isVisible)
+    await model.startTranscription()
+    #expect(transcription.retainedObservationCount == 1)
+    let stopCallsBeforeTransition = transcription.stopCallCount
+
+    for sequenceNumber in 6...8 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: changedImage,
+          captureSurfaceGeometry: geometry.surface,
+          captureScreenGeometry: geometry.initialScreen,
+          contentCell: RGBContentCell(red: 224, green: 224, blue: 224),
+          fingerprint: FrameFingerprint(
+            sampleColumns: 32,
+            sampleRows: 18,
+            luminance: Array(repeating: 224, count: 32 * 18)
+          )
+        )
+      )
+    }
+    try await waitUntil { model.slideChangeCount == 1 }
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil { transcription.retainedObservationCount == 2 }
+    #expect(model.boardScene.slideNumber == 2)
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(transcription.stopCallCount > stopCallsBeforeTransition)
+    transcription.emitRetained(
+      TranscriptionObservation(
+        segment: boardProposalDefinition(text: "Stale words must not cross the slide boundary."),
+        sourceMachTime: UInt64.max
+      ),
+      startIndex: 0
+    )
+    #expect(model.boardScene.elements.isEmpty)
+
+    await capture.emit(
+      frame(
+        sequenceNumber: 9,
+        image: changedImage,
+        captureSurfaceGeometry: geometry.surface,
+        captureScreenGeometry: geometry.initialScreen,
+        contentCell: RGBContentCell(red: 224, green: 224, blue: 224),
+        fingerprint: FrameFingerprint(
+          sampleColumns: 32,
+          sampleRows: 18,
+          luminance: Array(repeating: 224, count: 32 * 18)
+        )
+      )
+    )
+    try await waitUntil { model.capturedFrameCount == 9 }
+    transcription.emitRetained(
+      TranscriptionObservation(
+        segment: boardProposalDefinition(text: "Resilience means retaining function."),
+        sourceMachTime: UInt64.max
+      ),
+      startIndex: 1
+    )
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(overlay.isVisible)
+
+    await model.stopWindowCapture()
+    #expect(!model.visualSlideTrackingActive)
+  }
+
+  @Test func visualBaselineRecoversAfterMissingDenseFingerprint() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      slideCanvasConfirmationMode: .testOnlyUseFullCapturedFrame
+    )
+    let image = try #require(
+      makeSolidImage(width: 200, height: 120, red: 128, green: 128, blue: 128)
+    )
+
+    await model.startVisualWindowCapture()
+    for sequenceNumber in 1...2 {
+      await capture.emit(
+        frame(
+          sequenceNumber: UInt64(sequenceNumber),
+          image: image,
+          captureSurfaceGeometry: captureGeometry(for: image),
+          includeContentFingerprint: false
+        )
+      )
+    }
+    await capture.emit(
+      frame(
+        sequenceNumber: 3,
+        image: image,
+        captureSurfaceGeometry: captureGeometry(for: image)
+      )
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
+
+    #expect(model.visualSlideTrackingActive)
+    #expect(model.boardScene.slideNumber == 1)
+    #expect(!model.boardScene.elements.isEmpty)
+    await model.stopWindowCapture()
+  }
+
   @Test func confirmedCanvasOverlayMovesOnlyWithCurrentFrameScreenGeometry() async throws {
     let capture = ManualCanvasCapture()
     let analyzer = RecordingCanvasAnalyzer(
@@ -1714,7 +1913,8 @@ struct AppSlideCanvasIntegrationTests {
     transcriptionProvider: any TranscriptionProvider =
       RetainingCanvasTranscriptionProvider(),
     slideIdentityProvider: any PowerPointSlideIdentityProviding =
-      IdentifiedCanvasSlideIdentityProvider()
+      IdentifiedCanvasSlideIdentityProvider(),
+    slideCanvasConfirmationMode: SlideCanvasConfirmationMode = .userConfirmed
   ) -> AppModel {
     let model = AppModel(
       permissionService: PermissionService(
@@ -1725,6 +1925,7 @@ struct AppSlideCanvasIntegrationTests {
       transcriptionProvider: transcriptionProvider,
       slideIdentityProvider: slideIdentityProvider,
       slideVisionAnalyzer: analyzer,
+      slideCanvasConfirmationMode: slideCanvasConfirmationMode,
       slideIdentityFrameTimeout: .seconds(3_600),
       overlayController: overlay,
       displayCoordinateSnapshotProvider: FixedCanvasDisplayProvider(
@@ -1879,6 +2080,7 @@ struct AppSlideCanvasIntegrationTests {
     captureScreenGeometry: CaptureScreenGeometry? = nil,
     deliveryKind: CapturedFrameDeliveryKind = .new,
     contentCell: RGBContentCell = RGBContentCell(red: 255, green: 255, blue: 255),
+    includeContentFingerprint: Bool = true,
     fingerprint: FrameFingerprint? = nil
   ) -> CapturedPowerPointFrame {
     CapturedPowerPointFrame(
@@ -1896,14 +2098,16 @@ struct AppSlideCanvasIntegrationTests {
           sampleRows: 18,
           luminance: Array(repeating: 128, count: 32 * 18)
         ),
-      contentFingerprint: ContentFingerprint(
-        sampleColumns: 160,
-        sampleRows: 90,
-        cells: Array(
-          repeating: contentCell,
-          count: 160 * 90
+      contentFingerprint: includeContentFingerprint
+        ? ContentFingerprint(
+          sampleColumns: 160,
+          sampleRows: 90,
+          cells: Array(
+            repeating: contentCell,
+            count: 160 * 90
+          )
         )
-      )
+        : nil
     )
   }
 

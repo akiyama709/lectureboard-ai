@@ -294,10 +294,9 @@ if [[ "$kind" == 'app' ]]; then
     || fail 'the embedded entitlement property list is malformed'
   [[ -x /usr/libexec/PlistBuddy ]] || fail 'PlistBuddy is required for entitlement verification'
   entitlement_key_count="$(grep -Ec '^[[:space:]]*<key>[^<]+</key>[[:space:]]*$' "$entitlements_path")"
-  [[ "$entitlement_key_count" == '2' ]] \
-    || fail 'the embedded entitlements differ from the exact two-key allowlist'
+  [[ "$entitlement_key_count" == '1' ]] \
+    || fail 'the embedded entitlements differ from the exact one-key allowlist'
   for entitlement_key in \
-    com.apple.security.automation.apple-events \
     com.apple.security.device.audio-input; do
     key_count="$(grep -Ec "^[[:space:]]*<key>${entitlement_key}</key>[[:space:]]*$" "$entitlements_path" || true)"
     [[ "$key_count" == '1' ]] || fail 'an approved release entitlement is missing or duplicated'

@@ -2,6 +2,14 @@
 
 更新日：2026年9月7日
 
+## 最新の再開点（2026年9月7日16時台，visual-onlyへ確定）
+
+　ADR 0014を採択し，公開v1のPowerPoint経路をvisual-onlyへ変更した．講師が通常の全画面又はwindow表示slide showを開始し，LectureBoard AIで正確な聴衆向け画面を選んで「この画面で板書を開始」を押す．AppはApple Events又はPowerPoint内部のslide IDを使わず，presentationを開始，編集，保存又は終了しない．安定した視覚状態をlocal baseline，確定した大きな視覚変化を新しいlocal visual epochとする．Presenter View及び複数displayは対象外である．
+
+　sourceでは，visual baseline／切替，切替時の旧board・analysis・speech callback無効化，current analysis後の文字起こし自動再開，dense fingerprint欠落後の復帰，bounded fresh sampleによるcoarse切替，stable button listによる画面選択，full ScreenCaptureKit inventoryの再検出及びfull-screen Spaceへ参加できるoverlayを実装した．直接影響する47件の統合testは合格した．Info.plist及びentitlementからPowerPoint Automation／Apple Events権限を削除した．旧managed実装と証拠は研究上の履歴として保持するが，公開v1のUI，権限，受入又は配布物には用いない．
+
+　次は，このsourceをclean exact commitへ固定し，そのcommitだけからarm64 Release・Hardened Runtime・ad hoc署名の本人試用Appを1件生成してstable pathへ保存する．そのAppと本人PPTXの作業用copyで，正確な画面選択，canvas，実音声partial，final前の可視板書，visual epoch，遅延，overlay alignment，mouse優先，export，取得停止後もPowerPointが通常操作できること及び原本不変を確認する．旧`c525ee4`及び`e32917e`候補は再使用又は公開しない．本人受入後にだけ全exact-commit gateと5 assetを生成し，正確なcommit及びZIP SHA-256を示して外部公開の明示承認を得る．
+
 ## 最新の再開点（2026年9月7日11–12時台）
 
 　本人試用後，PowerPointのDock表示が2個に見え，通常の「PowerPointを終了」が無効になった事象を調査した．読取りだけの観測では，実在するPowerPoint processは1件，子process及びhelperは0件，編集windowは1件，slide-show windowは0件であり，presentationは保存済みだった．PowerPointのQuit commandは2経路ともdisabledで，対象processへの標準AppleScript quitはerror `-128`を返した．Dock重複表示と`-128`の根本原因は確定しておらず，LectureBoard AI又は今回の反復Apple Event試験との因果も断定しない．

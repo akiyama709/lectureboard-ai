@@ -29,15 +29,67 @@ struct ScreenCaptureSetupPolicyTests {
     )
   }
 
-  @Test func returningActiveRefreshesOnlyAfterPreflightIsGranted() {
+  @Test func returningActiveDoesNotRefreshWithoutDeniedToGrantedTransition() {
     #expect(
       ScreenCaptureSetupPolicy.action(
-        for: .sceneBecameActive(preflightGranted: true)
+        for: .sceneBecameActive(
+          previousPreflightGranted: true,
+          preflightGranted: true
+        )
+      ) == .none
+    )
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(
+          previousPreflightGranted: false,
+          preflightGranted: false
+        )
+      ) == .none
+    )
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(
+          previousPreflightGranted: true,
+          preflightGranted: false
+        )
+      ) == .none
+    )
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(
+          previousPreflightGranted: nil,
+          preflightGranted: false
+        )
+      ) == .none
+    )
+  }
+
+  @Test func returningActiveRefreshesOnceAfterPreflightBecomesGranted() {
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(
+          previousPreflightGranted: false,
+          preflightGranted: true
+        )
       ) == .refreshPowerPointWindowsAfterSceneActivation
     )
     #expect(
       ScreenCaptureSetupPolicy.action(
-        for: .sceneBecameActive(preflightGranted: false)
+        for: .sceneBecameActive(
+          previousPreflightGranted: true,
+          preflightGranted: true
+        )
+      ) == .none
+    )
+  }
+
+  @Test func firstActiveObservationDoesNotCompeteWithAppearanceRefresh() {
+    #expect(
+      ScreenCaptureSetupPolicy.action(
+        for: .sceneBecameActive(
+          previousPreflightGranted: nil,
+          preflightGranted: true
+        )
       ) == .none
     )
   }

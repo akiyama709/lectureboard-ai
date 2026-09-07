@@ -14,12 +14,12 @@
 
 ## 実施前の条件
 
-- [ ] 合成PPTXによるmanaged workflow，canvas，overlay，mouse priority，export及びcleanupの現行候補検証が先に合格している．
+- [ ] 合成PPTXによる視覚観測workflow，canvas，overlay，mouse priority，export及び取得停止の現行候補検証が先に合格している．
 - [ ] 対象は，公開予定commitから生成したHardened Runtime・arm64・ad hoc署名の正確な候補Appである．
 - [ ] 候補commit，App executable SHA-256及びZIP SHA-256を記録している．
 - [ ] macOS及びPowerPointのversionが[`supported-environment.md`](supported-environment.md)の対象範囲内である．
-- [ ] local displayは1台，PowerPointで開くpresentationは複製物1件だけで，既存slide showはない．
-- [ ] PowerPointのslide-show typeはwindow表示であり，full screen，Presenter View又はkiosk modeではない．
+- [ ] local displayは1台であり，PowerPointで開くpresentationは受入用複製物1件だけである．
+- [ ] PowerPointの通常のfull screen又はwindow表示slide showを使う．Presenter View，multidisplay及びkiosk modeは対応範囲外である．
 - [ ] 元PPTXの存在，byte size及びSHA-256を記録し，同じ内容の受入用複製物を作成した．
 - [ ] 受入用複製物のAutoSaveを無効にし，元PPTXを閉じたままにしている．
 
@@ -33,26 +33,26 @@
 
 ## 対応講義経路
 
-1. 受入用複製物をPowerPointで開き，LectureBoard AIでPowerPoint windowを更新する．
-2. 正確なediting windowを1件選び，「管理されたスライドショーを開始」を1回実行する．
-3. 新しく生成されたwindow表示のslide showが選択資料へ結び付いていることを確認する．
+1. 受入用複製物をPowerPointで開き，通常のfull screen又はwindow表示slide showを開始する．slide showはLectureBoard AIより先に開いていてもよい．
+2. LectureBoard AIでPowerPoint windowを更新し，受講者に見せる正確なslide-show画面を1件選び，「この画面で板書を開始」を1回実行する．選択後にslide showを開いた場合は，windowを再更新して新しいslide-show画面を選び直す．
+3. 選択した画面が受入用複製物の受講者向け表示であることを確認する．
 4. frozen preview上で実際のslide canvasだけを選択・確定し，PowerPointのcontrol又は余白を含めない．
-5. 少なくとも3枚を通常の講義速度で進め，slide ID／indexの変化，visual analysis及びoverlayの追従を観察する．
+5. 少なくとも3枚の視覚的に異なるslideを通常の講義速度で進め，local visual epoch，visual analysis及びoverlayの追従を観察する．PowerPoint内部のslide ID又はindexの取得は合格条件としない．
 6. 日本語又は英語のうち資料の主言語で約30秒，通常の模擬講義として自然に話す．命令用の定型句は用いない．一つの重要な宣言文を発話してから，その安定した内容に基づく板書がfinal transcriptより前にPowerPoint上へ現れるかを目視し，発話終了から可視化までの秒数を記録する．final transcript確定後に同じ板書が重複せず，文脈に根拠のある状態を保つことも確認する．少なくとも1件の自動板書がPowerPoint上に実際に見えることを目視確認する．
 7. mouse又はtrackpadで短い手書き線を1本描き，AI overlayが入力を妨げず，人間入力が優先されることを確認する．
 8. text，box，arrow又は簡単なdiagramが表示された場合，既存内容を覆わず，根拠のない内容を追加せず，読める間は安定していることを確認する．
 9. 文字起こしを停止し，final transcriptが確定した後に，文字起こしが停止済みであることを確認する．
-10. Appの取得を停止し，managed slide showが片付けられ，PowerPoint editing windowへ安全に戻ったことを確認する．
+10. Appの取得を停止し，PowerPoint slide showが開いたまま通常操作できることを確認する．
 11. 取得状態が停止済みであることを確認してから，lecture sessionをJSON及びSVGへexportし，slide画像，OCR全文，音声，文字起こし，window title又は非公開intentが含まれないことを確認する．
-12. 受入用複製物を保存せずに閉じ，元PPTX及び複製物のbyte sizeとSHA-256を実施前の値と比較する．
+12. PowerPointでslide showを通常の方法で終了し，受入用複製物を保存せずに閉じ，元PPTX及び複製物のbyte sizeとSHA-256を実施前の値と比較する．
 
 　実行時診断の`final`，座標変換済み，許可，描画要求済み又は正数の本番板書件数は，原因調査の補助であり，可視板書の代替証拠ではない．PowerPoint上で自動板書を1件も目視できなければ，診断値にかかわらず不合格とする．
 
 ## 合格条件
 
-- [ ] 間違ったPowerPoint window又は既存slide showを取得していない．
+- [ ] 受講者に見せるものと異なるPowerPoint windowを取得していない．
 - [ ] crash，停止不能，反復する権限要求又は残存する補助windowがない．
-- [ ] slide移動後のidentity，analysis及びoverlayが現在のslideへ追従する．
+- [ ] 確定した安定視覚変化がlocal visual epochを更新し，analysis及びoverlayが現在の画面へ追従する．
 - [ ] board内容はslide又はそのsessionの発話に根拠があり，利用者が読める間は不意に変化しない．
 - [ ] 少なくとも1件の根拠ある板書がfinal transcript確定前に見え，発話終了から可視化までの時間を記録した．
 - [ ] 命令用定型句なしの自然な模擬講義から，少なくとも1件の根拠ある自動板書をPowerPoint上で目視した．
@@ -78,7 +78,7 @@ slide枚数：
 元PPTX SHA-256（Obsidianだけに記録）：
 複製物・実施前SHA-256（Obsidianだけに記録）：
 複製物・実施後SHA-256（Obsidianだけに記録）：
-managed開始：未実施／合格／不合格
+画面選択・板書開始：未実施／合格／不合格
 canvas・overlay：未実施／合格／不合格
 文字起こし・grounding：未実施／合格／不合格
 発話終了からpre-final板書可視化まで（秒）：

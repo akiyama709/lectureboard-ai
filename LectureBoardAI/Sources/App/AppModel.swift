@@ -183,6 +183,7 @@ final class AppModel: ObservableObject {
     SlideIdentityFrameSyncState.notRequired
   @Published private(set) var slideIdentitySampleCount = 0
   @Published private(set) var slideIdentityContinuityBreakCount = 0
+  @Published private(set) var visualSlideTrackingActive = false
   @Published private(set) var contentRevisionCount = 0
   @Published private(set) var latestContentRevisionEvent: RuntimeContentRevisionEvent?
   @Published private(set) var slideCanvasStatus = SlideCanvasStatus.unavailable
@@ -232,6 +233,9 @@ final class AppModel: ObservableObject {
   private var activeCaptureWindowID: CGWindowID?
   private var activeCaptureIdentity: PowerPointWindowIdentity?
   private var activeCaptureUsesManagedSlideShow = false
+  private var activeCaptureUsesVisualGrounding = false
+  private var visualSlideBaselineEstablished = false
+  private var visualSlideNumber = 1
   private var lastAcceptedCaptureSequenceNumber: UInt64?
   private var captureContentRequiresNewFrame = false
   private var slideIdentityTracker = SlideIdentityTracker()
@@ -274,7 +278,7 @@ final class AppModel: ObservableObject {
   init(
     permissionService: PermissionService = PermissionService(),
     windowCapture: any PowerPointWindowCapturing = PowerPointWindowCapture(),
-    scanner: any PowerPointWindowScanning = PowerPointWindowScanner(),
+    scanner: any PowerPointWindowScanning = PowerPointWindowScanner(scope: .completeInventory),
     transcriptionProvider: any TranscriptionProvider = AppleSpeechRecognizerProvider(),
     slideIdentityProvider: any PowerPointSlideIdentityProviding =
       UnavailablePowerPointSlideIdentityProvider(),
@@ -610,7 +614,19 @@ final class AppModel: ObservableObject {
     }
   }
 
+  /// Starts the legacy diagnostic capture path, retaining the injected semantic-identity
+  /// provider contract used by deterministic tests.
   func startWindowCapture() async {
+    await startWindowCapture(usingVisualGrounding: false)
+  }
+
+  /// Starts the production observation path without controlling PowerPoint. The selected exact
+  /// window, confirmed slide canvas, stable visual frames, and local speech are the only inputs.
+  func startVisualWindowCapture() async {
+    await startWindowCapture(usingVisualGrounding: true)
+  }
+
+  private func startWindowCapture(usingVisualGrounding: Bool) async {
     guard !applicationTerminationCleanupInProgress else { return }
     guard let selectedWindow, let selectedIdentity = selectedWindow.identity else {
       let event = CaptureFailureEventFactory.unclassified(
@@ -641,6 +657,13 @@ final class AppModel: ObservableObject {
     activeCaptureWindowID = selectedPowerPointWindowID
     activeCaptureIdentity = selectedIdentity
     activeCaptureUsesManagedSlideShow = false
+    activeCaptureUsesVisualGrounding = usingVisualGrounding
+    visualSlideTrackingActive = usingVisualGrounding
+    visualSlideBaselineEstablished = false
+    visualSlideNumber = 1
+    if usingVisualGrounding {
+      boardScene = BoardScene(slideNumber: visualSlideNumber)
+    }
     captureStatus = .starting
     capturedFrameCount = 0
     captureDeliveryMetrics.reset()
@@ -691,6 +714,8 @@ final class AppModel: ObservableObject {
         activeCaptureWindowID = nil
         activeCaptureIdentity = nil
         activeCaptureUsesManagedSlideShow = false
+        activeCaptureUsesVisualGrounding = false
+        visualSlideTrackingActive = false
         invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
         resetVisualDetectors()
         lastAcceptedCaptureSequenceNumber = nil
@@ -701,15 +726,17 @@ final class AppModel: ObservableObject {
         return
       }
       captureStatus = .capturing
-      await slideIdentityProvider.start(
-        operationID: operationID,
-        identity: selectedIdentity,
-        onObservation: { [weak self] observation in
-          Task { @MainActor [weak self] in
-            self?.receive(observation, sessionID: operationID)
+      if !usingVisualGrounding {
+        await slideIdentityProvider.start(
+          operationID: operationID,
+          identity: selectedIdentity,
+          onObservation: { [weak self] observation in
+            Task { @MainActor [weak self] in
+              self?.receive(observation, sessionID: operationID)
+            }
           }
-        }
-      )
+        )
+      }
     } catch {
       guard activeCaptureSessionID == operationID else { return }
       let event = CaptureFailureEventFactory.startFailed(error: error)
@@ -718,6 +745,8 @@ final class AppModel: ObservableObject {
       activeCaptureWindowID = nil
       activeCaptureIdentity = nil
       activeCaptureUsesManagedSlideShow = false
+      activeCaptureUsesVisualGrounding = false
+      visualSlideTrackingActive = false
       sessionSceneRecordingEnabled = false
       invalidateSlideIdentityAfterCaptureEnd(state: failedIdentityState)
       captureFailureSource = event.source
@@ -757,6 +786,8 @@ final class AppModel: ObservableObject {
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
     activeCaptureUsesManagedSlideShow = true
+    activeCaptureUsesVisualGrounding = false
+    visualSlideTrackingActive = false
     captureStatus = .starting
     capturedFrameCount = 0
     captureDeliveryMetrics.reset()
@@ -821,6 +852,8 @@ final class AppModel: ObservableObject {
       activeCaptureWindowID = nil
       activeCaptureIdentity = nil
       activeCaptureUsesManagedSlideShow = false
+      activeCaptureUsesVisualGrounding = false
+      visualSlideTrackingActive = false
       sessionSceneRecordingEnabled = false
       invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
       resetVisualDetectors()
@@ -894,6 +927,10 @@ final class AppModel: ObservableObject {
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
     activeCaptureUsesManagedSlideShow = false
+    activeCaptureUsesVisualGrounding = false
+    visualSlideTrackingActive = false
+    visualSlideBaselineEstablished = false
+    visualSlideNumber = 1
     invalidateSlideIdentityAfterCaptureEnd(state: .unavailable)
     resetVisualDetectors()
     lastAcceptedCaptureSequenceNumber = nil
@@ -1076,7 +1113,7 @@ final class AppModel: ObservableObject {
       !slideAnalysisNeedsRefresh,
       latestCompletedAnalysisGeneration == analysisGeneration
     else { return }
-    guard !isSlideIdentityQuarantined, !slideIdentityFrameGate.requiresFreshFrame else {
+    guard transcriptGroundingContextIsUsable else {
       return
     }
     guard
@@ -1169,10 +1206,10 @@ final class AppModel: ObservableObject {
       guard frame.deliveryKind == .new else { return }
       captureContentRequiresNewFrame = false
     }
-    if slideIdentityQuarantineActive {
+    if slideIdentityQuarantineActive && !activeCaptureUsesVisualGrounding {
       return
     }
-    if slideIdentityFrameGate.requiresFreshFrame {
+    if slideIdentityFrameGate.requiresFreshFrame && !activeCaptureUsesVisualGrounding {
       guard
         slideIdentityFrameGate.acceptFrame(
           isNewDelivery: frame.deliveryKind == .new,
@@ -1501,6 +1538,7 @@ final class AppModel: ObservableObject {
           confirmedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
         )
       }
+      acceptVisualSlideFrame(significantChange: false)
       guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
@@ -1512,6 +1550,7 @@ final class AppModel: ObservableObject {
         evidenceStartedMachAbsoluteTime: coarseEvidenceStartedMachAbsoluteTime,
         confirmedMachAbsoluteTime: sourceMachAbsoluteTime(for: frame)
       )
+      acceptVisualSlideFrame(significantChange: true)
       guard rebaseDenseFingerprintForConfirmedCoarseFrame(frame.contentFingerprint) else { return }
       latestStableFrame = frame.image
       startSlideAnalysis(frame, captureSessionID: sessionID)
@@ -1556,6 +1595,8 @@ final class AppModel: ObservableObject {
     activeCaptureWindowID = nil
     activeCaptureIdentity = nil
     activeCaptureUsesManagedSlideShow = false
+    activeCaptureUsesVisualGrounding = false
+    visualSlideTrackingActive = false
     sessionSceneRecordingEnabled = false
     invalidateSlideIdentityAfterCaptureEnd(state: failedIdentityState)
     resetVisualDetectors()
@@ -1973,6 +2014,9 @@ final class AppModel: ObservableObject {
         evidenceStartedMachAbsoluteTime: request.evidenceStartedMachAbsoluteTime,
         confirmedMachAbsoluteTime: confirmedMachAbsoluteTime
       )
+      acceptVisualSlideFrame(
+        significantChange: observation.stability == .significantVisualChange
+      )
       guard rebaseDenseFingerprintForConfirmedCoarseFrame(freshFrame.contentFingerprint) else {
         return
       }
@@ -2292,9 +2336,7 @@ final class AppModel: ObservableObject {
       !productionOverlayIsManuallySuppressed,
       captureStatus == .capturing,
       slideCanvasStatus == .confirmed,
-      slideIdentityState == .identified,
-      !slideIdentityQuarantineActive,
-      !slideIdentityFrameGate.requiresFreshFrame,
+      currentSlideContextIsUsable,
       slideAnalysisStatus == .ready,
       !slideAnalysisNeedsRefresh,
       latestCompletedAnalysisGeneration == analysisGeneration,
@@ -2435,6 +2477,7 @@ final class AppModel: ObservableObject {
     _ observation: PowerPointSlideIdentityObservation,
     sessionID: CaptureOperationID
   ) {
+    guard !activeCaptureUsesVisualGrounding else { return }
     guard sessionID == activeCaptureSessionID,
       observation.targetIdentity == activeCaptureIdentity,
       activeCaptureSelectionIsConsistent
@@ -2476,6 +2519,49 @@ final class AppModel: ObservableObject {
 
   private var isSlideIdentityQuarantined: Bool {
     slideIdentityQuarantineActive
+  }
+
+  /// Visual mode deliberately does not ask PowerPoint for semantic slide metadata. A coarse
+  /// frame is usable only after the existing stability detector has confirmed its baseline.
+  private var currentSlideContextIsUsable: Bool {
+    if activeCaptureUsesVisualGrounding {
+      return visualSlideBaselineEstablished
+    }
+    return slideIdentityState == .identified
+      && !slideIdentityQuarantineActive
+      && !slideIdentityFrameGate.requiresFreshFrame
+  }
+
+  private var transcriptGroundingContextIsUsable: Bool {
+    if activeCaptureUsesVisualGrounding {
+      return visualSlideBaselineEstablished
+    }
+    return !slideIdentityQuarantineActive
+      && !slideIdentityFrameGate.requiresFreshFrame
+  }
+
+  private func acceptVisualSlideFrame(significantChange: Bool) {
+    guard activeCaptureUsesVisualGrounding else { return }
+    if !visualSlideBaselineEstablished {
+      latestVisualFreshnessBoundaryMachTime = mach_absolute_time()
+      invalidateTranscriptionContext(preserveUserRequest: true)
+      visualSlideBaselineEstablished = true
+      visualSlideNumber = 1
+      boardScene = BoardScene(slideNumber: visualSlideNumber)
+      return
+    }
+    guard significantChange else { return }
+    latestVisualFreshnessBoundaryMachTime = mach_absolute_time()
+    invalidateTranscriptionContext(preserveUserRequest: true)
+    if visualSlideNumber < Int.max {
+      visualSlideNumber += 1
+    }
+    if slideChangeCount < Int.max {
+      slideChangeCount += 1
+    }
+    resetBoardCandidateContext()
+    boardScene = BoardScene(slideNumber: visualSlideNumber)
+    boardSceneAnalysisGeneration = nil
   }
 
   private func prepareSlideIdentityForNewCapture() {
@@ -2618,9 +2704,7 @@ final class AppModel: ObservableObject {
       automaticTranscriptionResumeTask == nil,
       captureStatus == .capturing,
       slideCanvasStatus == .confirmed,
-      slideIdentityState == .identified,
-      !slideIdentityQuarantineActive,
-      !slideIdentityFrameGate.requiresFreshFrame,
+      currentSlideContextIsUsable,
       slideAnalysisStatus == .ready,
       !slideAnalysisNeedsRefresh,
       latestCompletedAnalysisGeneration == analysisGeneration
@@ -2634,9 +2718,7 @@ final class AppModel: ObservableObject {
         !self.transcriptionOperationGate.hasActiveOperation,
         self.captureStatus == .capturing,
         self.slideCanvasStatus == .confirmed,
-        self.slideIdentityState == .identified,
-        !self.slideIdentityQuarantineActive,
-        !self.slideIdentityFrameGate.requiresFreshFrame,
+        self.currentSlideContextIsUsable,
         self.slideAnalysisStatus == .ready,
         !self.slideAnalysisNeedsRefresh,
         self.latestCompletedAnalysisGeneration == self.analysisGeneration

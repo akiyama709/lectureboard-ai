@@ -1707,7 +1707,7 @@ if not isinstance(data["tagObject"],str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9
 if not isinstance(data["executableSha256"],str) or not re.fullmatch(r"[0-9a-f]{64}",data["executableSha256"]): raise SystemExit(1)
 if not isinstance(data["toolchain"],str) or not re.fullmatch(r"Xcode [0-9]+(?:\.[0-9]+){1,2}; Build version [0-9A-Za-z]+",data["toolchain"]): raise SystemExit(1)
 entitlements=data["entitlements"]
-if not exact(entitlements,{"keys","canonicalJsonSha256"}) or entitlements!={"keys":["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"],"canonicalJsonSha256":"2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0"}: raise SystemExit(1)
+if not exact(entitlements,{"keys","canonicalJsonSha256"}) or entitlements!={"keys":["com.apple.security.device.audio-input"],"canonicalJsonSha256":"82052f68fb90e288554c67b08bdcb3403699ac396387a93d37f3b397c3e9f064"}: raise SystemExit(1)
 if not exact(data["archive"],{"name","sha256"}) or data["archive"]!={"name":"LectureBoard-AI-v1.0.0-arm64.zip","sha256":archive_sha}: raise SystemExit(1)
 if not exact(data["testResult"],{"name","sha256"}) or data["testResult"]!={"name":"LectureBoard-AI-v1.0.0-test-results.json","sha256":test_sha}: raise SystemExit(1)
 PY
@@ -1910,7 +1910,7 @@ verify_app() {
     if ! /usr/bin/codesign -d --entitlements :- "$app" >"$ent" 2>/dev/null; then /bin/unlink "$ent"; die 'entitlement inspection failed'; fi
     if ! /usr/bin/plutil -convert json -o - "$ent" | /usr/bin/python3 -I -c 'import json,sys
 d=json.load(sys.stdin)
-expected={"com.apple.security.automation.apple-events": True,"com.apple.security.device.audio-input": True}
+expected={"com.apple.security.device.audio-input": True}
 if d != expected: raise SystemExit(1)' >/dev/null; then
       /bin/unlink "$ent"; die 'entitlements are not the exact release allowlist'
     fi
@@ -2056,7 +2056,7 @@ package_release() {
   json_string "$toolchain"
   created_at="$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')" || die 'SBOM creation time unavailable'; json_string "$created_at"
   /usr/bin/printf '{\n  "spdxVersion":"SPDX-2.3",\n  "dataLicense":"CC0-1.0",\n  "SPDXID":"SPDXRef-DOCUMENT",\n  "name":"LectureBoard AI v1.0.0",\n  "documentNamespace":"https://github.com/akiyama709/lectureboard-ai/releases/download/v1.0.0/SBOM.spdx.json#%s",\n  "creationInfo":{"created":"%s","creators":["Tool: no-fee-release-v1.sh"]},\n  "packages":[{"SPDXID":"SPDXRef-Package-LectureBoardAI","name":"LectureBoard AI","versionInfo":"1.0.0","downloadLocation":"https://github.com/akiyama709/lectureboard-ai/releases/download/v1.0.0/%s","supplier":"Person: Tomohiro Akiyama","filesAnalyzed":false,"checksums":[{"algorithm":"SHA256","checksumValue":"%s"}],"licenseConcluded":"MIT","licenseDeclared":"MIT","copyrightText":"Copyright (c) 2026 Tomohiro Akiyama"}],\n  "documentDescribes":["SPDXRef-Package-LectureBoardAI"]\n}\n' "$commit" "$created_at" "${archive##*/}" "$archive_sha" >"$output_dir/SBOM.spdx.json" || die 'SBOM producer failed'
-  /usr/bin/printf '{\n  "schema":"lectureboard.no-fee-provenance.v1",\n  "repository":"akiyama709/lectureboard-ai",\n  "tag":"%s",\n  "tagObject":"%s",\n  "commit":"%s",\n  "bundleIdentifier":"%s",\n  "version":"%s",\n  "architecture":"arm64",\n  "configuration":"Release",\n  "signature":"ad hoc",\n  "hardenedRuntime":true,\n  "entitlements":{"keys":["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"],"canonicalJsonSha256":"2ef41daa1f5a828d3492e8e40efdd881b539169e6b1b95aad9be949c73de01b0"},\n  "toolchain":"%s",\n  "archive":{"name":"%s","sha256":"%s"},\n  "executableSha256":"%s",\n  "testResult":{"name":"%s","sha256":"%s"}\n}\n' "$tag" "$tag_object" "$commit" "$bundle_id" "$version" "$toolchain" "${archive##*/}" "$archive_sha" "$app_sha" "$release_test_evidence_name" "$test_sha" >"$output_dir/provenance.json" || die 'provenance producer failed'
+  /usr/bin/printf '{\n  "schema":"lectureboard.no-fee-provenance.v1",\n  "repository":"akiyama709/lectureboard-ai",\n  "tag":"%s",\n  "tagObject":"%s",\n  "commit":"%s",\n  "bundleIdentifier":"%s",\n  "version":"%s",\n  "architecture":"arm64",\n  "configuration":"Release",\n  "signature":"ad hoc",\n  "hardenedRuntime":true,\n  "entitlements":{"keys":["com.apple.security.device.audio-input"],"canonicalJsonSha256":"82052f68fb90e288554c67b08bdcb3403699ac396387a93d37f3b397c3e9f064"},\n  "toolchain":"%s",\n  "archive":{"name":"%s","sha256":"%s"},\n  "executableSha256":"%s",\n  "testResult":{"name":"%s","sha256":"%s"}\n}\n' "$tag" "$tag_object" "$commit" "$bundle_id" "$version" "$toolchain" "${archive##*/}" "$archive_sha" "$app_sha" "$release_test_evidence_name" "$test_sha" >"$output_dir/provenance.json" || die 'provenance producer failed'
   /usr/bin/python3 -I -m json.tool "$output_dir/SBOM.spdx.json" >/dev/null || die 'SBOM is not valid JSON'; /usr/bin/python3 -I -m json.tool "$output_dir/provenance.json" >/dev/null || die 'provenance is not valid JSON';
   sbom_sha="$(sha256 "$output_dir/SBOM.spdx.json")"; provenance_sha="$(sha256 "$output_dir/provenance.json")"
   /usr/bin/printf '%s  %s\n%s  %s\n%s  %s\n%s  %s\n' "$archive_sha" "${archive##*/}" "$test_sha" "$release_test_evidence_name" "$sbom_sha" 'SBOM.spdx.json' "$provenance_sha" 'provenance.json' >"$output_dir/SHA256SUMS" || die 'checksum producer failed'
@@ -2124,7 +2124,7 @@ verify_archive() {
   /usr/bin/python3 -I - "$provenance" <<'PY'
 import hashlib,json,sys
 d=json.load(open(sys.argv[1]))
-keys=["com.apple.security.automation.apple-events","com.apple.security.device.audio-input"]
+keys=["com.apple.security.device.audio-input"]
 e=d.get("entitlements")
 assert isinstance(e,dict) and set(e)=={"keys","canonicalJsonSha256"} and e["keys"]==keys
 canonical=json.dumps({key:True for key in keys},sort_keys=True,separators=(",",":"))

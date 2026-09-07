@@ -8,6 +8,7 @@ struct MainView: View {
   @EnvironmentObject private var model: AppModel
   @Environment(\.scenePhase) private var scenePhase
   @State private var sessionExportError: String?
+  @State private var lastScreenCapturePreflightGranted: Bool?
 
   var body: some View {
     NavigationSplitView {
@@ -37,10 +38,12 @@ struct MainView: View {
       }
     }
     .task {
+      let preflightGranted = model.permissionService.screenCaptureAccessGranted
+      lastScreenCapturePreflightGranted = preflightGranted
       await performScreenCaptureSetupAction(
         ScreenCaptureSetupPolicy.action(
           for: .viewAppeared(
-            preflightGranted: model.permissionService.screenCaptureAccessGranted
+            preflightGranted: preflightGranted
           )
         )
       )
@@ -48,11 +51,15 @@ struct MainView: View {
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
       Task { @MainActor in
+        let previousPreflightGranted = lastScreenCapturePreflightGranted
         model.recheckScreenCapturePermission()
+        let preflightGranted = model.permissionService.screenCaptureAccessGranted
+        lastScreenCapturePreflightGranted = preflightGranted
         await performScreenCaptureSetupAction(
           ScreenCaptureSetupPolicy.action(
             for: .sceneBecameActive(
-              preflightGranted: model.permissionService.screenCaptureAccessGranted
+              previousPreflightGranted: previousPreflightGranted,
+              preflightGranted: preflightGranted
             )
           )
         )
@@ -78,6 +85,7 @@ struct MainView: View {
     case .requestScreenCapturePermission:
       let granted = model.requestScreenCapturePermission()
       model.recheckScreenCapturePermission()
+      lastScreenCapturePreflightGranted = model.permissionService.screenCaptureAccessGranted
       await performScreenCaptureSetupAction(
         ScreenCaptureSetupPolicy.action(
           for: .permissionRequestCompleted(granted: granted)
@@ -148,23 +156,50 @@ struct MainView: View {
           Text("setup.noPowerPoint")
             .foregroundStyle(.secondary)
         } else {
-          Picker("setup.powerPointWindow", selection: $model.selectedPowerPointWindowID) {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("setup.powerPointWindow")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+
             ForEach(model.powerPointWindows) { window in
-              Text(window.title.isEmpty ? window.applicationName : window.title)
-                .tag(Optional(window.id))
+              let title = window.title.isEmpty ? window.applicationName : window.title
+              let isSelected = model.selectedPowerPointWindowID == window.id
+
+              Button {
+                model.selectedPowerPointWindowID = window.id
+              } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                  Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .accessibilityHidden(true)
+
+                  Text(title)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                  RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                )
+                .overlay {
+                  RoundedRectangle(cornerRadius: 7)
+                    .stroke(
+                      isSelected ? Color.accentColor.opacity(0.65) : Color.secondary.opacity(0.25),
+                      lineWidth: 1
+                    )
+                }
+              }
+              .buttonStyle(.plain)
+              .accessibilityLabel(Text(title))
+              .accessibilityAddTraits(isSelected ? .isSelected : [])
+              .help(title)
             }
           }
-          .labelsHidden()
           .frame(maxWidth: 500)
-          .onChange(of: model.selectedPowerPointWindowID) { oldValue, newValue in
-            guard oldValue != newValue else { return }
-            guard let sessionID = model.activeCaptureSessionID(for: oldValue) else {
-              return
-            }
-            Task {
-              await model.stopWindowCapture(ifCurrentSessionID: sessionID)
-            }
-          }
         }
 
         HStack(spacing: 10) {
@@ -184,8 +219,8 @@ struct MainView: View {
               preflightGranted: model.permissionService.screenCaptureAccessGranted
             )
           )
-          Button("capture.managedStart") {
-            Task { await model.startManagedSlideShowCapture() }
+          Button("capture.visualStart") {
+            Task { await model.startVisualWindowCapture() }
           }
           .buttonStyle(.borderedProminent)
           .disabled(
@@ -201,28 +236,17 @@ struct MainView: View {
           }
           .disabled(model.captureStatus == .stopped)
         }
-        Text("capture.managedStart.explanation")
+        Text("capture.visualStart.explanation")
           .font(.footnote)
           .foregroundStyle(.secondary)
-
-        DisclosureGroup("capture.diagnostic.title") {
-          VStack(alignment: .leading, spacing: 8) {
-            Button("capture.diagnostic.start") {
-              Task { await model.startWindowCapture() }
-            }
-            .disabled(
-              !CaptureControlPolicy.canStart(
-                screenCaptureAccessGranted:
-                  model.permissionService.screenCaptureAccessGranted,
-                hasSelectedWindow: model.selectedWindow != nil,
-                captureStatus: model.captureStatus
-              )
-            )
-            Text("capture.diagnostic.explanation")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-          .padding(.top, 6)
+      }
+      .onChange(of: model.selectedPowerPointWindowID) { oldValue, newValue in
+        guard oldValue != newValue else { return }
+        guard let sessionID = model.activeCaptureSessionID(for: oldValue) else {
+          return
+        }
+        Task {
+          await model.stopWindowCapture(ifCurrentSessionID: sessionID)
         }
       }
       .padding(.vertical, 8)
@@ -350,22 +374,27 @@ struct MainView: View {
 
   @ViewBuilder
   private var slideIdentityStatusLabel: some View {
-    switch model.slideIdentityState {
-    case .unavailable:
-      Label("capture.slideIdentity.unavailable", systemImage: "questionmark.circle")
-        .foregroundStyle(.secondary)
-    case .establishing:
-      Label("capture.slideIdentity.establishing", systemImage: "ellipsis.circle")
-        .foregroundStyle(.secondary)
-    case .identified:
-      Label("capture.slideIdentity.identified", systemImage: "checkmark.seal")
+    if model.visualSlideTrackingActive {
+      Label("capture.visualTracking", systemImage: "eye")
         .foregroundStyle(.green)
-    case .interrupted:
-      Label(
-        "capture.slideIdentity.interrupted",
-        systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
-      )
-      .foregroundStyle(.orange)
+    } else {
+      switch model.slideIdentityState {
+      case .unavailable:
+        Label("capture.slideIdentity.unavailable", systemImage: "questionmark.circle")
+          .foregroundStyle(.secondary)
+      case .establishing:
+        Label("capture.slideIdentity.establishing", systemImage: "ellipsis.circle")
+          .foregroundStyle(.secondary)
+      case .identified:
+        Label("capture.slideIdentity.identified", systemImage: "checkmark.seal")
+          .foregroundStyle(.green)
+      case .interrupted:
+        Label(
+          "capture.slideIdentity.interrupted",
+          systemImage: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90"
+        )
+        .foregroundStyle(.orange)
+      }
     }
   }
 

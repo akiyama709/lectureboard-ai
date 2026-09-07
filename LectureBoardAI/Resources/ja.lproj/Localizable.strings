@@ -7,7 +7,7 @@
 "setup.request" = "アクセスを許可";
 "setup.requestScreen" = "画面収録を許可";
 "setup.refresh" = "PowerPointウィンドウを再検出";
-"setup.noPowerPoint" = "表示中のPowerPointウィンドウが見つかりません．";
+"setup.noPowerPoint" = "PowerPointウィンドウが見つかりません．PPTX又はスライドショーを開いて再検出してください．";
 "setup.language" = "講義言語";
 "setup.japanese" = "日本語";
 "setup.english" = "英語";
@@ -19,7 +19,7 @@
 "status.ready" = "準備完了";
 "status.listening" = "認識中";
 "status.overlay" = "オーバーレイ表示中";
-"status.supportedWorkflow" = "対応する利用方法：PowerPoint資料1件，ウィンドウ表示のスライドショー，ディスプレイ1台，講義言語1種類．文字起こしを始める前に，表示中のスライド面を確定してください．";
+"status.supportedWorkflow" = "PowerPointを操作せず，選択した画面の変化と発話から板書します．通常の全画面又はウィンドウ表示で利用できます．";
 "diagnostics.title" = "実行時診断";
 "diagnostics.lifecycle" = "アプリ／文字起こし";
 "diagnostics.applicationLifecycle" = "アプリ";
@@ -65,6 +65,8 @@
 "capture.title" = "選択ウィンドウの取得";
 "capture.managedStart" = "管理されたスライドショーを開始";
 "capture.managedStart.explanation" = "明示的なAutomation許可後に新しいPowerPointスライドショーを開始し，短い可逆的な役割確認を行います．既存のスライドショーは採用しません．";
+"capture.visualStart" = "この画面で板書を開始";
+"capture.visualStart.explanation" = "PowerPoint側の開始方法は問いません．スライドショーを後から開いた場合は再検出し，対象画面を選び直してください．PowerPointは変更も終了もしません．";
 "capture.diagnostic.title" = "高度な取得診断";
 "capture.diagnostic.start" = "選択ウィンドウだけを観測";
 "capture.diagnostic.explanation" = "診断モードはスライドショーを開始せず，意味的にも結び付けないため，本番用の板書を表示できません．";
@@ -80,6 +82,7 @@
 "capture.slideIdentity.establishing" = "独立したスライド識別信号を安定化しています";
 "capture.slideIdentity.identified" = "独立したスライド識別信号が安定しました";
 "capture.slideIdentity.interrupted" = "スライド識別の連続性が中断しました";
+"capture.visualTracking" = "画面変化によるスライド追跡を使用しています";
 "capture.slideIdentityFrameSync.waiting" = "スライド識別境界後の新しいフレームを待っています";
 "capture.slideIdentityFrameSync.synchronized" = "識別境界後の新しいフレームを受理しました";
 "capture.slideIdentityFrameSync.timedOut" = "新しいフレームの待機が時間切れになり，解析を停止しています";

@@ -7,7 +7,7 @@
 "setup.request" = "Request access";
 "setup.requestScreen" = "Allow screen recording";
 "setup.refresh" = "Refresh PowerPoint windows";
-"setup.noPowerPoint" = "No visible PowerPoint window was found.";
+"setup.noPowerPoint" = "No PowerPoint window was found. Open a PPTX or slide show, then refresh.";
 "setup.language" = "Lecture language";
 "setup.japanese" = "Japanese";
 "setup.english" = "English";
@@ -19,7 +19,7 @@
 "status.ready" = "Ready";
 "status.listening" = "Listening";
 "status.overlay" = "Overlay visible";
-"status.supportedWorkflow" = "Supported workflow: one PowerPoint presentation, a windowed slide show, one display, and one lecture language. Confirm the visible slide area before starting transcription.";
+"status.supportedWorkflow" = "LectureBoard observes the selected PowerPoint view and speech without controlling PowerPoint. Standard full-screen and windowed slide shows are supported.";
 "diagnostics.title" = "Runtime diagnostics";
 "diagnostics.lifecycle" = "Application / transcription";
 "diagnostics.applicationLifecycle" = "Application";
@@ -65,6 +65,8 @@
 "capture.title" = "Selected-window capture";
 "capture.managedStart" = "Start managed slide show";
 "capture.managedStart.explanation" = "Starts a new PowerPoint slide show after explicit Automation consent, then performs a brief reversible role check. Existing slide shows are not adopted.";
+"capture.visualStart" = "Start board on this view";
+"capture.visualStart.explanation" = "Use any normal PowerPoint start order. If you open the slide show later, refresh and select it. LectureBoard never changes or closes PowerPoint.";
 "capture.diagnostic.title" = "Advanced capture diagnostic";
 "capture.diagnostic.start" = "Observe the selected window only";
 "capture.diagnostic.explanation" = "Diagnostic mode does not start or semantically bind a slide show, so it cannot display production board output.";
@@ -80,6 +82,7 @@
 "capture.slideIdentity.establishing" = "Stabilizing independent slide-identity signal";
 "capture.slideIdentity.identified" = "Independent slide-identity signal is stable";
 "capture.slideIdentity.interrupted" = "Slide-identity continuity was interrupted";
+"capture.visualTracking" = "Tracking slides from stable visual changes";
 "capture.slideIdentityFrameSync.waiting" = "Waiting for a fresh frame after the slide-identity boundary";
 "capture.slideIdentityFrameSync.synchronized" = "Fresh post-identity frame accepted";
 "capture.slideIdentityFrameSync.timedOut" = "Fresh-frame wait timed out; analysis remains paused";

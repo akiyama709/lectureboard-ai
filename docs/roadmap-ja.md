@@ -59,7 +59,7 @@
 
 ## M4：対応範囲の実機受入
 
-- 資料1件，windowed slide show，display 1台のmanaged講義経路を完成する
+- 資料1件，通常の全画面又はwindow表示slide show，display 1台の読取専用visual講義経路を完成する
 - 利用者確認式canvas，可視overlay alignment，click-through mouse priority及びpublic-scene exportを検証する
 - 正常停止，取消し，許可拒否，window終了及びcapture中断時のcleanupを検証する
 - 元PowerPoint fileが不変であることを確認する
@@ -72,7 +72,7 @@
 
 - 代表的な日本語及び英語資料を別sessionで反復検証する
 - OCR，図形，座標，占有領域及び板書有用性を校正する
-- managed開始，正常停止，取消し及び対応範囲の復旧経路を反復検証する
+- 正確な画面選択，板書開始，取得停止及び対応範囲の復旧経路をPowerPointを自動操作せず反復検証する
 - microphone，透明overlay及びmouse input非干渉を検証する
 - プライバシー，アクセシビリティ，ライセンス及び第三者表示を確認する
 - 利用手順及び既知の制約を公開可能な形で整備する
