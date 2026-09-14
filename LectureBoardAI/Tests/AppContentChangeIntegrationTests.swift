@@ -869,7 +869,7 @@ struct AppContentChangeIntegrationTests {
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    receiveConfirmedProposal("Current occupancy means proposals may resume.", on: model)
+    receiveConfirmedProposal("Current occupancy means proposals resume.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
@@ -944,7 +944,7 @@ struct AppContentChangeIntegrationTests {
       occupiedRegions: boardProposalOccupiedRegions()
     )
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    receiveConfirmedProposal("Validated evidence means proposals may resume.", on: model)
+    receiveConfirmedProposal("Validated evidence means proposals resume.", on: model)
     #expect(!model.boardScene.elements.isEmpty)
 
     model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)

@@ -96,10 +96,66 @@ private enum SlideAnalysisOrigin: Equatable {
 private struct BoardCandidateContext {
   var transcriptSegments: [TranscriptSegment] = []
   var intents: [BoardIntent] = []
+  var unplacedPublicIntents: [BoardIntent] = []
+
+  var engineExistingIntents: [BoardIntent] {
+    intents + unplacedPublicIntents
+  }
+
+  @discardableResult
+  mutating func storeLatest(_ segment: TranscriptSegment) -> Bool {
+    guard segment.startTime.isFinite, segment.endTime.isFinite,
+      segment.startTime >= 0, segment.endTime >= segment.startTime
+    else {
+      return false
+    }
+    if let index = transcriptSegments.lastIndex(where: { $0.id == segment.id }) {
+      guard segment.endTime >= transcriptSegments[index].endTime else { return false }
+      transcriptSegments.remove(at: index)
+    }
+    transcriptSegments.append(segment)
+    return true
+  }
 
   mutating func reset() {
     transcriptSegments.removeAll(keepingCapacity: true)
     intents.removeAll(keepingCapacity: true)
+    unplacedPublicIntents.removeAll(keepingCapacity: true)
+  }
+
+  mutating func retainUnplacedPublicIntents(
+    _ pending: [BoardIntent],
+    maximumCount: Int
+  ) {
+    guard maximumCount > 0 else {
+      unplacedPublicIntents.removeAll(keepingCapacity: true)
+      return
+    }
+    unplacedPublicIntents = Array(pending.suffix(maximumCount))
+  }
+}
+
+private struct BoardIntentVisibleKey: Hashable {
+  let kind: BoardIntentKind
+  let title: String
+  let items: [String]
+
+  init(_ intent: BoardIntent) {
+    kind = intent.kind
+    title = Self.canonical(intent.title)
+    items = intent.items.map(Self.canonical)
+  }
+
+  private static func canonical(_ text: String) -> String {
+    let folded = text.folding(
+      options: [.caseInsensitive, .widthInsensitive],
+      locale: Locale(identifier: "en_US_POSIX")
+    )
+    return
+      folded
+      .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .trimmingCharacters(in: CharacterSet(charactersIn: "。．.!！?？"))
   }
 }
 
@@ -116,6 +172,32 @@ private struct PendingStablePartialTranscriptCommit {
   var observation: TranscriptionObservation
 }
 
+private enum BoardRecognitionProvenance: Equatable {
+  case stablePartial
+  case providerFinal
+
+  var isProvisional: Bool { self == .stablePartial }
+}
+
+private struct PendingBoardSegment {
+  let segment: TranscriptSegment
+  /// The Apple Speech segment whose cumulative hypothesis produced `segment`. Incremental stable
+  /// finals retain this provider identity and cumulative evidence so a later provider final can
+  /// atomically supersede every pending hypothesis from the same cycle.
+  let providerSourceSegmentID: UUID
+  let provenance: BoardRecognitionProvenance
+  let sourceMachTime: UInt64
+  let transcriptionOperationID: TranscriptionOperationID
+  let captureOperationID: CaptureOperationID
+  let windowID: CGWindowID
+  let slideIdentityGeneration: Int
+  let slideCanvasGeneration: Int
+  let analysisGeneration: Int
+  let slideIdentityBoundaryMachTime: UInt64?
+  let slideIdentityFrameSynchronizationMachTime: UInt64?
+  let visualFreshnessBoundaryMachTime: UInt64?
+}
+
 private struct RenderedProductionOverlayState: Equatable {
   let captureOperationID: CaptureOperationID
   let windowID: CGWindowID
@@ -126,6 +208,9 @@ private struct RenderedProductionOverlayState: Equatable {
 
 @MainActor
 final class AppModel: ObservableObject {
+  private static let maximumPendingBoardSegments = 8
+  private static let maximumUnplacedPublicBoardIntents = 8
+
   private static let maximumFreshContentSampleProviderBusyDeferrals = 10
 
   enum Status: Equatable {
@@ -251,7 +336,7 @@ final class AppModel: ObservableObject {
   private let stablePartialTranscriptPauseDelay: Duration
   private let stablePartialTranscriptPauseWaiter: any StablePartialTranscriptPauseWaiting
   private let boardEngine = ContextualBoardEngine()
-  private let sceneComposer = BoardSceneComposer()
+  private let sceneComposer: BoardSceneComposer
   private var stableFrameDetector = StableFrameDetector()
   private var stableContentChangeDetector = StableContentChangeDetector()
   private var coarseRevisionEvidence: CoarseRevisionEvidence?
@@ -293,9 +378,14 @@ final class AppModel: ObservableObject {
   private var stablePartialTranscriptCommitter = StablePartialTranscriptCommitter()
   private var stablePartialTranscriptPauseTask: Task<Void, Never>?
   private var pendingStablePartialTranscriptCommit: PendingStablePartialTranscriptCommit?
+  private var pendingBoardSegments: [PendingBoardSegment] = []
+  private var provisionalPartialBoardIntentIDs: Set<UUID> = []
+  private var lastAcceptedTranscriptionSourceID: UUID?
+  private var precedingTranscriptionSourceIDForCurrentCycle: UUID?
   private var transcriptionOperationGate = TranscriptionOperationGate()
   private var transcriptionRequestedByUser = false
   private var automaticTranscriptionResumeTask: Task<Void, Never>?
+  private var automaticTranscriptionResumeToken: UUID?
   private var applicationStatusErrorSource: ApplicationStatusErrorSource?
   private var overlayDemoSceneIsLoaded = false
   private var productionOverlayIsManuallySuppressed = false
@@ -316,6 +406,7 @@ final class AppModel: ObservableObject {
     slideIdentityProvider: any PowerPointSlideIdentityProviding =
       UnavailablePowerPointSlideIdentityProvider(),
     slideVisionAnalyzer: any SlideVisualAnalyzing = SlideVisionAnalyzer(),
+    sceneComposer: BoardSceneComposer = BoardSceneComposer(),
     slideCanvasConfirmationMode: SlideCanvasConfirmationMode = .userConfirmed,
     slideIdentityFrameTimeout: Duration = .seconds(2),
     slideIdentityFrameTimeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
@@ -343,6 +434,7 @@ final class AppModel: ObservableObject {
     self.speechProvider = transcriptionProvider
     self.slideIdentityProvider = slideIdentityProvider
     self.slideVisionAnalyzer = slideVisionAnalyzer
+    self.sceneComposer = sceneComposer
     self.slideCanvasConfirmationMode = slideCanvasConfirmationMode
     self.slideIdentityFrameTimeout = max(slideIdentityFrameTimeout, .zero)
     self.slideIdentityFrameTimeoutWaiter = slideIdentityFrameTimeoutWaiter
@@ -402,6 +494,14 @@ final class AppModel: ObservableObject {
 
   var publicBoardElementCount: Int {
     boardScene.elements.count
+  }
+
+  var committedBoardIntentCount: Int {
+    boardCandidateContext.intents.count
+  }
+
+  var pendingUnplacedBoardIntentCount: Int {
+    boardCandidateContext.unplacedPublicIntents.count
   }
 
   var productionConfirmedBoardElementCount: Int {
@@ -1093,7 +1193,10 @@ final class AppModel: ObservableObject {
     transcriptionRequestedByUser = false
     automaticTranscriptionResumeTask?.cancel()
     automaticTranscriptionResumeTask = nil
+    automaticTranscriptionResumeToken = nil
     cancelPendingStablePartialTranscriptCommit()
+    pendingBoardSegments.removeAll(keepingCapacity: true)
+    boardCandidateContext.unplacedPublicIntents.removeAll(keepingCapacity: true)
     guard let operationID = transcriptionOperationGate.activeOperationID else {
       if applicationStatusErrorSource == nil || applicationStatusErrorSource == .transcription {
         status = .ready
@@ -1141,6 +1244,9 @@ final class AppModel: ObservableObject {
       return
     }
     transcriptionRequestedByUser = false
+    pendingBoardSegments.removeAll(keepingCapacity: true)
+    discardProvisionalPartialBoardWork()
+    boardCandidateContext.unplacedPublicIntents.removeAll(keepingCapacity: true)
     switch event.outcome {
     case .gracefulStopCompleted:
       if liveTranscriptPhase != .final {
@@ -1162,22 +1268,82 @@ final class AppModel: ObservableObject {
     transcriptionOperationID: TranscriptionOperationID?
   ) {
     let segment = observation.segment
+    var boardSegment = segment
+    if lastAcceptedTranscriptionSourceID != segment.id {
+      precedingTranscriptionSourceIDForCurrentCycle = lastAcceptedTranscriptionSourceID
+      lastAcceptedTranscriptionSourceID = segment.id
+    }
     liveTranscript = segment.text
     if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       liveTranscriptPhase = .empty
     } else {
       liveTranscriptPhase = segment.isFinal ? .final : .partial
     }
+    if let precedingSourceID = precedingTranscriptionSourceIDForCurrentCycle {
+      let precedingPending = pendingBoardSegments.last(where: {
+        $0.providerSourceSegmentID == precedingSourceID
+      })
+      let precedingSegment =
+        boardCandidateContext.transcriptSegments.last(where: {
+          $0.id == precedingSourceID
+        }) ?? precedingPending?.segment
+      let precedingIntentCount =
+        (boardCandidateContext.intents + boardCandidateContext.unplacedPublicIntents).filter {
+          $0.sourceSegmentIDs.first == precedingSourceID
+        }.count
+      if let precedingSegment,
+        precedingIntentCount <= 1,
+        boardEngine.canRetractAcrossProviderCycle(
+          previousText: precedingSegment.text,
+          correction: segment
+        ),
+        discardBoardWork(sourceSegmentID: precedingSourceID)
+      {
+        boardSegment =
+          boardEngine.replacementSegmentAfterCrossCycleRetraction(segment) ?? segment
+        precedingTranscriptionSourceIDForCurrentCycle = nil
+      }
+    }
+    let invalidatedSameSourceBoardWork = invalidateSupersededSameSourceBoardWork(
+      for: observation,
+      transcriptionOperationID: transcriptionOperationID
+    )
+    if invalidatedSameSourceBoardWork {
+      // Reconsider the entire current hypothesis after the bounded pause. This avoids publishing a
+      // previously safe prefix when its append-only continuation retracts, questions, or qualifies
+      // it, while still allowing a safe cumulative hypothesis to be admitted from fresh evidence.
+      stablePartialTranscriptCommitter.reset()
+    }
     if segment.isFinal {
+      precedingTranscriptionSourceIDForCurrentCycle = nil
       cancelPendingStablePartialTranscriptCommit()
+      reconcileProviderFinalWithProvisionalBoardWork(segment)
       _ = stablePartialTranscriptCommitter.observe(segment)
-      processBoardSegment(segment, sourceMachTime: observation.sourceMachTime)
+      processBoardSegment(
+        boardSegment,
+        providerSourceSegmentID: segment.id,
+        sourceMachTime: observation.sourceMachTime,
+        transcriptionOperationID: transcriptionOperationID,
+        provenance: .providerFinal
+      )
       return
     }
 
     if let committedPartial = stablePartialTranscriptCommitter.observe(segment) {
       cancelPendingStablePartialTranscriptCommit()
-      processBoardSegment(committedPartial, sourceMachTime: observation.sourceMachTime)
+      processBoardSegment(
+        committedPartial,
+        providerSourceSegmentID: segment.id,
+        sourceMachTime: observation.sourceMachTime,
+        transcriptionOperationID: transcriptionOperationID,
+        provenance: .stablePartial
+      )
+      if let transcriptionOperationID {
+        scheduleStablePartialTranscriptCommit(
+          observation,
+          transcriptionOperationID: transcriptionOperationID
+        )
+      }
       return
     }
 
@@ -1191,34 +1357,188 @@ final class AppModel: ObservableObject {
     }
   }
 
+  private func invalidateSupersededSameSourceBoardWork(
+    for observation: TranscriptionObservation,
+    transcriptionOperationID: TranscriptionOperationID?
+  ) -> Bool {
+    let partial = observation.segment
+    guard !partial.isFinal,
+      let transcriptionOperationID,
+      transcriptionOperationGate.accepts(transcriptionOperationID),
+      transcriptSourceIsCurrent(observation.sourceMachTime)
+    else { return false }
+
+    var didInvalidate = false
+    pendingBoardSegments.removeAll { pending in
+      let shouldRemove =
+        pending.transcriptionOperationID == transcriptionOperationID
+        && pending.providerSourceSegmentID == partial.id
+        && observation.sourceMachTime >= pending.sourceMachTime
+        && !boardEngine.canRetainProvisionalBoardWork(
+          previousText: pending.segment.text,
+          currentText: partial.text
+        )
+      didInvalidate = didInvalidate || shouldRemove
+      return shouldRemove
+    }
+
+    guard
+      let previousSemanticSegment = boardCandidateContext.transcriptSegments.last(where: {
+        $0.id == partial.id
+      }),
+      partial.startTime.isFinite,
+      partial.endTime.isFinite,
+      partial.startTime >= 0,
+      partial.endTime >= partial.startTime,
+      partial.endTime >= previousSemanticSegment.endTime,
+      !boardEngine.canRetainProvisionalBoardWork(
+        previousText: previousSemanticSegment.text,
+        currentText: partial.text
+      )
+    else { return didInvalidate }
+
+    let removedProvisionalWork = discardProvisionalPartialBoardWork(
+      sourceSegmentID: partial.id
+    )
+    let removedStaleEvidence = discardBoardWork(
+      intentIDs: [],
+      transcriptSourceIDs: [partial.id]
+    )
+    return removedProvisionalWork || removedStaleEvidence || didInvalidate
+  }
+
+  private func reconcileProviderFinalWithProvisionalBoardWork(_ finalSegment: TranscriptSegment) {
+    let sourceID = finalSegment.id
+    let provisionalIntents =
+      (boardCandidateContext.intents + boardCandidateContext.unplacedPublicIntents)
+      .filter {
+        provisionalPartialBoardIntentIDs.contains($0.id)
+          && $0.sourceSegmentIDs.contains(sourceID)
+      }
+    guard !provisionalIntents.isEmpty else { return }
+
+    let provisionalIntentIDs = Set(provisionalIntents.map(\.id))
+    if let previousSegment = boardCandidateContext.transcriptSegments.last(where: {
+      $0.id == sourceID
+    }),
+      boardEngine.canRetainProvisionalBoardWork(
+        previousText: previousSegment.text,
+        currentText: finalSegment.text
+      )
+    {
+      // The provider final is semantically equivalent or a safe cumulative continuation. Promote
+      // the already visible work without rebuilding the scene, which avoids punctuation-only
+      // flicker while still allowing a later final-only unit to be appended normally.
+      provisionalPartialBoardIntentIDs.subtract(provisionalIntentIDs)
+      return
+    }
+
+    discardProvisionalPartialBoardWork(sourceSegmentID: sourceID)
+  }
+
+  @discardableResult
+  private func discardProvisionalPartialBoardWork(sourceSegmentID: UUID? = nil) -> Bool {
+    let provisionalIntents =
+      (boardCandidateContext.intents + boardCandidateContext.unplacedPublicIntents)
+      .filter { intent in
+        provisionalPartialBoardIntentIDs.contains(intent.id)
+          && sourceSegmentID.map { intent.sourceSegmentIDs.contains($0) } ?? true
+      }
+    let provisionalIntentIDs = Set(provisionalIntents.map(\.id))
+    guard !provisionalIntentIDs.isEmpty else { return false }
+
+    let provisionalSourceIDs = Set(provisionalIntents.flatMap(\.sourceSegmentIDs))
+    return discardBoardWork(
+      intentIDs: provisionalIntentIDs,
+      transcriptSourceIDs: sourceSegmentID.map { Set([$0]) } ?? provisionalSourceIDs
+    )
+  }
+
+  @discardableResult
+  private func discardBoardWork(sourceSegmentID: UUID) -> Bool {
+    var removedPending = false
+    pendingBoardSegments.removeAll { pending in
+      let shouldRemove = pending.providerSourceSegmentID == sourceSegmentID
+      removedPending = removedPending || shouldRemove
+      return shouldRemove
+    }
+    let intentIDs = Set(
+      (boardCandidateContext.intents + boardCandidateContext.unplacedPublicIntents)
+        .filter { $0.sourceSegmentIDs.first == sourceSegmentID }
+        .map(\.id)
+    )
+    let removedIntent = discardBoardWork(
+      intentIDs: intentIDs,
+      transcriptSourceIDs: [sourceSegmentID]
+    )
+    return removedPending || removedIntent
+  }
+
+  @discardableResult
+  private func discardBoardWork(
+    intentIDs: Set<UUID>,
+    transcriptSourceIDs: Set<UUID>
+  ) -> Bool {
+    var removedTranscript = false
+    boardCandidateContext.transcriptSegments.removeAll { segment in
+      let shouldRemove = transcriptSourceIDs.contains(segment.id)
+      removedTranscript = removedTranscript || shouldRemove
+      return shouldRemove
+    }
+    guard !intentIDs.isEmpty else { return removedTranscript }
+    boardCandidateContext.intents.removeAll { intentIDs.contains($0.id) }
+    boardCandidateContext.unplacedPublicIntents.removeAll {
+      intentIDs.contains($0.id)
+    }
+    provisionalPartialBoardIntentIDs.subtract(intentIDs)
+
+    var reconciledScene = boardScene
+    reconciledScene.elements.removeAll { element in
+      guard let sourceIntentID = element.sourceIntentID else { return false }
+      return intentIDs.contains(sourceIntentID)
+    }
+    guard reconciledScene != boardScene else { return true }
+    boardScene = reconciledScene
+    if reconciledScene.elements.isEmpty,
+      lectureSessionScenes.last?.slideNumber == reconciledScene.slideNumber
+    {
+      lectureSessionScenes.removeLast()
+    }
+    boardSceneAnalysisGeneration = analysisGeneration
+    renderAlignedOverlayIfPossible()
+    return true
+  }
+
   private func processBoardSegment(
     _ segment: TranscriptSegment,
-    sourceMachTime: UInt64
+    providerSourceSegmentID: UUID,
+    sourceMachTime: UInt64,
+    transcriptionOperationID: TranscriptionOperationID?,
+    provenance: BoardRecognitionProvenance,
+    allowDeferral: Bool = true
   ) {
     guard segment.isFinal else { return }
+    guard transcriptSourceIsCurrent(sourceMachTime) else { return }
     guard
       slideCanvasStatus == .confirmed,
       slideAnalysisStatus == .ready,
       !slideAnalysisNeedsRefresh,
       latestCompletedAnalysisGeneration == analysisGeneration
-    else { return }
+    else {
+      if allowDeferral {
+        retainPendingBoardSegment(
+          segment,
+          providerSourceSegmentID: providerSourceSegmentID,
+          sourceMachTime: sourceMachTime,
+          transcriptionOperationID: transcriptionOperationID,
+          provenance: provenance
+        )
+      }
+      return
+    }
     guard transcriptGroundingContextIsUsable else {
       return
     }
-    guard
-      SlideIdentityTranscriptBoundary.accepts(
-        sourceMachTime: sourceMachTime,
-        after: latestSlideIdentityBoundaryMachTime
-      ),
-      SlideIdentityTranscriptBoundary.accepts(
-        sourceMachTime: sourceMachTime,
-        after: latestSlideIdentityFrameSynchronizationMachTime
-      ),
-      SlideIdentityTranscriptBoundary.accepts(
-        sourceMachTime: sourceMachTime,
-        after: latestVisualFreshnessBoundaryMachTime
-      )
-    else { return }
 
     guard
       let slideAnalysis = latestSlideAnalysis,
@@ -1227,7 +1547,19 @@ final class AppModel: ObservableObject {
       return
     }
 
-    boardCandidateContext.transcriptSegments.append(segment)
+    if let previousSameSource = boardCandidateContext.transcriptSegments.last(where: {
+      $0.id == providerSourceSegmentID
+    }),
+      !boardEngine.canRetainProvisionalBoardWork(
+        previousText: previousSameSource.text,
+        currentText: segment.text
+      )
+    {
+      boardCandidateContext.unplacedPublicIntents.removeAll {
+        $0.sourceSegmentIDs.contains(providerSourceSegmentID)
+      }
+    }
+    guard boardCandidateContext.storeLatest(segment) else { return }
     let fallbackTitle =
       selectedLanguage.rawValue.hasPrefix("ja") ? "現在のスライド" : "Current slide"
     let analysisTitle = slideAnalysis.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1242,24 +1574,216 @@ final class AppModel: ObservableObject {
       languages: [selectedLanguage]
     )
 
+    let recentSegments = Array(boardCandidateContext.transcriptSegments.suffix(8))
+    let currentSourceFirst =
+      recentSegments.filter { $0.id == providerSourceSegmentID }
+      + recentSegments.filter { $0.id != providerSourceSegmentID }
+    let engineExistingIntents = boardCandidateContext.engineExistingIntents
     let proposals = boardEngine.propose(
       slide: slide,
-      recentSegments: Array(boardCandidateContext.transcriptSegments.suffix(8)),
-      existingIntents: boardCandidateContext.intents
+      recentSegments: currentSourceFirst,
+      existingIntents: engineExistingIntents,
+      candidateSourceSegmentIDs: [providerSourceSegmentID]
+    ).filter {
+      // Only the current observation can produce a candidate, while all recent observations remain
+      // available as repetition evidence. Older evicted sources therefore cannot consume the
+      // bounded result before the current repeated assertion is promoted.
+      $0.sourceSegmentIDs.contains(providerSourceSegmentID)
+    }
+    let retainedUnplacedIntents = boardCandidateContext.unplacedPublicIntents
+    let intentsToCompose = deduplicatedBoardIntentsPreferringLatest(
+      retainedUnplacedIntents + proposals
     )
-    guard !proposals.isEmpty else { return }
+    guard !intentsToCompose.isEmpty else {
+      boardCandidateContext.retainUnplacedPublicIntents(
+        [],
+        maximumCount: Self.maximumUnplacedPublicBoardIntents
+      )
+      return
+    }
 
-    boardCandidateContext.intents.append(contentsOf: proposals)
-    let nextBoardScene = sceneComposer.append(
-      intents: proposals,
+    let composition = sceneComposer.appending(
+      intents: intentsToCompose,
       to: boardScene,
       slideOccupied: slide.occupiedRegions
     )
-    guard nextBoardScene != boardScene else { return }
+    applyBoardComposition(
+      composition,
+      provisionalSourceSegmentID: provenance.isProvisional ? providerSourceSegmentID : nil
+    )
+  }
 
-    boardScene = nextBoardScene
+  private func applyBoardComposition(
+    _ composition: BoardSceneCompositionResult,
+    provisionalSourceSegmentID: UUID? = nil
+  ) {
+    var committedIntentIDs = Set(boardCandidateContext.intents.map(\.id))
+    for intent in composition.placedIntents where committedIntentIDs.insert(intent.id).inserted {
+      boardCandidateContext.intents.append(intent)
+    }
+    boardCandidateContext.retainUnplacedPublicIntents(
+      composition.unplacedIntents,
+      maximumCount: Self.maximumUnplacedPublicBoardIntents
+    )
+    if let provisionalSourceSegmentID {
+      provisionalPartialBoardIntentIDs.formUnion(
+        (composition.placedIntents + composition.unplacedIntents)
+          .filter { $0.sourceSegmentIDs.contains(provisionalSourceSegmentID) }
+          .map(\.id)
+      )
+    }
+    let retainedIntentIDs = Set(
+      (boardCandidateContext.intents + boardCandidateContext.unplacedPublicIntents).map(\.id)
+    )
+    provisionalPartialBoardIntentIDs.formIntersection(retainedIntentIDs)
+    guard composition.scene != boardScene else { return }
+
+    boardScene = composition.scene
     boardSceneAnalysisGeneration = analysisGeneration
     renderAlignedOverlayIfPossible()
+  }
+
+  private func deduplicatedBoardIntentsPreferringLatest(
+    _ intents: [BoardIntent]
+  ) -> [BoardIntent] {
+    var seen: Set<BoardIntentVisibleKey> = []
+    var reversedUnique: [BoardIntent] = []
+    for intent in intents.reversed() where seen.insert(BoardIntentVisibleKey(intent)).inserted {
+      reversedUnique.append(intent)
+    }
+    return reversedUnique.reversed()
+  }
+
+  private func retryUnplacedBoardIntentsIfPossible() {
+    guard
+      slideCanvasStatus == .confirmed,
+      slideAnalysisStatus == .ready,
+      !slideAnalysisNeedsRefresh,
+      latestCompletedAnalysisGeneration == analysisGeneration,
+      transcriptGroundingContextIsUsable,
+      let slideAnalysis = latestSlideAnalysis,
+      !slideAnalysis.occupiedRegions.isEmpty,
+      !boardCandidateContext.unplacedPublicIntents.isEmpty
+    else { return }
+
+    let composition = sceneComposer.appending(
+      intents: boardCandidateContext.unplacedPublicIntents,
+      to: boardScene,
+      slideOccupied: slideAnalysis.occupiedRegions
+    )
+    applyBoardComposition(composition)
+  }
+
+  private func transcriptSourceIsCurrent(_ sourceMachTime: UInt64) -> Bool {
+    SlideIdentityTranscriptBoundary.accepts(
+      sourceMachTime: sourceMachTime,
+      after: latestSlideIdentityBoundaryMachTime
+    )
+      && SlideIdentityTranscriptBoundary.accepts(
+        sourceMachTime: sourceMachTime,
+        after: latestSlideIdentityFrameSynchronizationMachTime
+      )
+      && SlideIdentityTranscriptBoundary.accepts(
+        sourceMachTime: sourceMachTime,
+        after: latestVisualFreshnessBoundaryMachTime
+      )
+  }
+
+  private func retainPendingBoardSegment(
+    _ segment: TranscriptSegment,
+    providerSourceSegmentID: UUID,
+    sourceMachTime: UInt64,
+    transcriptionOperationID: TranscriptionOperationID?,
+    provenance: BoardRecognitionProvenance
+  ) {
+    guard
+      transcriptionRequestedByUser,
+      let transcriptionOperationID,
+      transcriptionOperationGate.accepts(transcriptionOperationID),
+      captureStatus == .capturing,
+      let activeCaptureSessionID,
+      let activeCaptureWindowID,
+      activeCaptureSelectionIsConsistent
+    else { return }
+    let sameSourcePendingSegments = pendingBoardSegments.filter {
+      $0.providerSourceSegmentID == providerSourceSegmentID
+    }
+    if let newestSameSource = sameSourcePendingSegments.max(by: {
+      $0.sourceMachTime < $1.sourceMachTime
+    }) {
+      guard
+        newestSameSource.transcriptionOperationID == transcriptionOperationID,
+        sourceMachTime >= newestSameSource.sourceMachTime
+      else { return }
+      if provenance.isProvisional,
+        sameSourcePendingSegments.contains(where: {
+          $0.segment == segment && $0.sourceMachTime == sourceMachTime
+        })
+      {
+        return
+      }
+      pendingBoardSegments.removeAll {
+        $0.providerSourceSegmentID == providerSourceSegmentID
+      }
+    }
+
+    pendingBoardSegments.append(
+      PendingBoardSegment(
+        segment: segment,
+        providerSourceSegmentID: providerSourceSegmentID,
+        provenance: provenance,
+        sourceMachTime: sourceMachTime,
+        transcriptionOperationID: transcriptionOperationID,
+        captureOperationID: activeCaptureSessionID,
+        windowID: activeCaptureWindowID,
+        slideIdentityGeneration: slideIdentityGeneration,
+        slideCanvasGeneration: slideCanvasGeneration,
+        analysisGeneration: analysisGeneration,
+        slideIdentityBoundaryMachTime: latestSlideIdentityBoundaryMachTime,
+        slideIdentityFrameSynchronizationMachTime: latestSlideIdentityFrameSynchronizationMachTime,
+        visualFreshnessBoundaryMachTime: latestVisualFreshnessBoundaryMachTime
+      )
+    )
+    if pendingBoardSegments.count > Self.maximumPendingBoardSegments {
+      if let oldestNonPriorityIndex = pendingBoardSegments.firstIndex(where: {
+        !boardEngine.shouldPrioritizePendingAnalysis($0.segment)
+      }) {
+        pendingBoardSegments.remove(at: oldestNonPriorityIndex)
+      } else {
+        pendingBoardSegments.removeFirst()
+      }
+    }
+  }
+
+  private func replayPendingBoardSegmentsIfCurrent() {
+    let pendingSegments = pendingBoardSegments
+    pendingBoardSegments.removeAll(keepingCapacity: true)
+    for pending in pendingSegments {
+      guard
+        transcriptionRequestedByUser,
+        transcriptionOperationGate.accepts(pending.transcriptionOperationID),
+        pending.captureOperationID == activeCaptureSessionID,
+        pending.windowID == activeCaptureWindowID,
+        pending.slideIdentityGeneration == slideIdentityGeneration,
+        pending.slideCanvasGeneration == slideCanvasGeneration,
+        pending.analysisGeneration == analysisGeneration,
+        pending.slideIdentityBoundaryMachTime == latestSlideIdentityBoundaryMachTime,
+        pending.slideIdentityFrameSynchronizationMachTime
+          == latestSlideIdentityFrameSynchronizationMachTime,
+        pending.visualFreshnessBoundaryMachTime == latestVisualFreshnessBoundaryMachTime,
+        activeCaptureSelectionIsConsistent,
+        transcriptSourceIsCurrent(pending.sourceMachTime)
+      else { continue }
+
+      processBoardSegment(
+        pending.segment,
+        providerSourceSegmentID: pending.providerSourceSegmentID,
+        sourceMachTime: pending.sourceMachTime,
+        transcriptionOperationID: pending.transcriptionOperationID,
+        provenance: pending.provenance,
+        allowDeferral: false
+      )
+    }
   }
 
   private func scheduleStablePartialTranscriptCommit(
@@ -1309,7 +1833,13 @@ final class AppModel: ObservableObject {
       else {
         return
       }
-      self.processBoardSegment(committed, sourceMachTime: latestObservation.sourceMachTime)
+      self.processBoardSegment(
+        committed,
+        providerSourceSegmentID: latestObservation.segment.id,
+        sourceMachTime: latestObservation.sourceMachTime,
+        transcriptionOperationID: pending.key.operationID,
+        provenance: .stablePartial
+      )
     }
   }
 
@@ -2396,6 +2926,8 @@ final class AppModel: ObservableObject {
     slideAnalysisNeedsRefresh = false
     latestCompletedAnalysisGeneration = requestGeneration
     slideAnalysisTask = nil
+    retryUnplacedBoardIntentsIfPossible()
+    replayPendingBoardSegmentsIfCurrent()
     scheduleAutomaticTranscriptionResumeIfReady()
     if origin == .continuousStream {
       renderAlignedOverlayIfPossible()
@@ -2478,6 +3010,12 @@ final class AppModel: ObservableObject {
 
   private func invalidateProductionSceneForVisualFreshness() {
     latestVisualFreshnessBoundaryMachTime = mach_absolute_time()
+    // Apple Speech hypotheses are cumulative within one provider operation. A callback delivered
+    // after this boundary can therefore still contain words spoken before the visual change even
+    // when its callback timestamp is new. Invalidate the whole operation so the operation gate
+    // rejects late callbacks, reset partial-prefix state, and resume from a fresh provider cycle
+    // only after analysis of the current visual context is ready.
+    invalidateTranscriptionContext(preserveUserRequest: true)
     resetBoardCandidateContext()
     boardScene = BoardScene(slideNumber: boardScene.slideNumber)
     boardSceneAnalysisGeneration = nil
@@ -2800,6 +3338,10 @@ final class AppModel: ObservableObject {
   }
 
   private func resetBoardCandidateContext() {
+    pendingBoardSegments.removeAll(keepingCapacity: true)
+    provisionalPartialBoardIntentIDs.removeAll(keepingCapacity: true)
+    lastAcceptedTranscriptionSourceID = nil
+    precedingTranscriptionSourceIDForCurrentCycle = nil
     boardCandidateContext.reset()
   }
 
@@ -2884,14 +3426,26 @@ final class AppModel: ObservableObject {
       transcriptionContextIsReady
     else { return }
 
+    let token = UUID()
+    automaticTranscriptionResumeToken = token
     automaticTranscriptionResumeTask = Task { @MainActor [weak self] in
-      guard let self else { return }
-      defer { self.automaticTranscriptionResumeTask = nil }
+      guard !Task.isCancelled, let self, self.automaticTranscriptionResumeToken == token else {
+        return
+      }
       guard
         self.transcriptionRequestedByUser,
         !self.transcriptionOperationGate.hasActiveOperation,
         self.transcriptionContextIsReady
-      else { return }
+      else {
+        self.automaticTranscriptionResumeTask = nil
+        self.automaticTranscriptionResumeToken = nil
+        return
+      }
+      // Detach this scheduler task before starting. `startTranscriptionOperation()` invalidates
+      // the previous transcription context; leaving the task installed would cancel the very
+      // cooperative provider start that it is awaiting.
+      self.automaticTranscriptionResumeTask = nil
+      self.automaticTranscriptionResumeToken = nil
       await self.startTranscriptionOperation()
     }
   }
@@ -2915,6 +3469,7 @@ final class AppModel: ObservableObject {
   ) {
     automaticTranscriptionResumeTask?.cancel()
     automaticTranscriptionResumeTask = nil
+    automaticTranscriptionResumeToken = nil
     if !preserveUserRequest {
       transcriptionRequestedByUser = false
     }
@@ -2933,7 +3488,10 @@ final class AppModel: ObservableObject {
 
   private func clearLiveTranscript() {
     cancelPendingStablePartialTranscriptCommit()
+    pendingBoardSegments.removeAll(keepingCapacity: true)
     stablePartialTranscriptCommitter.reset()
+    lastAcceptedTranscriptionSourceID = nil
+    precedingTranscriptionSourceIDForCurrentCycle = nil
     liveTranscript = ""
     liveTranscriptPhase = .empty
   }

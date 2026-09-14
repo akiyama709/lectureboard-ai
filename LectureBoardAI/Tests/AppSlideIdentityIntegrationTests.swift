@@ -108,6 +108,84 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func visualEpochTransitionRetainsBothSlidesInTheExportHistory() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let analyzer = CountingSlideIdentityAnalyzer(
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let model = makeModel(
+      capture: capture,
+      provider: ControllableSlideIdentityProvider(),
+      analyzer: analyzer,
+      transcriptionProvider: transcriptionProvider
+    )
+    let image = try #require(makeImage())
+    let baseline = frameFingerprints()
+
+    await model.startVisualWindowCapture()
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: baseline,
+      sequenceNumbers: 1...3
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await model.startTranscription()
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: "The key point is context."),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { model.lectureSessionScenes.count == 1 }
+    #expect(model.lectureSessionScenes[0].slideNumber == 1)
+
+    let changed = (
+      coarse: FrameFingerprint(
+        sampleColumns: 32,
+        sampleRows: 18,
+        luminance: Array(repeating: 107, count: 32 * 18)
+      ),
+      content: ContentFingerprint(
+        sampleColumns: 160,
+        sampleRows: 90,
+        cells: (0..<(160 * 90)).map { index in
+          index < 1_000
+            ? RGBContentCell(red: 0, green: 0, blue: 0)
+            : RGBContentCell(red: 255, green: 255, blue: 255)
+        }
+      )
+    )
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: changed,
+      sequenceNumbers: 4...6
+    )
+    try await waitUntil {
+      model.slideChangeCount == 1 && model.slideAnalysisStatus == .ready
+    }
+    try await waitUntil { transcriptionProvider.startCount == 2 }
+    #expect(model.lectureSessionScenes.count == 1)
+    #expect(model.lectureSessionScenes[0].slideNumber == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: "The key point is feedback."),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { model.lectureSessionScenes.count == 2 }
+    #expect(model.lectureSessionScenes.map(\.slideNumber) == [1, 2])
+    #expect(publicText(in: model.lectureSessionScenes[0]).contains("context"))
+    #expect(publicText(in: model.lectureSessionScenes[1]).contains("feedback"))
+    await model.stopWindowCapture()
+  }
+
   @Test func confirmedTransitionDoesNotReplayAcceptedTranscriptFromThePreviousSlide() async throws {
     let capture = SlideIdentityFrameCapture()
     let provider = ControllableSlideIdentityProvider()
@@ -410,6 +488,52 @@ struct AppSlideIdentityIntegrationTests {
     #expect(model.liveTranscript == "current operation")
 
     model.stopTranscription()
+  }
+
+  @Test func automaticResumeDoesNotCancelItsOwnCooperativeProviderStart() async throws {
+    let capture = SlideIdentityFrameCapture()
+    let identityProvider = ControllableSlideIdentityProvider()
+    let transcriptionProvider = CancellationSensitiveTranscriptionProvider()
+    let model = makeModel(
+      capture: capture,
+      provider: identityProvider,
+      analyzer: CountingSlideIdentityAnalyzer(
+        title: "Sustainability",
+        occupiedRegions: boardProposalOccupiedRegions()
+      ),
+      transcriptionProvider: transcriptionProvider
+    )
+    let slide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await identityProvider.emit(sequenceNumber: 1, signal: .available(slide))
+    await identityProvider.emit(sequenceNumber: 2, signal: .available(slide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 1...3
+    )
+    try await waitUntil { model.slideAnalysisStatus == .ready }
+    await model.startTranscription()
+    #expect(transcriptionProvider.cancellationStatesAfterYield == [false])
+
+    await capture.emitContentUnavailable(sequenceNumber: 4)
+    try await waitUntil { model.transcriptionLifecycleState == .waitingForContext }
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 5...7
+    )
+    try await waitUntil { transcriptionProvider.cancellationStatesAfterYield.count == 2 }
+
+    #expect(transcriptionProvider.cancellationStatesAfterYield == [false, false])
+    #expect(model.transcriptionLifecycleState == .listening)
+    await model.stopWindowCapture()
   }
 
   @Test func currentSpeechTerminalEventClearsListeningStateAndRejectsRetainedResults()
@@ -742,6 +866,2364 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func finalJapaneseImportanceAfterUnrelatedSentenceReachesPublicScene() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let text = "タイトルです。重要なのは根本問題です。"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: text, confidence: 0),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscript == text)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(!model.lectureSessionScenes.isEmpty)
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func finalImportanceSurvivesIndependentLogisticsBeforeOrAfterIt() async throws {
+    let examples: [(text: String, expected: String, language: LanguageTag)] = [
+      ("今日は背景について説明します。重要なのは根本問題です。", "根本問題", .japanese),
+      ("重要なのは根本問題です。次のスライドに進みます。", "根本問題", .japanese),
+      (
+        "Today I will explain context. The key point is relationships.",
+        "relationships",
+        .englishUS
+      ),
+      ("The key point is context. Now we move to the next slide.", "context", .englishUS),
+    ]
+
+    for example in examples {
+      let transcriptionProvider = ControllableTranscriptionProvider()
+      let model = try await makeGroundedDefinitionModel(
+        transcriptionProvider: transcriptionProvider
+      )
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: TranscriptSegment(
+            text: example.text,
+            startTime: 0,
+            endTime: 6,
+            language: example.language,
+            confidence: 1,
+            isFinal: true,
+            emphasis: 0.5
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+
+      #expect(!model.boardScene.elements.isEmpty, "No public board for: \(example.text)")
+      #expect(
+        publicText(in: model.boardScene).contains(example.expected),
+        "Importance was lost: \(example.text)"
+      )
+      await model.stopWindowCapture()
+    }
+  }
+
+  @Test func finalJapaneseImportanceIgnoresFollowingBoardCommand() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let text = "重要なのは根本問題です。白いスペースに板書してください。"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: text, confidence: 0),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    let boardText = publicText(in: model.boardScene)
+    #expect(!model.boardScene.elements.isEmpty)
+    #expect(!model.lectureSessionScenes.isEmpty)
+    #expect(boardText.contains("根本問題"))
+    #expect(!boardText.contains("白いスペース"))
+    #expect(!boardText.contains("板書してください"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func commitsOnlyPlacedIntentAndRetriesTheUnplacedIntentAfterSceneSpaceReturns()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは根本問題です。大切な点は文脈です。",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.committedBoardIntentCount == 1)
+    #expect(model.pendingUnplacedBoardIntentCount == 1)
+    #expect(!model.boardScene.elements.isEmpty)
+
+    // Simulate a same-context scene condition that frees the one available slot. A subsequent
+    // recognition pass must retry the retained intent even though the engine already knows it.
+    model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "ここでは背景を説明します。",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.committedBoardIntentCount == 2)
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    #expect(publicText(in: model.boardScene).contains("文脈"))
+
+    await model.stopWindowCapture()
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+  }
+
+  @Test func completelyUnplaceablePublicIntentsDoNotPolluteHistoryAndStayBounded()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let unavailableComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.51, gridStep: 0.02)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: unavailableComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+
+    for index in 1...9 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: "重要なのは概念\(index)です。",
+            confidence: 0.8,
+            endTime: TimeInterval(index)
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 8)
+
+    model.stopTranscription()
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    await model.stopWindowCapture()
+  }
+
+  @Test func ninthSameSourceImportanceUnitIsRetainedAfterEarlierUnitsFillThePass()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    let segmentID = UUID()
+    let units = (1...9).map { "重要なのは概念\($0)です。" }
+    let cumulativeText = units.joined()
+    let partial = japaneseProviderSegment(
+      text: cumulativeText,
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8,
+      endTime: 9
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: partial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { model.committedBoardIntentCount == 1 }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: cumulativeText,
+          id: segmentID,
+          confidence: 0.8,
+          endTime: 10
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.committedBoardIntentCount == 1)
+    #expect(model.pendingUnplacedBoardIntentCount == 8)
+
+    var drainedText = publicText(in: model.boardScene)
+    for index in 0..<8 {
+      model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(text: "Unrelated background \(index)."),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      drainedText += " " + publicText(in: model.boardScene)
+    }
+
+    for index in 1...9 {
+      #expect(drainedText.contains("概念\(index)"))
+    }
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    await model.stopWindowCapture()
+  }
+
+  @Test func evictedOlderUnplacedUnitsCannotRegenerateAndStarveTheLatestSource()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    model.boardScene = markerScene(slideNumber: model.boardScene.slideNumber)
+    let suffixes = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"]
+
+    let oldUnits = suffixes.map { "The key point is old \($0)." }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: oldUnits.joined(separator: " "),
+          startTime: 0,
+          endTime: 8,
+          language: .englishUS,
+          confidence: 0.8,
+          isFinal: true,
+          emphasis: 1
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    let middleUnits =
+      Array(oldUnits.suffix(4))
+      + suffixes.prefix(4).map { "The key point is middle \($0)." }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: middleUnits.joined(separator: " "),
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    let latestUnits = suffixes.map { "The key point is latest \($0)." }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: latestUnits.joined(separator: " "),
+          startTime: 0,
+          endTime: 8,
+          language: .englishUS,
+          confidence: 0.8,
+          isFinal: true,
+          emphasis: 0
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 8)
+
+    var drainedText = ""
+    for index in 0..<8 {
+      model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(
+            text: "This is unrelated background \(index).",
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      drainedText += " " + publicText(in: model.boardScene)
+    }
+
+    for suffix in suffixes {
+      #expect(drainedText.contains("latest \(suffix)"))
+    }
+    #expect(!drainedText.contains("middle "))
+    #expect(!drainedText.contains("old "))
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    await model.stopWindowCapture()
+  }
+
+  @Test func currentRepeatedQuestionRetainsHistoryWhenOldUnplacedCandidatesFillPass()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    model.boardScene = markerScene(slideNumber: model.boardScene.slideNumber)
+
+    for index in 0..<3 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: TranscriptSegment(
+            text: "The key point is old priority \(index).",
+            startTime: TimeInterval(20 + index * 4),
+            endTime: TimeInterval(23 + index * 4),
+            language: .englishUS,
+            confidence: 1,
+            isFinal: true,
+            emphasis: 1
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    for index in 0..<4 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: TranscriptSegment(
+            text: "Why does the system change?",
+            startTime: TimeInterval(index * 4),
+            endTime: TimeInterval(index * 4 + 3),
+            language: .englishUS,
+            confidence: 1,
+            isFinal: true,
+            emphasis: 0.5
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 4)
+
+    var drainedText = ""
+    for index in 0..<4 {
+      model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(text: "Unrelated background \(index)."),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      drainedText += " " + publicText(in: model.boardScene)
+    }
+
+    #expect(drainedText.contains("Why does the system change?"))
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    await model.stopWindowCapture()
+  }
+
+  @Test func correctedUnplacedIntentNeverAppearsAfterSpaceBecomesAvailable() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    let segmentID = UUID()
+    model.boardScene = markerScene(slideNumber: model.boardScene.slideNumber)
+
+    for text in ["重要なのは古い内容です。", "重要なのは訂正後の内容です。"] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 1)
+
+    model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "ここでは背景を説明します。",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    let boardText = publicText(in: model.boardScene)
+    #expect(boardText.contains("訂正後の内容"))
+    #expect(!boardText.contains("古い内容"))
+    #expect(model.committedBoardIntentCount == 1)
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    await model.stopWindowCapture()
+  }
+
+  @Test func cumulativeUnplacedIntentKeepsEveryCurrentImportanceUnit() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    let segmentID = UUID()
+    let first = "重要なのは根本問題です。"
+    let second = "大切な点は文脈です。"
+    model.boardScene = markerScene(slideNumber: model.boardScene.slideNumber)
+
+    for text in [first, first + second] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 2)
+    await model.stopWindowCapture()
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+  }
+
+  @Test func unsafeSameSourceCorrectionRemovesTheEarlierUnplacedIntent() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let singleSlotComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: singleSlotComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    let segmentID = UUID()
+    model.boardScene = markerScene(slideNumber: model.boardScene.slideNumber)
+
+    for text in ["重要なのは古い内容です。", "今の内容は違います。"] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+
+    model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "ここでは背景を説明します。",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(!publicText(in: model.boardScene).contains("古い内容"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func correctedPartialRemovesTheEarlierUnplacedSyntheticIntent() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let unavailableComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.51, gridStep: 0.02)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: unavailableComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    let segmentID = UUID()
+    let oldText = "重要なのは古い内容です。"
+    let correctedText = "重要なのは訂正後の内容です。"
+
+    for endTime in [1.0, 2.0] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: oldText,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    #expect(model.pendingUnplacedBoardIntentCount == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: correctedText,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 3
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscript == correctedText)
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    #expect(model.boardScene.elements.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func uncertaintyAppendedToPartialRemovesTheEarlierUnplacedSyntheticIntent()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let unavailableComposer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.51, gridStep: 0.02)
+    )
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      sceneComposer: unavailableComposer,
+      occupiedRegions: [NormalizedRect(x: 0.9, y: 0.9, width: 0.04, height: 0.04)]
+    )
+    let segmentID = UUID()
+    let oldText = "重要なのは古い内容です。"
+    let qualifiedText = oldText + "かもしれません。"
+
+    for endTime in [1.0, 2.0] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: oldText,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    #expect(model.pendingUnplacedBoardIntentCount == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: qualifiedText,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 3
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscript == qualifiedText)
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+    #expect(model.boardScene.elements.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func matchingFinalDoesNotDuplicateStablePartialFromSameProviderSegment() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let text = "重要なのは根本問題です。"
+    let partial = japaneseProviderSegment(
+      text: text,
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8,
+      endTime: 4
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partial,
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partial,
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    let sceneAfterPartial = model.boardScene
+    let sessionScenesAfterPartial = model.lectureSessionScenes
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは根本問題です．",
+          id: segmentID,
+          confidence: 0.8,
+          endTime: 4
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscriptPhase == .final)
+    #expect(model.boardScene == sceneAfterPartial)
+    #expect(model.lectureSessionScenes == sessionScenesAfterPartial)
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func correctingFinalReplacesOnlyItsProvisionalPartialIntent() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "大切な点は文脈です。",
+          confidence: 0.8,
+          endTime: 2
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("文脈") }
+    let partial = japaneseProviderSegment(
+      text: "重要なのは根本問題です。",
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8,
+      endTime: 3
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partial,
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partial,
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    let provisionalElementCount = model.productionConfirmedBoardElementCount
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは別の問題です。",
+          id: segmentID,
+          confidence: 0.8,
+          endTime: 5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscriptPhase == .final)
+    #expect(publicText(in: model.boardScene).contains("文脈"))
+    #expect(publicText(in: model.boardScene).contains("別の問題"))
+    #expect(!publicText(in: model.boardScene).contains("根本問題"))
+    #expect(model.committedBoardIntentCount == 2)
+    #expect(model.productionConfirmedBoardElementCount == provisionalElementCount)
+    #expect(model.lectureSessionScenes.last == model.boardScene)
+    await model.stopWindowCapture()
+  }
+
+  @Test func retractingFinalRemovesItsProvisionalPartialFromSceneAndSession() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let partial = japaneseProviderSegment(
+      text: "重要なのは古い内容です。",
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8,
+      endTime: 3
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: partial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { model.productionConfirmedBoardElementCount > 0 }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは古い内容です。違います。",
+          id: segmentID,
+          confidence: 0.8,
+          endTime: 5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.liveTranscriptPhase == .final)
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.productionConfirmedBoardElementCount == 0)
+    #expect(model.lectureSessionScenes.isEmpty)
+    #expect(model.productionOverlayPresentationState == .hidden)
+    await model.stopWindowCapture()
+  }
+
+  @Test func unsafeNewerPartialAndTerminalFailureCannotLeaveProvisionalBoardWork() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let partial = japaneseProviderSegment(
+      text: "重要なのは古い内容です。",
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8,
+      endTime: 3
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: partial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { model.productionConfirmedBoardElementCount > 0 }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは古い内容です？",
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.productionConfirmedBoardElementCount == 0)
+    #expect(model.lectureSessionScenes.isEmpty)
+
+    transcriptionProvider.emitTerminal(
+      startIndex: 0,
+      error: .recognitionFinalizationTimedOut
+    )
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.productionConfirmedBoardElementCount == 0)
+    #expect(model.lectureSessionScenes.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func supersededNonpublicPartialCannotRemainAsRepetitionEvidenceAfterFailure()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let staleSourceID = UUID()
+    let repeatedText = "Why does the system change? We discuss it."
+    let stablePartial = TranscriptSegment(
+      id: staleSourceID,
+      text: repeatedText,
+      startTime: 0,
+      endTime: 8,
+      language: .englishUS,
+      confidence: 0.8,
+      isFinal: false,
+      emphasis: 0.5
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: stablePartial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.committedBoardIntentCount == 0)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          id: staleSourceID,
+          text: "Why does another system change?",
+          startTime: 0,
+          endTime: 9,
+          language: .englishUS,
+          confidence: 0.8,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emitTerminal(
+      startIndex: 0,
+      error: .recognitionFinalizationTimedOut
+    )
+    await model.requestTranscriptionStart()
+
+    for index in 0..<3 {
+      transcriptionProvider.emit(
+        startIndex: 1,
+        observation: TranscriptionObservation(
+          segment: TranscriptSegment(
+            text: repeatedText,
+            startTime: Double((index + 1) * 10),
+            endTime: Double((index + 1) * 10 + 8),
+            language: .englishUS,
+            confidence: 0.8,
+            isFinal: true,
+            emphasis: 0.5
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    #expect(model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: repeatedText,
+          startTime: 40,
+          endTime: 48,
+          language: .englishUS,
+          confidence: 0.8,
+          isFinal: true,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    await model.stopWindowCapture()
+  }
+
+  @Test func cumulativeFinalCanAddANewImportanceUnitAfterItsStablePartial() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let first = "重要なのは根本問題です。"
+    let second = "大切な点は文脈です。"
+    let partial = japaneseProviderSegment(
+      text: first,
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8,
+      endTime: 3
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: partial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { publicText(in: model.boardScene).contains("根本問題") }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: first + second,
+          id: segmentID,
+          confidence: 0.8,
+          endTime: 5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil {
+      let boardText = publicText(in: model.boardScene)
+      return boardText.contains("根本問題") && boardText.contains("文脈")
+    }
+    await model.stopWindowCapture()
+  }
+
+  @Test func punctuationFreeCumulativePartialAddsItsSecondImportanceClause() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let segmentID = UUID()
+    let first = "重要なのはAです"
+    let cumulative = first + " 重要なのはBです"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: first,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 1
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+    await pauseWaiter.resume(invocation: 0)
+    try await waitUntil { publicText(in: model.boardScene).contains("Aです") }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: cumulative,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 2
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await pauseWaiter.waitForInvocationCount(2)
+    await pauseWaiter.resume(invocation: 1)
+    try await waitUntil {
+      let boardText = publicText(in: model.boardScene)
+      return boardText.contains("Aです") && boardText.contains("Bです")
+    }
+    await model.stopWindowCapture()
+  }
+
+  @Test func finalCorrectionInNextProviderCycleRetractsOneImmediatelyPrecedingIntent()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let firstCycleID = UUID()
+    let secondCycleID = UUID()
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは古い内容です。",
+          id: firstCycleID,
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { model.productionConfirmedBoardElementCount > 0 }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "ええと",
+          id: secondCycleID,
+          isFinal: false,
+          confidence: 0.2
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "ええと，いや，違います。",
+          id: secondCycleID,
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.productionConfirmedBoardElementCount == 0)
+    #expect(model.lectureSessionScenes.isEmpty)
+    await model.stopWindowCapture()
+  }
+
+  @Test func crossCycleFinalRetractionCoversEverySingleUtterancePublicPath() async throws {
+    let examples: [(text: String, expected: String, language: LanguageTag)] = [
+      ("空白部分に誤りと書いてください。", "誤り", .japanese),
+      (
+        "Sustainability determines interpretation.",
+        "determines interpretation",
+        .englishUS
+      ),
+    ]
+
+    for example in examples {
+      let transcriptionProvider = ControllableTranscriptionProvider()
+      let model = try await makeGroundedDefinitionModel(
+        transcriptionProvider: transcriptionProvider
+      )
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: TranscriptSegment(
+            text: example.text,
+            startTime: 0,
+            endTime: 8,
+            language: example.language,
+            confidence: 0.8,
+            isFinal: true,
+            emphasis: 0.5
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      try await waitUntil { publicText(in: model.boardScene).contains(example.expected) }
+
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(text: "No, that was wrong.", confidence: 0.8),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+
+      #expect(model.boardScene.elements.isEmpty)
+      #expect(model.committedBoardIntentCount == 0)
+      await model.stopWindowCapture()
+    }
+  }
+
+  @Test func crossCycleFinalRetractionRemovesTheImmediatelyPrecedingUnplacedIntent()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    model.boardScene = BoardScene(
+      slideNumber: model.boardScene.slideNumber,
+      elements: [
+        BoardElement(
+          kind: .text,
+          region: NormalizedRect(x: 0, y: 0, width: 1, height: 1),
+          text: "Existing human content"
+        )
+      ]
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは古い内容です。",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.committedBoardIntentCount == 0)
+    #expect(model.pendingUnplacedBoardIntentCount == 1)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: "いや，違います。", confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.pendingUnplacedBoardIntentCount == 0)
+
+    model.boardScene = BoardScene(slideNumber: model.boardScene.slideNumber)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: "次の話題に進みます。", confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(model.boardScene.elements.isEmpty)
+    #expect(!publicText(in: model.boardScene).contains("古い内容"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func crossCycleFinalCorrectionPublishesOnlyItsIndependentReplacement() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: "重要なのは旧説です。", confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("旧説") }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "いや，違います。重要なのは新説です。",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("新説") }
+    #expect(!publicText(in: model.boardScene).contains("旧説"))
+    #expect(model.committedBoardIntentCount == 1)
+    await model.stopWindowCapture()
+  }
+
+  @Test func quotedCrossCycleCorrectionCannotRetractPriorBoardWork() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "The key point is context.",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("context") }
+    let sceneBeforeQuotation = model.boardScene
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "The slide says no, that was wrong.",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.boardScene == sceneBeforeQuotation)
+    #expect(model.committedBoardIntentCount == 1)
+    #expect(publicText(in: model.boardScene).contains("context"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func negatedQuotedOrMetalinguisticCorrectionsCannotRetractPriorBoardWork()
+    async throws
+  {
+    let unsafeCorrections: [(text: String, language: LanguageTag)] = [
+      ("No, that was not wrong.", .englishUS),
+      ("No, that wasn't wrong.", .englishUS),
+      ("No, that's not wrong. The key point is malware.", .englishUS),
+      ("No, that was correct.", .englishUS),
+      ("“No, that was wrong. The key point is malware.”", .englishUS),
+      ("The phrase no, that was wrong.", .englishUS),
+      ("The sentence no, that was wrong.", .englishUS),
+      ("いや，違いますという文です。", .japanese),
+      ("いや，違わないです。", .japanese),
+      ("いや，間違っていません。", .japanese),
+      ("いや，正しいです。", .japanese),
+      ("いえ，合っています。", .japanese),
+    ]
+
+    for unsafeCorrection in unsafeCorrections {
+      let transcriptionProvider = ControllableTranscriptionProvider()
+      let model = try await makeGroundedDefinitionModel(
+        transcriptionProvider: transcriptionProvider
+      )
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(
+            text: "The key point is context.",
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      try await waitUntil { publicText(in: model.boardScene).contains("context") }
+      let sceneBeforeCorrection = model.boardScene
+
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: unsafeCorrection.language == .japanese
+            ? japaneseProviderSegment(text: unsafeCorrection.text, confidence: 0.8)
+            : providerStrengthSegment(text: unsafeCorrection.text, confidence: 0.8),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+
+      #expect(model.boardScene == sceneBeforeCorrection)
+      #expect(model.committedBoardIntentCount == 1)
+      #expect(!publicText(in: model.boardScene).contains("malware"))
+      await model.stopWindowCapture()
+    }
+  }
+
+  @Test func crossCycleFinalRetractionSupersedesAPriorFinalWaitingForAnalysis()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: "重要なのは古い内容です。", confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: "いや，違います。", confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    await drainMainActorQueue()
+    #expect(setup.model.boardScene.elements.isEmpty)
+    #expect(setup.model.committedBoardIntentCount == 0)
+    #expect(setup.model.pendingUnplacedBoardIntentCount == 0)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func retractedCrossCycleQuestionCannotCountAsLaterRepetitionEvidence() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let question = "Why does the system change?"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: question, confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "No, that question was wrong.",
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    for index in 0..<3 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: TranscriptSegment(
+            text: question,
+            startTime: Double((index + 1) * 10),
+            endTime: Double((index + 1) * 10 + 8),
+            language: .englishUS,
+            confidence: 0.8,
+            isFinal: true,
+            emphasis: 0.5
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    #expect(model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: question,
+          startTime: 40,
+          endTime: 48,
+          language: .englishUS,
+          confidence: 0.8,
+          isFinal: true,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains(question) }
+    await model.stopWindowCapture()
+  }
+
+  @Test func crossCycleCorrectionCannotEraseMultiplePriorImportanceUnits() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let priorText = "重要なのは根本問題です。大切な点は文脈です。"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: priorText, confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { model.committedBoardIntentCount == 2 }
+    let sceneBeforeCorrection = model.boardScene
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(text: "いや，最後の説明は違います。", confidence: 0.8),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    #expect(model.boardScene == sceneBeforeCorrection)
+    #expect(model.committedBoardIntentCount == 2)
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
+    #expect(publicText(in: model.boardScene).contains("文脈"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func cumulativeFinalReplacesPublishedUnitsItDropsFromTheSamePartial()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let first = "重要なのは根本問題です。"
+    let second = "大切な点は文脈です。"
+    let replacement = "一番伝えたいことはフィードバックです。"
+
+    for text in [first, first, first + second, first + second] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil {
+      let text = publicText(in: model.boardScene)
+      return text.contains("根本問題") && text.contains("文脈")
+    }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: first + replacement,
+          id: segmentID,
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("フィードバック") }
+
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
+    #expect(!publicText(in: model.boardScene).contains("文脈"))
+    #expect(publicText(in: model.boardScene).contains("フィードバック"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func cumulativeFinalMayAppendWhenItRetainsEveryPublishedPartialUnit() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let first = "重要なのは根本問題です。"
+    let second = "大切な点は文脈です。"
+    let third = "一番伝えたいことはフィードバックです。"
+
+    for text in [first, first, first + second, first + second] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { publicText(in: model.boardScene).contains("文脈") }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: first + second + third,
+          id: segmentID,
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("フィードバック") }
+
+    let boardText = publicText(in: model.boardScene)
+    #expect(boardText.contains("根本問題"))
+    #expect(boardText.contains("文脈"))
+    #expect(boardText.contains("フィードバック"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func ninthCumulativePartialUpdateSurvivesWhileCurrentAnalysisIsPending()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let revisions = [
+      "重",
+      "重要",
+      "重要なの",
+      "重要なのは",
+      "重要なのは最新",
+      "重要なのは最新内容",
+      "重要なのは最新内容です。",
+      "重要なのは最新内容です。",
+      "重要なのは最新内容です。続いて",
+    ]
+
+    for (index, text) in revisions.enumerated() {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: TimeInterval(index + 1)
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    #expect(setup.model.liveTranscript == revisions.last)
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { publicText(in: setup.model.boardScene).contains("最新内容") }
+
+    #expect(!publicText(in: setup.model.boardScene).contains("続いて"))
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func cumulativeFinalCanAppendImportanceAfterAGroundedStablePartial() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let grounded = "Sustainability determines interpretation."
+    let partial = providerStrengthSegment(
+      text: grounded,
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: partial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { publicText(in: model.boardScene).contains("Sustainability") }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: grounded + " The key point is feedback.",
+          id: segmentID,
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("feedback") }
+    let boardText = publicText(in: model.boardScene)
+    #expect(boardText.contains("Sustainability"))
+    #expect(boardText.contains("feedback"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func replacementFinalReplacesAGroundedStablePartial() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let grounded = "Sustainability determines interpretation."
+    let partial = providerStrengthSegment(
+      text: grounded,
+      id: segmentID,
+      isFinal: false,
+      confidence: 0.8
+    )
+
+    for _ in 0..<2 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: partial,
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    try await waitUntil { publicText(in: model.boardScene).contains("Sustainability") }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "The key point is feedback.",
+          id: segmentID,
+          confidence: 0.8
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { publicText(in: model.boardScene).contains("feedback") }
+
+    #expect(!publicText(in: model.boardScene).contains("determines interpretation"))
+    #expect(publicText(in: model.boardScene).contains("feedback"))
+    #expect(model.lectureSessionScenes.last == model.boardScene)
+    await model.stopWindowCapture()
+  }
+
+  @Test func finalReceivedDuringCurrentAnalysisIsReplayedOnceWhenAnalysisBecomesReady()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let text =
+      "Sustainability means meeting present needs without undermining future possibilities."
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: text),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(setup.model.liveTranscript == text)
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { !setup.model.boardScene.elements.isEmpty }
+    let completedScene = setup.model.boardScene
+    await drainMainActorQueue()
+
+    #expect(setup.model.boardScene == completedScene)
+    #expect(publicText(in: setup.model.boardScene).contains("Sustainability"))
+    #expect(setup.model.lectureSessionScenes.count == 1)
+    setup.model.stopTranscription()
+    #expect(setup.model.boardScene == completedScene)
+    #expect(setup.model.productionConfirmedBoardElementCount > 0)
+    #expect(setup.model.lectureSessionScenes.last == completedScene)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func syntheticFinalFromAStablePartialCanWaitForCurrentAnalysis() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let text = "Sustainability means preserving options across time."
+    let partial = providerStrengthSegment(
+      text: text,
+      id: segmentID,
+      isFinal: false
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partial,
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: partial,
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(setup.model.liveTranscriptPhase == .partial)
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { !setup.model.boardScene.elements.isEmpty }
+
+    #expect(publicText(in: setup.model.boardScene).contains("Sustainability"))
+    #expect(setup.model.lectureSessionScenes.count == 1)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func correctedPartialInvalidatesOlderSyntheticFinalWaitingForAnalysis() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let oldText = "重要なのは古い内容です。"
+    let correctedText = "重要なのは訂正後の内容です。"
+
+    for endTime in [1.0, 2.0] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: oldText,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: correctedText,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 3
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { setup.model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+    #expect(setup.model.liveTranscript == correctedText)
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: correctedText,
+          id: segmentID,
+          confidence: 0.8,
+          endTime: 4
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { !setup.model.boardScene.elements.isEmpty }
+    let boardText = publicText(in: setup.model.boardScene)
+    #expect(boardText.contains("訂正後の内容"))
+    #expect(!boardText.contains("古い内容"))
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func retractionAppendedToPartialInvalidatesSyntheticFinalWaitingForAnalysis()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let oldText = "重要なのは古い内容です。"
+    let retractedText = oldText + "違います。"
+
+    for endTime in [1.0, 2.0] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: oldText,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: retractedText,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: 3
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { setup.model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+
+    #expect(setup.model.liveTranscript == retractedText)
+    #expect(setup.model.boardScene.elements.isEmpty)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func nineLaterUnimportantFinalsCannotDisplaceImportantFinalWaitingForAnalysis()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "I reviewed the background. The key point is the root problem."
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    for index in 0..<9 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(
+            text: "The speaker now moves to unrelated aside \(index)."
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { !setup.model.boardScene.elements.isEmpty }
+    let boardText = publicText(in: setup.model.boardScene)
+
+    #expect(boardText.contains("root problem"))
+    #expect(!boardText.contains("unrelated aside"))
+    #expect(setup.model.lectureSessionScenes.count == 1)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func reportedImportanceFinalsCannotEvictSafeImportanceWaitingForAnalysis()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(text: "The key point is the root problem."),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    for index in 0..<8 {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: providerStrengthSegment(
+            text: "The lecturer said the key point is unsafe claim (index)."
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { publicText(in: setup.model.boardScene).contains("root problem") }
+    #expect(!publicText(in: setup.model.boardScene).contains("unsafe claim"))
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func providerFinalSupersedesEveryPendingSyntheticUnitFromItsCycle() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let providerSegmentID = UUID()
+    let first = "重要なのは根本問題です。"
+    let second = "大切な点は文脈です。"
+
+    for (text, endTime) in [
+      (first, 1.0),
+      (first + second, 2.0),
+      (first + second, 3.0),
+    ] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: providerSegmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは訂正後の内容です。",
+          id: providerSegmentID,
+          confidence: 0.8,
+          endTime: 4
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { !setup.model.boardScene.elements.isEmpty }
+    let boardText = publicText(in: setup.model.boardScene)
+    #expect(boardText.contains("訂正後の内容"))
+    #expect(!boardText.contains("根本問題"))
+    #expect(!boardText.contains("文脈"))
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func committedLeadingPartialReschedulesPauseForImportantRemainder() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let segmentID = UUID()
+    let leading = "この研究の背景を丁寧に説明します。"
+    let importance = "重要なのは根本問題です"
+
+    func observation(text: String, endTime: TimeInterval) -> TranscriptionObservation {
+      TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: text,
+          id: segmentID,
+          isFinal: false,
+          confidence: 0.8,
+          endTime: endTime
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    }
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(text: leading, endTime: 1)
+    )
+    try await pauseWaiter.waitForInvocationCount(1)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(text: leading, endTime: 2)
+    )
+    try await pauseWaiter.waitForInvocationCount(2)
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: observation(text: leading + importance, endTime: 3)
+    )
+    try await pauseWaiter.waitForInvocationCount(3)
+
+    #expect(model.boardScene.elements.isEmpty)
+    await pauseWaiter.resume(invocation: 0)
+    await pauseWaiter.resume(invocation: 1)
+    await drainMainActorQueue()
+    #expect(model.boardScene.elements.isEmpty)
+    await pauseWaiter.resume(invocation: 2)
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
+    #expect(!publicText(in: model.boardScene).contains("背景"))
+    await model.stopWindowCapture()
+  }
+
+  @Test func stableExactZeroImportancePartialPublishesWhileSpeechKeepsGrowing() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+
+    for (text, endTime) in [
+      ("ここで重要なのは根本問題です。続いて", 1.0),
+      ("ここで重要なのは根本問題です。続いて背景を", 2.0),
+    ] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
+    #expect(!publicText(in: model.boardScene).contains("背景"))
+    #expect(model.liveTranscriptPhase == .partial)
+    await model.stopWindowCapture()
+  }
+
+  @Test func twoImportantUnitsInOneProviderCycleCanBothReachThePublicScene() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let segmentID = UUID()
+    let first = "重要なのは根本問題です。"
+    let second = "大切な点は文脈です。"
+
+    for (text, endTime) in [
+      (first, 1.0),
+      (first + second, 2.0),
+      (first + second, 3.0),
+    ] {
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: text,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: endTime
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+    }
+
+    try await waitUntil {
+      let boardText = publicText(in: model.boardScene)
+      return boardText.contains("根本問題") && boardText.contains("文脈")
+    }
+    #expect(model.lectureSessionScenes.count >= 1)
+    await model.stopWindowCapture()
+  }
+
+  @Test func pendingFinalCannotCrossAVisualEpoch() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    let secondSlide = try sample(slideID: 202, slideIndex: 2)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "Sustainability means retaining the previous slide."
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    await setup.provider.emit(sequenceNumber: 3, signal: .available(secondSlide))
+    await setup.provider.emit(sequenceNumber: 4, signal: .available(secondSlide))
+    try await waitUntil { setup.model.slideChangeCount == 1 }
+    try await setup.analyzer.succeed(sequenceNumber: 3, title: "Stale slide")
+    await emitStableFrames(
+      capture: setup.capture,
+      image: setup.image,
+      fingerprints: setup.fingerprints,
+      sequenceNumbers: 4...6
+    )
+    try await setup.analyzer.waitForInvocation(sequenceNumber: 6)
+    try await setup.analyzer.succeed(
+      sequenceNumber: 6,
+      title: "Current slide",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { setup.model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+
+    #expect(setup.model.boardScene.slideNumber == 2)
+    #expect(setup.model.boardScene.elements.isEmpty)
+    #expect(setup.model.lectureSessionScenes.isEmpty)
+    #expect(transcriptionProvider.startCount == 2)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func cumulativeSpeechFromBeforeAVisualFreshnessBoundaryCannotCrossIt() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { setup.model.slideAnalysisStatus == .ready }
+    #expect(transcriptionProvider.startCount == 1)
+
+    let staleSegmentID = UUID()
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは旧内容です。続いて",
+          id: staleSegmentID,
+          isFinal: false,
+          confidence: 0,
+          endTime: 2
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(!setup.model.liveTranscript.isEmpty)
+
+    await setup.capture.emit(
+      CapturedPowerPointFrame(
+        windowID: 42,
+        sequenceNumber: 4,
+        capturedAt: Date(),
+        displayTime: mach_absolute_time(),
+        deliveryKind: .new,
+        image: setup.image,
+        fingerprint: setup.fingerprints.coarse,
+        contentFingerprint: nil
+      )
+    )
+    try await waitUntil { transcriptionProvider.stopCount == 1 }
+    #expect(setup.model.liveTranscript.isEmpty)
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは旧内容です。続いて新内容です。",
+          id: staleSegmentID,
+          confidence: 0,
+          endTime: 4
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    #expect(setup.model.liveTranscript.isEmpty)
+    #expect(setup.model.boardScene.elements.isEmpty)
+
+    await setup.capture.emit(
+      frame(
+        sequenceNumber: 5,
+        image: setup.image,
+        coarseFingerprint: setup.fingerprints.coarse,
+        contentFingerprint: setup.fingerprints.content
+      )
+    )
+    try await setup.analyzer.waitForInvocation(sequenceNumber: 5)
+    try await setup.analyzer.succeed(
+      sequenceNumber: 5,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { transcriptionProvider.startCount == 2 }
+
+    transcriptionProvider.emit(
+      startIndex: 1,
+      observation: TranscriptionObservation(
+        segment: japaneseProviderSegment(
+          text: "重要なのは現在内容です。",
+          confidence: 0
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    try await waitUntil { !setup.model.boardScene.elements.isEmpty }
+    let boardText = publicText(in: setup.model.boardScene)
+    #expect(boardText.contains("現在内容"))
+    #expect(!boardText.contains("旧内容"))
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func manualStopDiscardsAFinalPendingOnAnalysis() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "Sustainability means retaining a stopped observation."
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    setup.model.stopTranscription()
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { setup.model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+
+    #expect(setup.model.transcriptionLifecycleState == .idle)
+    #expect(setup.model.boardScene.elements.isEmpty)
+    #expect(setup.model.lectureSessionScenes.isEmpty)
+    await setup.model.stopWindowCapture()
+  }
+
+  @Test func captureStopDiscardsAFinalPendingOnAnalysis() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "Sustainability means retaining a stopped capture."
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+    await setup.model.stopWindowCapture()
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Stale analysis",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    await drainMainActorQueue()
+
+    #expect(setup.model.captureStatus == .stopped)
+    #expect(setup.model.boardScene.elements.isEmpty)
+    #expect(setup.model.lectureSessionScenes.isEmpty)
+  }
+
+  @Test func finalOlderThanTheCurrentVisualBoundaryIsNeverDeferred() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let setup = try await makeSuspendedGroundingModel(
+      transcriptionProvider: transcriptionProvider
+    )
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: providerStrengthSegment(
+          text: "Sustainability means retaining stale speech."
+        ),
+        sourceMachTime: setup.preAnalysisMachTime
+      )
+    )
+    try await setup.analyzer.succeed(
+      sequenceNumber: 3,
+      title: "Sustainability",
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    try await waitUntil { setup.model.slideAnalysisStatus == .ready }
+    await drainMainActorQueue()
+
+    #expect(setup.model.boardScene.elements.isEmpty)
+    #expect(setup.model.lectureSessionScenes.isEmpty)
+    await setup.model.stopWindowCapture()
+  }
+
   @Test func groundedZeroConfidenceFinalDefinitionRemainsInternal() async throws {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let model = try await makeGroundedDefinitionModel(
@@ -828,6 +3310,52 @@ struct AppSlideIdentityIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func newlyAppendedUnsafePartialTailPreventsStablePrefixPublication() async throws {
+    let stableImportance = "重要なのは根本問題です。"
+
+    for tail in ["いや", "違います", "本当でしょうか"] {
+      let transcriptionProvider = ControllableTranscriptionProvider()
+      let model = try await makeGroundedDefinitionModel(
+        transcriptionProvider: transcriptionProvider
+      )
+      let segmentID = UUID()
+
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: stableImportance,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: 1
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      let latestText = stableImportance + tail
+      transcriptionProvider.emit(
+        startIndex: 0,
+        observation: TranscriptionObservation(
+          segment: japaneseProviderSegment(
+            text: latestText,
+            id: segmentID,
+            isFinal: false,
+            confidence: 0.8,
+            endTime: 2
+          ),
+          sourceMachTime: mach_absolute_time()
+        )
+      )
+      await drainMainActorQueue()
+
+      #expect(model.liveTranscript == latestText)
+      #expect(model.boardScene.elements.isEmpty)
+      #expect(model.lectureSessionScenes.isEmpty)
+      await model.stopWindowCapture()
+    }
+  }
+
   @Test func punctuationFreeJapaneseImportancePartialReachesPublicSceneAfterPause() async throws {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
@@ -860,6 +3388,84 @@ struct AppSlideIdentityIntegrationTests {
 
     await pauseWaiter.resume(invocation: 0)
     try await waitUntil { !model.boardScene.elements.isEmpty }
+    #expect(!model.lectureSessionScenes.isEmpty)
+    #expect(model.liveTranscriptPhase == .partial)
+    await model.stopWindowCapture()
+  }
+
+  @Test func punctuationFreeExplicitBoardRequestPartialReachesPublicSceneAfterPause()
+    async throws
+  {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let text = "空白部分にテストと書いてください"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: text,
+          startTime: 0,
+          endTime: 3,
+          language: .japanese,
+          confidence: 0.25,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await pauseWaiter.waitForInvocationCount(1)
+    #expect(model.liveTranscript == text)
+    #expect(model.liveTranscriptPhase == .partial)
+    #expect(model.boardScene.elements.isEmpty)
+
+    await pauseWaiter.resume(invocation: 0)
+    try await waitUntil { publicText(in: model.boardScene).contains("テスト") }
+    #expect(model.publicBoardElementCount > 0)
+    #expect(model.productionConfirmedBoardElementCount > 0)
+    #expect(model.lectureSessionScenes.last == model.boardScene)
+    #expect(model.liveTranscriptPhase == .partial)
+    await model.stopWindowCapture()
+  }
+
+  @Test func punctuatedZeroConfidenceImportancePartialReachesPublicSceneAfterPause() async throws {
+    let transcriptionProvider = ControllableTranscriptionProvider()
+    let pauseWaiter = ControllableStablePartialTranscriptPauseWaiter()
+    let model = try await makeGroundedDefinitionModel(
+      transcriptionProvider: transcriptionProvider,
+      stablePartialTranscriptPauseWaiter: pauseWaiter
+    )
+    let text = "タイトルです。重要なのは根本問題です。"
+
+    transcriptionProvider.emit(
+      startIndex: 0,
+      observation: TranscriptionObservation(
+        segment: TranscriptSegment(
+          text: text,
+          startTime: 0,
+          endTime: 3,
+          language: .japanese,
+          confidence: 0,
+          isFinal: false,
+          emphasis: 0.5
+        ),
+        sourceMachTime: mach_absolute_time()
+      )
+    )
+
+    try await pauseWaiter.waitForInvocationCount(1)
+    #expect(model.liveTranscript == text)
+    #expect(model.boardScene.elements.isEmpty)
+
+    await pauseWaiter.resume(invocation: 0)
+    try await waitUntil { !model.boardScene.elements.isEmpty }
+    #expect(publicText(in: model.boardScene).contains("根本問題"))
     #expect(!model.lectureSessionScenes.isEmpty)
     #expect(model.liveTranscriptPhase == .partial)
     await model.stopWindowCapture()
@@ -2067,6 +4673,7 @@ struct AppSlideIdentityIntegrationTests {
     provider: any PowerPointSlideIdentityProviding,
     analyzer: any SlideVisualAnalyzing = ImmediateSlideIdentityAnalyzer(),
     transcriptionProvider: any TranscriptionProvider = ControllableTranscriptionProvider(),
+    sceneComposer: BoardSceneComposer = BoardSceneComposer(),
     slideCanvasConfirmationMode: SlideCanvasConfirmationMode =
       .testOnlyUseFullCapturedFrame,
     timeoutWaiter: any SlideIdentityFrameTimeoutWaiting =
@@ -2084,6 +4691,7 @@ struct AppSlideIdentityIntegrationTests {
       transcriptionProvider: transcriptionProvider,
       slideIdentityProvider: provider,
       slideVisionAnalyzer: analyzer,
+      sceneComposer: sceneComposer,
       slideCanvasConfirmationMode: slideCanvasConfirmationMode,
       slideIdentityFrameTimeout: .seconds(2),
       slideIdentityFrameTimeoutWaiter: timeoutWaiter,
@@ -2106,19 +4714,22 @@ struct AppSlideIdentityIntegrationTests {
   private func makeGroundedDefinitionModel(
     transcriptionProvider: ControllableTranscriptionProvider,
     stablePartialTranscriptPauseWaiter: any StablePartialTranscriptPauseWaiting =
-      TaskStablePartialTranscriptPauseWaiter()
+      TaskStablePartialTranscriptPauseWaiter(),
+    sceneComposer: BoardSceneComposer = BoardSceneComposer(),
+    occupiedRegions: [NormalizedRect]? = nil
   ) async throws -> AppModel {
     let capture = SlideIdentityFrameCapture()
     let identityProvider = ControllableSlideIdentityProvider()
     let analyzer = CountingSlideIdentityAnalyzer(
       title: "Sustainability",
-      occupiedRegions: boardProposalOccupiedRegions()
+      occupiedRegions: occupiedRegions ?? boardProposalOccupiedRegions()
     )
     let model = makeModel(
       capture: capture,
       provider: identityProvider,
       analyzer: analyzer,
       transcriptionProvider: transcriptionProvider,
+      sceneComposer: sceneComposer,
       stablePartialTranscriptPauseWaiter: stablePartialTranscriptPauseWaiter
     )
     let slide = try sample(slideID: 101, slideIndex: 1)
@@ -2137,6 +4748,57 @@ struct AppSlideIdentityIntegrationTests {
     try await waitUntil { model.slideAnalysisStatus == .ready }
     await model.startTranscription()
     return model
+  }
+
+  private func makeSuspendedGroundingModel(
+    transcriptionProvider: ControllableTranscriptionProvider
+  ) async throws -> (
+    model: AppModel,
+    capture: SlideIdentityFrameCapture,
+    provider: ControllableSlideIdentityProvider,
+    analyzer: SuspendedSlideIdentityAnalyzer,
+    image: CGImage,
+    fingerprints: (coarse: FrameFingerprint, content: ContentFingerprint),
+    preAnalysisMachTime: UInt64
+  ) {
+    let capture = SlideIdentityFrameCapture()
+    let provider = ControllableSlideIdentityProvider()
+    let analyzer = SuspendedSlideIdentityAnalyzer()
+    let model = makeModel(
+      capture: capture,
+      provider: provider,
+      analyzer: analyzer,
+      transcriptionProvider: transcriptionProvider
+    )
+    let slide = try sample(slideID: 101, slideIndex: 1)
+    let image = try #require(makeImage())
+    let fingerprints = frameFingerprints()
+
+    await model.startWindowCapture()
+    await provider.emit(sequenceNumber: 1, signal: .available(slide))
+    await provider.emit(sequenceNumber: 2, signal: .available(slide))
+    try await waitUntil { model.slideIdentityFrameSyncState == .waiting }
+    let preAnalysisMachTime = mach_absolute_time()
+    await emitStableFrames(
+      capture: capture,
+      image: image,
+      fingerprints: fingerprints,
+      sequenceNumbers: 1...3
+    )
+    try await analyzer.waitForInvocation(sequenceNumber: 3)
+    #expect(model.slideAnalysisStatus == .analyzing)
+    await model.startTranscription()
+    #expect(transcriptionProvider.startCount == 1)
+
+    return (
+      model,
+      capture,
+      provider,
+      analyzer,
+      image,
+      fingerprints,
+      preAnalysisMachTime
+    )
   }
 
   private func sample(slideID: Int, slideIndex: Int) throws -> SlideIdentitySample {
@@ -2238,6 +4900,29 @@ struct AppSlideIdentityIntegrationTests {
     )
   }
 
+  private func japaneseProviderSegment(
+    text: String,
+    id: UUID = UUID(),
+    isFinal: Bool = true,
+    confidence: Double,
+    endTime: TimeInterval = 8
+  ) -> TranscriptSegment {
+    TranscriptSegment(
+      id: id,
+      text: text,
+      startTime: 0,
+      endTime: endTime,
+      language: .japanese,
+      confidence: confidence,
+      isFinal: isFinal,
+      emphasis: 0.5
+    )
+  }
+
+  private func publicText(in scene: BoardScene) -> String {
+    scene.elements.compactMap(\.text).joined(separator: " ")
+  }
+
   private func emitStableFrames(
     capture: SlideIdentityFrameCapture,
     image: CGImage,
@@ -2311,6 +4996,29 @@ struct AppSlideIdentityIntegrationTests {
       }
     }
   }
+}
+
+@MainActor
+private final class CancellationSensitiveTranscriptionProvider: TranscriptionProvider {
+  private(set) var cancellationStatesAfterYield: [Bool] = []
+
+  func start(
+    operationID: TranscriptionOperationID,
+    language: LanguageTag,
+    onObservation: @escaping @MainActor (TranscriptionObservation) -> Void,
+    onTerminalEvent: @escaping @MainActor (TranscriptionTerminalEvent) -> Void
+  ) async throws {
+    await Task.yield()
+    let isCancelled = Task.isCancelled
+    cancellationStatesAfterYield.append(isCancelled)
+    if isCancelled {
+      throw CancellationError()
+    }
+  }
+
+  func stop(operationID: TranscriptionOperationID) {}
+
+  func finishCurrentSegment(operationID: TranscriptionOperationID) {}
 }
 
 @MainActor
@@ -2630,11 +5338,20 @@ private actor SuspendedSlideIdentityAnalyzer: SlideVisualAnalyzing {
     throw AppSlideIdentityIntegrationTestError.timedOut
   }
 
-  func succeed(sequenceNumber: UInt64, title: String) throws {
+  func succeed(
+    sequenceNumber: UInt64,
+    title: String,
+    occupiedRegions: [NormalizedRect] = []
+  ) throws {
     guard let continuation = continuations.removeValue(forKey: sequenceNumber) else {
       throw AppSlideIdentityIntegrationTestError.missingAnalysis(sequenceNumber)
     }
-    continuation.resume(returning: SlideVisualAnalysis(title: title))
+    continuation.resume(
+      returning: SlideVisualAnalysis(
+        title: title,
+        occupiedRegions: occupiedRegions
+      )
+    )
   }
 }
 

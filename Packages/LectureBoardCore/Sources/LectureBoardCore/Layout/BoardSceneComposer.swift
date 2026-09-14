@@ -1,5 +1,21 @@
 import Foundation
 
+public struct BoardSceneCompositionResult: Equatable, Sendable {
+  public var scene: BoardScene
+  public var placedIntents: [BoardIntent]
+  public var unplacedIntents: [BoardIntent]
+
+  public init(
+    scene: BoardScene,
+    placedIntents: [BoardIntent],
+    unplacedIntents: [BoardIntent]
+  ) {
+    self.scene = scene
+    self.placedIntents = placedIntents
+    self.unplacedIntents = unplacedIntents
+  }
+}
+
 public struct BoardSceneComposer: Sendable {
   public var layoutEngine: BoardLayoutEngine
 
@@ -12,7 +28,24 @@ public struct BoardSceneComposer: Sendable {
     to scene: BoardScene,
     slideOccupied: [NormalizedRect]
   ) -> BoardScene {
+    appending(
+      intents: intents,
+      to: scene,
+      slideOccupied: slideOccupied
+    ).scene
+  }
+
+  /// Appends every public intent that can be placed and reports the public intents that could not
+  /// be placed. Callers can commit only `placedIntents` to their semantic history and retain the
+  /// bounded `unplacedIntents` for a later attempt without changing the stable public scene.
+  public func appending(
+    intents: [BoardIntent],
+    to scene: BoardScene,
+    slideOccupied: [NormalizedRect]
+  ) -> BoardSceneCompositionResult {
     var result = scene
+    var placedIntents: [BoardIntent] = []
+    var unplacedIntents: [BoardIntent] = []
 
     for intent in intents where isAllowedInPublicScene(intent.state) {
       guard
@@ -21,12 +54,20 @@ public struct BoardSceneComposer: Sendable {
           slideOccupied: slideOccupied,
           boardOccupied: result.occupiedRegions
         )
-      else { continue }
+      else {
+        unplacedIntents.append(intent)
+        continue
+      }
 
       result.elements.append(contentsOf: elements(for: intent, in: region))
+      placedIntents.append(intent)
     }
 
-    return result
+    return BoardSceneCompositionResult(
+      scene: result,
+      placedIntents: placedIntents,
+      unplacedIntents: unplacedIntents
+    )
   }
 
   private func isAllowedInPublicScene(_ state: BoardIntentState) -> Bool {

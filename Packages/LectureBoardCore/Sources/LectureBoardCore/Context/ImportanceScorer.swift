@@ -104,12 +104,58 @@ public struct ImportanceScorer: Sendable {
     "means", "is defined as", "refers to", "in other words",
   ]
 
-  static let importanceCuePatterns = [
-    #"^\s*(?:ここで\s*)?重要なのは\s*[、，,;；:：]?\s*"#,
-    #"^\s*(?:ここで\s*)?重要な点は\s*[、，,;；:：]?\s*"#,
-    #"^\s*the\s+key\s+point\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+  static let importancePrefixCuePatterns = [
+    #"^\s*(?:ここで\s*)?(?:特に\s*)?重要なのは\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:特に\s*)?重要な(?:点|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:特に\s*)?(?:大切|大事)な(?:点|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:一番|最も)\s*(?:重要|大切)なのは\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:特に\s*)?大切なのは\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:特に\s*)?(?:大事|肝心)なのは\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:(?:この|その|今日の|今回の)\s*)?(?:要点|ポイント)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:ぜひ\s*)?(?:押さえて|理解して|覚えて)(?:おいて|いて)?ほしい(?:の|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:ぜひ\s*)?(?:注目して|意識して)(?:おいて|いて)?ほしい(?:の|点|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:特に\s*)?(?:強調|重視)したい(?:の|点|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:ぜひ\s*)?(?:押さえるべき|覚えておくべき|見逃してはいけない)(?:点|こと|の)?は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:(?:この|その|ここでの)\s*)?(?:鍵|核心)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:鍵|核心)になるのは\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:要するに|まとめると|まとめれば|一言で言えば|ひとことで言えば|端的に言えば|結論を言うと)\s*[、，,;；:：]?\s*"#,
+    #"^\s*結論(?:として(?:は)?|は)\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:the|a|an|our|my)\s+(?:(?:most\s+)?important|key|main|central)\s+(?:point|idea|thing|takeaway)(?:\s+here)?\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*the\s+(?:point|bottom\s+line|take(?:[-‐‑–—]|\s+)home\s+message|thing\s+to\s+remember|core\s+(?:point|message|issue))\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*the\s+(?:conclusion|takeaway)(?:\s+here)?\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
     #"^\s*what\s+matters\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*what\s+is\s+important\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*what\s+(?:i\s+want\s+you\s+to|you\s+(?:should|need\s+to))\s+remember(?:\s+here)?\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*(?:please\s+)?remember\s+that(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*keep\s+in\s+mind\s+that(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*(?:please\s+)?pay\s+attention\s+to(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*(?:(?:i|we)\s+(?:want|need)\s+to|let\s+me)\s+(?:emphasize|stress|highlight)(?:\s+that)?(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*(?:in\s+conclusion|to\s+conclude|in\s+summary|to\s+summarize|to\s+sum\s+up|in\s+short|most\s+importantly|put\s+simply|simply\s+put)\s*[,;:]?\s*"#,
+    #"^\s*(?:もう一つ|もうひとつ|別の)\s*(?:重要|大切)な(?:点|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?(?:肝|要旨)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?忘れないでほしい(?:の|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*(?:ここで\s*)?一番伝えたい(?:の|こと)は\s*[、，,;；:：]?\s*"#,
+    #"^\s*another\s+(?:important|key|main)\s+(?:point|idea|thing)\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*(?:the\s+)?crux(?:\s+here)?\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*(?:the\s+)?one\s+thing\s+to\s+remember(?:\s+here)?\s+is(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*you\s+should\s+remember\s+that(?=\s|[,;:])\s*[,;:]?\s*"#,
+    #"^\s*above\s+all\s*[,;:]?\s*"#,
   ]
+
+  static let importanceSuffixCuePatterns = [
+    #"(?:が|こそ)\s*(?:(?:いちばん|一番|最も|特に)\s*)?(?:重要|大切|大事)(?:です|だ|である)\s*[。．.!！]?\s*$"#,
+    #"(?:が|こそ|は)\s*(?:(?:いちばん|一番|最も|特に)\s*)?(?:重要な\s*)?(?:鍵|核心|要点|ポイント|決め手|本質)(?:です|だ|である|になります|となります)\s*[。．.!！]?\s*$"#,
+    #"\s+(?:is|are)\s+(?:(?:the\s+)?(?:most|particularly)\s+)?(?:important|essential|crucial)(?:\s+(?:point|thing|idea|takeaway))?\s*[.!]?\s*$"#,
+    #"\s+(?:is|are)\s+(?:the\s+)?(?:key|central|core|fundamental)(?:\s+(?:point|idea|issue|message|factor))?\s*[.!]?\s*$"#,
+    #"\s+(?:is|are)\s+the\s+(?:point|bottom\s+line|take(?:[-‐‑–—]|\s+)home\s+message)\s*[.!]?\s*$"#,
+    #"\s+(?:is|are)\s+(?:what\s+matters|worth\s+remembering)\s*[.!]?\s*$"#,
+    #"\s+matters?\s+most\s*[.!]?\s*$"#,
+    #"(?:は)\s*(?:(?:いちばん|一番|最も|特に)\s*)?(?:重要|大切|大事)(?:です|だ|である)\s*[。．.!！]?\s*$"#,
+    #"を\s*覚えておいてください\s*[。．.!！]?\s*$"#,
+  ]
+
+  static let importanceCuePatterns =
+    importancePrefixCuePatterns + importanceSuffixCuePatterns
 
   static func containsExplicitImportanceCue(_ text: String) -> Bool {
     let searchRange = NSRange(text.startIndex..<text.endIndex, in: text)

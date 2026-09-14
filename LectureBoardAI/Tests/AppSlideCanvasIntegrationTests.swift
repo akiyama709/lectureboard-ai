@@ -912,7 +912,7 @@ struct AppSlideCanvasIntegrationTests {
     #expect(model.boardScene.elements.isEmpty)
     #expect(model.latestSlideAnalysis == nil)
     #expect(overlay.renderCallCount == rendersBeforeChange)
-    #expect(transcription.stopCallCount == stopCallsBeforeVisualChange)
+    #expect(transcription.stopCallCount == stopCallsBeforeVisualChange + 1)
 
     for sequenceNumber in 7...8 {
       await capture.emit(
@@ -932,18 +932,19 @@ struct AppSlideCanvasIntegrationTests {
     #expect(!overlay.isVisible)
     await analyzer.succeedSecondAnalysis()
     try await waitUntil { model.slideAnalysisStatus == .ready }
+    try await waitUntil { transcription.retainedObservationCount == 2 }
     #expect(model.boardScene.elements.isEmpty)
     #expect(!overlay.isVisible)
 
     transcription.emitRetained(staleObservation, startIndex: 0)
     #expect(model.boardScene.elements.isEmpty)
-    #expect(transcription.stopCallCount == stopCallsBeforeVisualChange)
+    #expect(transcription.stopCallCount == stopCallsBeforeVisualChange + 1)
     transcription.emitRetained(
       TranscriptionObservation(
         segment: boardProposalDefinition(text: "Sustainability means preserving options."),
         sourceMachTime: UInt64.max
       ),
-      startIndex: 0
+      startIndex: 1
     )
     #expect(!model.boardScene.elements.isEmpty)
     #expect(!overlay.isVisible)

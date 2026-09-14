@@ -73,6 +73,52 @@ struct BoardSceneComposerTests {
     #expect(renderedIntentIDs == Set([confirmed.id, pinned.id]))
   }
 
+  @Test func reportsOnlyPlacedIntentAndAllowsUnplacedIntentToBeRetried() {
+    let composer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.015, gridStep: 1)
+    )
+    let first = makeIntent(title: "First", state: .confirmed)
+    let second = makeIntent(title: "Second", state: .confirmed)
+
+    let initial = composer.appending(
+      intents: [first, second],
+      to: BoardScene(slideNumber: 1),
+      slideOccupied: []
+    )
+
+    #expect(initial.placedIntents == [first])
+    #expect(initial.unplacedIntents == [second])
+    #expect(Set(initial.scene.elements.compactMap(\.sourceIntentID)) == [first.id])
+
+    let retried = composer.appending(
+      intents: initial.unplacedIntents,
+      to: BoardScene(slideNumber: 1),
+      slideOccupied: []
+    )
+
+    #expect(retried.placedIntents == [second])
+    #expect(retried.unplacedIntents.isEmpty)
+    #expect(Set(retried.scene.elements.compactMap(\.sourceIntentID)) == [second.id])
+  }
+
+  @Test func completelyUnavailableLayoutDoesNotReportAnIntentAsPlaced() {
+    let composer = BoardSceneComposer(
+      layoutEngine: BoardLayoutEngine(margin: 0.51, gridStep: 0.02)
+    )
+    let intent = makeIntent(state: .confirmed)
+    let original = BoardScene(slideNumber: 3)
+
+    let result = composer.appending(
+      intents: [intent],
+      to: original,
+      slideOccupied: []
+    )
+
+    #expect(result.scene == original)
+    #expect(result.placedIntents.isEmpty)
+    #expect(result.unplacedIntents == [intent])
+  }
+
   @Test func causalChainProducesVectorArrows() {
     let intent = BoardIntent(
       kind: .causalChain,
