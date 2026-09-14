@@ -720,6 +720,47 @@ struct AppSlideCanvasIntegrationTests {
     await model.stopWindowCapture()
   }
 
+  @Test func recognizedJapaneseBoardRequestCreatesPreviewAndInvokesOverlay() async throws {
+    let capture = ManualCanvasCapture()
+    let analyzer = RecordingCanvasAnalyzer(
+      occupiedRegions: boardProposalOccupiedRegions()
+    )
+    let overlay = RecordingCanvasOverlayController()
+    let eligibility = MutableCanvasProductionOverlayEligibilityProvider()
+    let geometry = try makeProductionOverlayTestGeometry()
+    let model = makeModel(
+      capture: capture,
+      analyzer: analyzer,
+      overlay: overlay,
+      displays: [geometry.display],
+      productionOverlayEligibilityProvider: eligibility
+    )
+
+    try await establishAnalyzedProductionOverlay(
+      model: model,
+      capture: capture,
+      geometry: geometry
+    )
+    let renderCallsBeforeRequest = overlay.renderCallCount
+    model.receive(
+      TranscriptSegment(
+        text: "問題を板書してください",
+        startTime: 0,
+        endTime: 2,
+        language: .japanese,
+        confidence: 0,
+        isFinal: true,
+        emphasis: 0.5
+      )
+    )
+
+    #expect(model.productionConfirmedBoardElementCount > 0)
+    #expect(model.boardScene.elements.contains { $0.text == "• 問題" })
+    #expect(overlay.renderCallCount == renderCallsBeforeRequest + 1)
+
+    await model.stopWindowCapture()
+  }
+
   @Test func productionOverlayLeaseExpiresAndFocusEventsRequireANewEligibleFrame() async throws {
     let capture = ManualCanvasCapture()
     let analyzer = RecordingCanvasAnalyzer(

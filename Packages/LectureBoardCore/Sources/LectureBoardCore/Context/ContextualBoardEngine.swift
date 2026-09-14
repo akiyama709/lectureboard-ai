@@ -59,6 +59,10 @@ public struct ContextualBoardEngine: Sendable {
       .enumerated()
       .filter { !existingSources.contains($0.element.id) }
       .compactMap { sourceIndex, segment -> (sourceIndex: Int, intent: BoardIntent)? in
+        let explicitBoardRequest = ExplicitBoardRequestParser.requestedContent(
+          in: segment.text,
+          language: segment.language
+        )
         let otherFinalizedSegments = finalizedSegments.filter { $0.id != segment.id }
         let matchingRepeatedEvidence = repeatedEvidence(
           for: segment,
@@ -69,7 +73,9 @@ public struct ContextualBoardEngine: Sendable {
           slide: slide,
           recentSegments: otherFinalizedSegments
         )
-        guard scorer.shouldPropose(score) else { return nil }
+        let hasValidExplicitRequestEvidence =
+          explicitBoardRequest != nil && isValidExplicitRequestEvidence(segment)
+        guard hasValidExplicitRequestEvidence || scorer.shouldPropose(score) else { return nil }
         let reliableRepeatedScore = scorer.score(
           segment: segment,
           slide: slide,
@@ -80,7 +86,8 @@ public struct ContextualBoardEngine: Sendable {
           slide: slide,
           score: score,
           reliableRepeatedScore: reliableRepeatedScore,
-          repeatedEvidence: matchingRepeatedEvidence
+          repeatedEvidence: matchingRepeatedEvidence,
+          explicitBoardRequest: explicitBoardRequest
         )
         guard
           !existingIntents.contains(where: { existing in
@@ -125,7 +132,8 @@ public struct ContextualBoardEngine: Sendable {
     slide: SlideContext,
     score: ImportanceScore,
     reliableRepeatedScore: ImportanceScore,
-    repeatedEvidence: [TranscriptSegment]
+    repeatedEvidence: [TranscriptSegment],
+    explicitBoardRequest: String?
   ) -> BoardIntent {
     let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
     let inferredKind = classifyKind(text)
@@ -145,7 +153,12 @@ public struct ContextualBoardEngine: Sendable {
     let state: BoardIntentState
     let usesRepeatedEvidence: Bool
 
-    if let explicitContent {
+    if let explicitBoardRequest {
+      kind = .keyword
+      content = (nil, [explicitBoardRequest])
+      state = isValidExplicitRequestEvidence(segment) ? .confirmed : .proposed
+      usesRepeatedEvidence = false
+    } else if let explicitContent {
       kind = explicitContent.kind
       content = (explicitContent.title, explicitContent.items)
       state = hasReliableEvidence ? .confirmed : .proposed
@@ -461,6 +474,13 @@ public struct ContextualBoardEngine: Sendable {
 
   private func isReliable(_ segment: TranscriptSegment) -> Bool {
     segment.confidence.isFinite && (0.5...1).contains(segment.confidence)
+      && segment.startTime.isFinite && segment.endTime.isFinite
+      && segment.startTime >= 0 && segment.endTime >= segment.startTime
+  }
+
+  private func isValidExplicitRequestEvidence(_ segment: TranscriptSegment) -> Bool {
+    segment.confidence.isFinite && (0...1).contains(segment.confidence)
+      && segment.emphasis.isFinite && (0...1).contains(segment.emphasis)
       && segment.startTime.isFinite && segment.endTime.isFinite
       && segment.startTime >= 0 && segment.endTime >= segment.startTime
   }

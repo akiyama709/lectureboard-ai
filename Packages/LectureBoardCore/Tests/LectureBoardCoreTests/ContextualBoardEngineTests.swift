@@ -977,6 +977,110 @@ struct ContextualBoardEngineTests {
     }
   }
 
+  @Test func explicitJapaneseBoardRequestPublishesOnlyTheRequestedContent() throws {
+    let segment = TranscriptSegment(
+      text: "問題を板書してください",
+      startTime: 0,
+      endTime: 2,
+      language: .japanese,
+      confidence: 0,
+      isFinal: true,
+      emphasis: 0.5
+    )
+    let slide = SlideContext(slideNumber: 1, title: "根本問題", dwellTime: 40)
+
+    let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+    let intent = try #require(intents.first)
+
+    #expect(intent.kind == .keyword)
+    #expect(intent.items == ["問題"])
+    #expect(intent.state == .confirmed)
+    #expect(!publicScene(for: intents, slide: slide).elements.isEmpty)
+  }
+
+  @Test func explicitBoardRequestExtractsContentAfterPlacementWordingAndInEnglish()
+    throws
+  {
+    let examples: [(text: String, item: String, language: LanguageTag)] = [
+      ("右上の部分にテストと書いてください", "テスト", .japanese),
+      ("Write feedback loop on the board.", "feedback loop", .englishUS),
+      ("Put resilience on the board", "resilience", .englishUS),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Lecture", dwellTime: 40)
+
+    for example in examples {
+      let segment = TranscriptSegment(
+        text: example.text,
+        startTime: 0,
+        endTime: 2,
+        language: example.language,
+        confidence: 0,
+        isFinal: true,
+        emphasis: 0.5
+      )
+      let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+      let intent = try #require(intents.first)
+
+      #expect(intent.items == [example.item], "Unexpected content for: \(example.text)")
+      #expect(intent.state == .confirmed, "Request was not confirmed: \(example.text)")
+      #expect(!intent.items.contains(example.text))
+    }
+  }
+
+  @Test func malformedQuotedDeicticOrMultisentenceBoardRequestsRemainNonpublic() {
+    let examples: [(text: String, language: LanguageTag)] = [
+      ("板書してください", .japanese),
+      ("『問題を板書してください』と学生が言いました", .japanese),
+      ("問題を板書してください．別の指示です", .japanese),
+      ("問題を板書してくださいと発話しました", .japanese),
+      ("この内容を板書してください", .japanese),
+      ("Write this point on the board", .englishUS),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Lecture", dwellTime: 40)
+
+    for example in examples {
+      let segment = TranscriptSegment(
+        text: example.text,
+        startTime: 0,
+        endTime: 2,
+        language: example.language,
+        confidence: 1,
+        isFinal: true,
+        emphasis: 0.5
+      )
+      let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+
+      #expect(
+        publicScene(for: intents, slide: slide).elements.isEmpty,
+        "Unsafe request became public: \(example.text)"
+      )
+    }
+  }
+
+  @Test func explicitBoardRequestRejectsInvalidRecognitionEvidence() {
+    let examples: [(confidence: Double, start: TimeInterval, end: TimeInterval)] = [
+      (.nan, 0, 2),
+      (0.5, .nan, 2),
+      (0.5, 2, 1),
+    ]
+    let slide = SlideContext(slideNumber: 1, title: "Lecture", dwellTime: 40)
+
+    for example in examples {
+      let segment = TranscriptSegment(
+        text: "問題を板書してください",
+        startTime: example.start,
+        endTime: example.end,
+        language: .japanese,
+        confidence: example.confidence,
+        isFinal: true,
+        emphasis: 0.5
+      )
+
+      let intents = ContextualBoardEngine().propose(slide: slide, recentSegments: [segment])
+      #expect(publicScene(for: intents, slide: slide).elements.isEmpty)
+    }
+  }
+
   @Test func explicitImportanceWrapperDoesNotBypassDefinitionGrounding() throws {
     let segment = TranscriptSegment(
       text: "The key point is Sustainability means meeting present needs.",

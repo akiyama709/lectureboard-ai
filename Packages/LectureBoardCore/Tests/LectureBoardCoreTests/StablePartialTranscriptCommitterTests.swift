@@ -153,6 +153,19 @@ struct StablePartialTranscriptCommitterTests {
     }
   }
 
+  @Test func pauseFallbackDoesNotPublishAnUnfinishedBoardRequest() {
+    let partial = segment(
+      id: UUID(),
+      text: "問題を板書してください",
+      endTime: 1,
+      confidence: 0
+    )
+    var committer = StablePartialTranscriptCommitter()
+
+    #expect(committer.observe(partial) == nil)
+    #expect(committer.commitAfterPause(partial) == nil)
+  }
+
   @Test func pauseFallbackRejectsStaleUnsafeOrUnreliablePartials() {
     let id = UUID()
 
