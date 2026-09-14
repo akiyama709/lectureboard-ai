@@ -588,6 +588,9 @@ final class AppModel: ObservableObject {
             ) != nil
           }?.id
       }
+      if applicationStatusErrorSource == .powerPointScan {
+        applicationStatusErrorSource = nil
+      }
       status = .ready
     } catch {
       guard generation == refreshGeneration else { return }
@@ -644,6 +647,9 @@ final class AppModel: ObservableObject {
               in: windows
             ) != nil
           }?.id
+      }
+      if applicationStatusErrorSource == .powerPointScan {
+        applicationStatusErrorSource = nil
       }
       status = .ready
     } catch {
@@ -1028,11 +1034,6 @@ final class AppModel: ObservableObject {
       applicationStatusErrorSource = nil
       status = .ready
     }
-    guard transcriptionContextIsReady else {
-      transcriptionLifecycleState = .waitingForContext
-      clearLiveTranscript()
-      return
-    }
     await startTranscriptionOperation()
   }
 
@@ -1074,7 +1075,9 @@ final class AppModel: ObservableObject {
         }
         return
       }
-      status = .listening
+      if applicationStatusErrorSource == nil || applicationStatusErrorSource == .transcription {
+        status = .listening
+      }
       transcriptionLifecycleState = .listening
     } catch {
       guard transcriptionOperationGate.invalidate(ifCurrent: operationID) else { return }
@@ -1092,11 +1095,15 @@ final class AppModel: ObservableObject {
     automaticTranscriptionResumeTask = nil
     cancelPendingStablePartialTranscriptCommit()
     guard let operationID = transcriptionOperationGate.activeOperationID else {
-      status = .ready
+      if applicationStatusErrorSource == nil || applicationStatusErrorSource == .transcription {
+        status = .ready
+      }
       transcriptionLifecycleState = .idle
       return
     }
-    status = .finalizingTranscription
+    if applicationStatusErrorSource == nil || applicationStatusErrorSource == .transcription {
+      status = .finalizingTranscription
+    }
     transcriptionLifecycleState = .finalizing
     speechProvider.finishCurrentSegment(operationID: operationID)
   }
@@ -1139,7 +1146,9 @@ final class AppModel: ObservableObject {
       if liveTranscriptPhase != .final {
         clearLiveTranscript()
       }
-      status = .ready
+      if applicationStatusErrorSource == nil || applicationStatusErrorSource == .transcription {
+        status = .ready
+      }
       transcriptionLifecycleState = .idle
     case .failure(let error):
       clearLiveTranscript()
@@ -1411,6 +1420,49 @@ final class AppModel: ObservableObject {
       {
         slideCanvasStatus = .needsConfirmation
       }
+    case .automaticCapturedContent:
+      guard
+        let captureSurfaceGeometry = frame.captureSurfaceGeometry,
+        captureSurfaceGeometry.outputPixelWidth == frame.image.width,
+        captureSurfaceGeometry.outputPixelHeight == frame.image.height
+      else {
+        invalidateConfirmedSlideCanvas(
+          reason: .surfaceGeometryUnavailableOrMismatched(for: frame.deliveryKind)
+        )
+        return
+      }
+      if slideCanvasStatus == .selecting {
+        guard
+          let source = slideCanvasCalibrationSource,
+          source.captureOperationID == sessionID,
+          source.windowID == frame.windowID,
+          source.captureSurfaceGeometry == captureSurfaceGeometry
+        else {
+          invalidateConfirmedSlideCanvas(reason: .selectionContextMismatch)
+          return
+        }
+        return
+      }
+      guard
+        let automaticRegion = AutomaticSlideCanvasSelection.region(
+          for: captureSurfaceGeometry
+        ),
+        let selection = ConfirmedSlideCanvasSelection(
+          captureOperationID: sessionID,
+          windowID: frame.windowID,
+          captureSurfaceGeometry: captureSurfaceGeometry,
+          region: automaticRegion
+        )
+      else {
+        invalidateConfirmedSlideCanvas(reason: .confirmedFrameRejected)
+        return
+      }
+      slideCanvasGeneration &+= 1
+      confirmedSlideCanvasSelection = selection
+      confirmedSlideCanvasRegion = automaticRegion
+      slideCanvasStatus = .confirmed
+      slideCanvasInvalidationReason = nil
+      resetCanvasVisualPipeline()
     case .testOnlyUseFullCapturedFrame:
       guard
         let fullFrameRegion = SlideCanvasRegion(
@@ -2853,14 +2905,8 @@ final class AppModel: ObservableObject {
       && latestCompletedAnalysisGeneration == analysisGeneration
   }
 
-  private var transcriptionRequestIsQueued: Bool {
-    transcriptionRequestedByUser
-      && !transcriptionOperationGate.hasActiveOperation
-      && transcriptionLifecycleState == .waitingForContext
-  }
-
   private func invalidateTranscriptionContextForSetupTransition() {
-    invalidateTranscriptionContext(preserveUserRequest: transcriptionRequestIsQueued)
+    invalidateTranscriptionContext(preserveUserRequest: transcriptionRequestedByUser)
   }
 
   private func invalidateTranscriptionContext(

@@ -1,8 +1,8 @@
 # LectureBoard AI：発話中の自動板書から正式公開までの開発計画
 
-更新日：2026年9月7日
+更新日：2026年9月14日
 
-状態：全体計画．ADR 0014により，公開v1はPowerPointを自動操作せず，利用者が選択した正確な画面を観測してlocal visual epochを形成する方式に確定した．固定候補`926be08…`も本人試用では確定板書0のため不合格となった．実partial信頼度，同文callbackによるtimer再開及び既定sizeを置けない場合の黙示的破棄をcommit `7dd1c78…`で修正し，新しい固定Appで予備再試験を行う．実音声からの可視板書・遅延目標・本人資料受入は未確認である．
+状態：全体計画．ADR 0014により，公開v1はPowerPointを自動操作せず，利用者が選択した正確な聴衆向けslide show画面を観測してlocal visual epochを形成する方式に確定した．現行working treeでは，最初の有効なScreenCaptureKit frameからsurface paddingを除いたcaptured-content pixel boundsを求め，pixel round-trip検証後にproduction canvasを自動確定する．文字起こし開始要求は視覚準備を待たず直ちに端末内音声認識を開始し，板書生成だけをcurrent visual groundingまでfail closedに保つ．重点90件及びnative App全520件のtestは合格したが，実microphone及びPowerPoint上の可視overlayは未検証である．
 
 ## 1．完成形と現在位置
 
@@ -10,7 +10,7 @@
 
 　最終到達点は，既定の全5添付物・exact commitとの対応・未認証再取得検証を伴う，公開かつimmutableで非prereleaseのGitHub v1.0.0である．有料Apple Developer加入・機関名義は使わず，ad hoc署名及び未公証という配布条件を明示する．α・βという名前で中核要件の未達を公開しない．既存の公開要件はROADMAP及びv1-release-checklistを維持する．
 
-　現在は，固定App`Visual-Owner-Trial-7dd1c78`で段階1・2・4・5を一度だけ短く再確認することが次の主要境界である．commit `7dd1c78…`は，明示cueと700 msの同文安定を満たす日本語partialに限って有限な低信頼度を受理し，同じ表示文のcallbackではtimerを再開せず，短いkeywordを既存内容に重ならない範囲で段階的に縮小配置する．Core全269件及び関連App全44件は合格したが，実音声からの発話中の可視板書，overlay，export及び本人資料は再試用まで未確認である．旧`f18c873…`，`e2c66af…`及び`926be08…`候補は再使用しない．全体の完成率をテスト件数から計算しない．
+　現在は，canvas未確認を理由に音声認識まで待機させていたUI経路を修正し，production visual-only経路のcanvasを選択済み聴衆向けwindowのcaptured-content pixel boundsから自動確定する段階である．手動canvas選択は診断又はfallbackとして残す．重点90件及びnative App全520件のtestは合格したが，実音声からの発話中の可視板書，overlay，export及び本人資料は再試用まで未確認である．旧`f18c873…`，`e2c66af…`，`926be08…`及び`7dd1c78…`のowner trial候補は再使用しない．全体の完成率をテスト件数から計算しない．
 
 ## 2．構成判断
 
@@ -29,11 +29,11 @@
 | 段階 | 主な作業・成果物 | 次へ進む条件 | 現在の状態 |
 |---|---|---|---|
 | 0．仕様・評価の固定 | 発話中の板書，原本保護，手書き優先，無課金前提を明文化し，重要／非重要・否定・訂正を含む小さな合成評価セットを定義 | 成功／失敗を実測で判定でき，対象範囲と構成比較条件が明確 | 計画作成済．評価セット未作成 |
-| 1．通常起動と入力 | 固定Appの通常起動，音声権限，連続した部分認識，開始・停止・再開を確認．TCC終了を原因別に修正 | Codexからの実行ファイル直接起動に依存せず，実マイクの部分結果が継続して届く．拒否時は正常に停止し，クラッシュしない | 修正版`7dd1c78…`のexact Appは生成済み．実マイク予備再試験待ち |
+| 1．通常起動と入力 | 固定Appの通常起動，音声権限，連続した部分認識，開始・停止・再開を確認．TCC終了を原因別に修正 | Codexからの実行ファイル直接起動に依存せず，開始要求直後から実マイクの部分結果が継続して届く．視覚準備前も認識を止めず，拒否時は正常に停止し，クラッシュしない | UI開始要求で認識器を直ちに開始する回帰testは合格．実マイク未検証 |
 | 2．短い発話の即時板書 | 同一発話のpartial改訂を管理し，安定した短い意味単位を出力へつなぐ．既存描画部を使う最小の縦通し試験 | 合成スライド1枚と短い実発話で，全文確定前に根拠ある短い板書が見える．遅延を測定できる | 保守的なsource経路と合成統合testは合格．実音声・可視表示・遅延は未検証 |
 | 3．文脈判断の品質 | 現スライドと直前の発話を使い，単なる字幕ではなく重要な内容を選ぶ．固定規則と必要に応じたローカル推論を同じ評価例で比較 | 言い直し・否定・非重要な説明・重複等を含む評価で，誤出力・見逃し・遅延を把握し，採用方式を決める | 現行規則実装はあるが講義品質は未検証 |
-| 4．PowerPoint上で結合 | 普段の全画面又はwindow表示slide show，正確な画面選択，canvas確認，視覚切替・戻り，空白配置，人の手書き優先を一本の流れで検証 | 本物のslide show上に発話中の板書が出る．別窓・旧visual epochへの誤表示がなく，原本を変更しない | 旧3候補の可視自動板書は不合格．`7dd1c78…`で実partialと狭い空白の修正済み，live未確認 |
-| 5．本人の短い模擬講義 | 新しい正確な候補と作業用コピーで5〜10分程度試し，タイミング・内容・邪魔にならないかを本人が評価 | 秋山さんが実際の表示を見て，講義に使えるかを判断できる．未解決の主要な不具合は修正して再試験 | `f18c873…`，`e2c66af…`及び`926be08…`は不合格．`7dd1c78…`で予備再試験待ち |
+| 4．PowerPoint上で結合 | 普段の全画面又はwindow表示slide show，正確な聴衆向け画面選択，captured-contentからのcanvas自動確定，視覚切替・戻り，空白配置，人の手書き優先を一本の流れで検証 | 本物のslide show上に発話中の板書が出る．surface paddingをcanvasに含めず，別窓・旧visual epochへの誤表示がなく，原本を変更しない | 自動canvas，pixel round-trip及び音声開始からgrounded boardまでの関連testは合格．live microphone・可視overlay未検証 |
+| 5．本人の短い模擬講義 | 新しい正確な候補と作業用コピーで5〜10分程度試し，タイミング・内容・邪魔にならないかを本人が評価 | 秋山さんが実際の表示を見て，講義に使えるかを判断できる．未解決の主要な不具合は修正して再試験 | 旧owner trial候補は不合格．現行working treeの候補固定とlive再試験待ち |
 | 6．対応範囲の仕上げ | 講義時間相当の連続動作，日英と対応する混在条件，簡単な図，復帰，JSON/SVG書出し，導入UI，privacy・license・説明を確認 | 公開する対応機能が検証記録と一致する．短時間試験だけを長時間講義の証拠にしない | 未完了 |
 | 7．配布物の最終検証 | sourceを固定し，全gateをexact commitで実行．署名・5添付物・checksums・来歴を生成し，清浄な対応環境で導入・権限・中核動作を検証 | 正確な配布物が公開前チェックリストを通る．別buildの合格を流用しない | 未完了 |
 | 8．GitHub正式公開 | exact commitとZIP hashを提示して公開承認を得た後，v1.0.0を公開し，未認証で再取得・照合 | 公開Releaseと全5添付物が定義どおりで，再取得したAppでも必要な検証を通る | 未完了 |
@@ -64,7 +64,8 @@
 
 ## 6．参照と変更履歴
 
-- 最新の実音声・同文安定・狭い空白修正commit：`7dd1c78d8ff8d7802e1e30a7cfd05328e059a45b`．Core全269件及び関連App全44件は合格したが，全26段階gate，実マイクからの可視板書及び本人受入は未検証である．
+- 直前の実音声・同文安定・狭い空白修正commit：`7dd1c78d8ff8d7802e1e30a7cfd05328e059a45b`．Core全269件及び関連App全44件は合格したが，owner trialは不合格であり，現行候補として再使用しない．
+- 2026-09-14：production visual-only経路で，選択済み聴衆向けPowerPoint windowの最初の有効frameからpaddingを除外したcaptured-content pixel boundsを算出し，round-trip検証後にcanvasを自動確定するよう更新した．UIの文字起こし開始要求は直ちに端末内認識を開始し，板書生成だけをcurrent visual groundingまで閉じる．manual canvasは診断又はfallbackとして保持した．重点90件及びnative App全520件のtestは合格したが，実microphone及び可視overlayは未検証である．
 - 実機の正負の証拠：[build-verification.md](build-verification.md)．
 - 正式公開の条件：[v1-release-checklist.md](v1-release-checklist.md)及び[ROADMAP.md](../ROADMAP.md)．
 - 2026-09-06：engineering:architectureによる構成比較とproduct-management:roadmap-updateによる優先順位整理を反映．既存の細かな証拠は保持し，中核の実動作と早期本人試用を先に置いた．

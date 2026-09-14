@@ -31,8 +31,97 @@ enum SlideCanvasInvalidationReason: Equatable, Sendable {
 
 enum SlideCanvasConfirmationMode: Sendable {
   case userConfirmed
+  /// Treats only the validated captured-content pixels of the exact PowerPoint window chosen by
+  /// the user as the production slide surface. Padding in the stream output remains excluded.
+  case automaticCapturedContent
   /// Preserves deterministic whole-frame fixtures without weakening the app default.
   case testOnlyUseFullCapturedFrame
+}
+
+/// Builds the production automatic selection from the same inward-rounded content crop used by
+/// frame sampling. The normalized representation is accepted only when converting it back through
+/// the public slide-canvas rounding contract reproduces that pixel crop exactly.
+enum AutomaticSlideCanvasSelection {
+  static func region(
+    for surfaceGeometry: CaptureSurfaceGeometry
+  ) -> SlideCanvasRegion? {
+    guard
+      let pixelCrop = FrameFingerprintSampler.PixelCrop(
+        surfaceGeometry: surfaceGeometry
+      )
+    else {
+      return nil
+    }
+
+    let sourcePixelWidth = surfaceGeometry.outputPixelWidth
+    let sourcePixelHeight = surfaceGeometry.outputPixelHeight
+    let maximumX = pixelCrop.x + pixelCrop.width
+    let maximumY = pixelCrop.y + pixelCrop.height
+
+    guard
+      let minimumNormalizedX = normalizedMinimumBoundary(
+        pixelCrop.x,
+        extent: sourcePixelWidth
+      ),
+      let minimumNormalizedY = normalizedMinimumBoundary(
+        pixelCrop.y,
+        extent: sourcePixelHeight
+      ),
+      let maximumNormalizedX = normalizedMaximumBoundary(
+        maximumX,
+        extent: sourcePixelWidth
+      ),
+      let maximumNormalizedY = normalizedMaximumBoundary(
+        maximumY,
+        extent: sourcePixelHeight
+      ),
+      let region = SlideCanvasRegion(
+        x: minimumNormalizedX,
+        y: minimumNormalizedY,
+        width: maximumNormalizedX - minimumNormalizedX,
+        height: maximumNormalizedY - minimumNormalizedY
+      ),
+      let roundTrip = region.pixelRect(
+        sourcePixelWidth: sourcePixelWidth,
+        sourcePixelHeight: sourcePixelHeight
+      ),
+      roundTrip.x == pixelCrop.x,
+      roundTrip.y == pixelCrop.y,
+      roundTrip.width == pixelCrop.width,
+      roundTrip.height == pixelCrop.height,
+      SlideCanvasSelectionPolicy.accepts(
+        region,
+        sourcePixelWidth: sourcePixelWidth,
+        sourcePixelHeight: sourcePixelHeight
+      )
+    else {
+      return nil
+    }
+
+    return region
+  }
+
+  /// Places an interior normalized boundary halfway through the edge pixel. Outward rounding still
+  /// selects that entire pixel, while floating-point division cannot expand into adjacent padding.
+  private static func normalizedMinimumBoundary(
+    _ pixel: Int,
+    extent: Int
+  ) -> Double? {
+    guard extent > 0, pixel >= 0, pixel < extent else { return nil }
+    guard pixel > 0 else { return 0 }
+    return (Double(pixel) + 0.5) / Double(extent)
+  }
+
+  /// Mirrors `normalizedMinimumBoundary` at the trailing edge. The exact outer surface boundary is
+  /// retained so a content crop that fills the output surface remains a true full-frame region.
+  private static func normalizedMaximumBoundary(
+    _ pixel: Int,
+    extent: Int
+  ) -> Double? {
+    guard extent > 0, pixel > 0, pixel <= extent else { return nil }
+    guard pixel < extent else { return 1 }
+    return (Double(pixel) - 0.5) / Double(extent)
+  }
 }
 
 enum SlideCanvasSelectionPolicy {

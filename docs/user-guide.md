@@ -80,20 +80,23 @@ safe test procedure.
 ## Start a lecture
 
 1. Open LectureBoard AI and select Japanese or English for the session.
-2. Confirm that Screen Recording is granted, then choose **Refresh PowerPoint windows**.
-3. Select the exact PowerPoint slide-show or presentation view that the audience sees. If the slide
+2. Choose **Start transcription**. On-device recognition can start immediately without waiting for
+   visual analysis.
+3. Confirm that Screen Recording is granted, then choose **Refresh PowerPoint windows**.
+4. Select the exact PowerPoint slide-show or presentation view that the audience sees. If the slide
    show was opened afterward, refresh and select its new view.
-4. Choose **Start board on this view**.
-5. On the frozen preview, drag around only the visible slide, excluding PowerPoint controls and
-   surrounding UI, then confirm the slide area.
-6. Start transcription after the visual baseline and analysis are ready, then return to PowerPoint
-   and speak naturally.
+5. Choose **Start board on this view**. From the first valid frame, the App automatically confirms
+   the captured content excluding surrounding surface padding as the production canvas.
+6. Return to PowerPoint and speak naturally. Only if automatic confirmation fails and the App asks
+   for reselection, use the frozen preview to select the visible slide manually.
 
-The runtime diagnostics show application state and transcription state separately. `Waiting for
-current slide context` means that output is intentionally closed until the current visual slide
-epoch, canvas, and analysis are ready. `Render requested` proves only that the renderer was invoked;
-the presenter must still confirm that the board is visibly over PowerPoint. The production element
-count excludes demo content.
+The runtime diagnostics show application state and transcription state separately. Recognized
+speech can appear before the canvas and current analysis are ready; only board generation remains
+closed until the current visual slide epoch, canvas, and analysis are ready. If a visual boundary
+temporarily shows `Waiting for current slide context`, recognition automatically resumes after the
+replacement context is ready while retaining the user's start request. `Render requested` proves
+only that the renderer was invoked; the presenter must still confirm that the board is visibly over
+PowerPoint. The production element count excludes demo content.
 
 During a lecture, use PowerPoint normally. Human mouse or pen input has priority. **Hide board**
 immediately hides LectureBoard AI output. If slide identity, canvas, current analysis, focus, or
@@ -126,7 +129,7 @@ slide ID.
 - **On-device speech unavailable:** continue without transcription or stop the session. The App
   deliberately has no network fallback.
 - **Overlay disappears:** restore PowerPoint to the front, avoid moving or resizing either window,
-  and reselect the slide area if requested. Hidden output is the safe state.
+  and select the slide area manually only if requested. Hidden output is the safe state.
 - **Export is disabled:** first stop capture and confirm that at least one public board scene was
   produced.
 - **Crash, wrong window, ungrounded content, intercepted input, or file change:** stop using the

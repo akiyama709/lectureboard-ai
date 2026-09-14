@@ -2494,3 +2494,38 @@ reports `adhoc,runtime`, contains only the audio-input entitlement, has no TeamI
 strict deep verification, and exactly matches the archived build product. Codex has not launched
 this app. Live preview and PowerPoint-overlay success, latency, export, owner acceptance, the full
 publication gate, Gatekeeper, GitHub publication, and public re-download remain unverified.
+
+### 2026-09-14 immediate-transcription and automatic-canvas working-tree checkpoint
+
+The later owner screenshot exposed a setup deadlock rather than an operator error. Capture was
+delivering frames, but the slide canvas was still unconfirmed. `requestTranscriptionStart()` then
+required the complete visual context before it invoked the speech provider, so the UI remained at
+`waitingForContext` and no live transcript could appear. The same manual-canvas prerequisite also
+kept visual analysis and board admission closed until an extra calibration action was performed.
+The frozen `7dd1c78` owner app is therefore not a valid retry or publication candidate.
+
+The current working tree separates requested transcription from board readiness. An explicit UI
+request invokes the speech provider immediately. Its accepted callbacks may update the displayed
+transcript while the visual context is incomplete, but board-segment processing independently
+requires the current canvas, visual baseline or epoch, and completed analysis. Setup, visual-epoch,
+and temporary capture-content boundaries still invalidate the old operation, callbacks, and
+segments. They retain an explicit user request and resume it only when the replacement context is
+ready; manual stop, cancellation of a manual canvas selection, and capture end cancel it.
+
+For the standard public UI, the first valid frame from the exact user-selected audience-view
+slide-show window now confirms only ScreenCaptureKit's validated captured-content pixel crop. The
+conversion excludes surface padding, requires the normalized selection to round-trip to the exact
+pixel crop, and retains the existing minimum-dimension and provenance checks. Invalid, partial, or
+out-of-bounds geometry leaves visual analysis and board placement closed. Manual frozen-preview
+selection remains a fallback and diagnostic mode. The automatic path does not infer an internal
+slide subview for an editor or Presenter View window.
+
+After the final source and localization correction, four directly affected native suites passed
+90 tests at
+`/private/tmp/LectureBoardFixTests/Logs/Test/Test-LectureBoardAI-2026.09.14_11-08-47-+0900.xcresult`.
+The full native App suite then passed 520 tests in 41 suites at
+`/private/tmp/LectureBoardFinalTests/Logs/Test/Test-LectureBoardAI-2026.09.14_11-09-24-+0900.xcresult`.
+These results are working-tree checkpoints rather than clean exact-commit, release-archive, or
+publication evidence. Live microphone input, visible PowerPoint overlay output, the owner's PPTX,
+export, original-file preservation, owner acceptance, Gatekeeper, and public re-download remain
+unverified.

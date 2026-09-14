@@ -5,6 +5,85 @@ import Testing
 @testable import LectureBoard_AI
 
 struct SlideCanvasCalibrationTests {
+  @Test func automaticSelectionExcludesSurfacePaddingAndExactlyMatchesSamplerCrop() throws {
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 10.25, y: 5.25, width: 79.5, height: 39.5),
+        scaleFactor: 2,
+        contentScale: 0.5,
+        outputPixelWidth: 200,
+        outputPixelHeight: 120
+      )
+    )
+    let samplerCrop = try #require(
+      FrameFingerprintSampler.PixelCrop(surfaceGeometry: geometry)
+    )
+    let region = try #require(AutomaticSlideCanvasSelection.region(for: geometry))
+    let roundTrip = try #require(
+      region.pixelRect(sourcePixelWidth: 200, sourcePixelHeight: 120)
+    )
+
+    #expect(!region.isFullFrame)
+    #expect(roundTrip.x == samplerCrop.x)
+    #expect(roundTrip.y == samplerCrop.y)
+    #expect(roundTrip.width == samplerCrop.width)
+    #expect(roundTrip.height == samplerCrop.height)
+    #expect(roundTrip.x == 21)
+    #expect(roundTrip.y == 11)
+    #expect(roundTrip.width == 158)
+    #expect(roundTrip.height == 78)
+  }
+
+  @Test func automaticSelectionPreservesTrueFullContentSurface() throws {
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 0, y: 0, width: 100, height: 60),
+        scaleFactor: 2,
+        contentScale: 1,
+        outputPixelWidth: 200,
+        outputPixelHeight: 120
+      )
+    )
+    let region = try #require(AutomaticSlideCanvasSelection.region(for: geometry))
+
+    #expect(region.isFullFrame)
+    #expect(
+      region.pixelRect(sourcePixelWidth: 200, sourcePixelHeight: 120)?.width == 200
+    )
+    #expect(
+      region.pixelRect(sourcePixelWidth: 200, sourcePixelHeight: 120)?.height == 120
+    )
+  }
+
+  @Test func automaticSelectionRejectsTooSmallContentCrop() throws {
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 10, y: 10, width: 31, height: 31),
+        scaleFactor: 1,
+        contentScale: 1,
+        outputPixelWidth: 100,
+        outputPixelHeight: 100
+      )
+    )
+
+    #expect(AutomaticSlideCanvasSelection.region(for: geometry) == nil)
+  }
+
+  @Test func automaticSelectionRejectsContentGeometryOutsideOutputSurface() throws {
+    let geometry = try #require(
+      CaptureSurfaceGeometry(
+        contentRect: CGRect(x: 90, y: 10, width: 20, height: 40),
+        scaleFactor: 1,
+        contentScale: 1,
+        outputPixelWidth: 100,
+        outputPixelHeight: 100
+      )
+    )
+
+    #expect(FrameFingerprintSampler.PixelCrop(surfaceGeometry: geometry) == nil)
+    #expect(AutomaticSlideCanvasSelection.region(for: geometry) == nil)
+  }
+
   @Test func dragSelectionNormalizesForwardAndReverseDrags() throws {
     let size = CGSize(width: 200, height: 100)
     let forward = try #require(

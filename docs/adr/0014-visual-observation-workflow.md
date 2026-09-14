@@ -18,8 +18,15 @@ Public v1 will use a visual-only workflow:
 2. The user refreshes the available windows and selects the exact PowerPoint window to observe
    through ScreenCaptureKit. If PowerPoint creates a new slide-show surface after selection, the
    user refreshes and reselects that surface.
-3. The user manually selects and confirms the visible slide canvas on the captured window.
-4. Stable visual changes within that confirmed canvas create local slide epochs. These epochs
+3. For the selected audience slide-show window, the first valid ScreenCaptureKit frame is used to
+   derive the captured-content pixel bounds. Surface padding is excluded, the normalized crop must
+   round-trip to the same pixel rectangle, and that validated crop is confirmed automatically as
+   the production canvas. Manual canvas selection remains available only as a diagnostic or
+   fallback path.
+4. An explicit transcription-start request starts on-device speech recognition immediately. Board
+   generation remains fail closed until the production canvas and current visual grounding are
+   ready; speech capture itself does not wait for those visual prerequisites.
+5. Stable visual changes within that confirmed canvas create local slide epochs. These epochs
    scope on-device speech recognition, visual analysis, board planning, and the local overlay.
 
 The supported workflow is single-display. LectureBoard AI will not send Apple Events, request
@@ -27,6 +34,10 @@ Automation permission, or start, stop, edit, or save a PowerPoint presentation. 
 exact PowerPoint semantic slide IDs and will not read speaker notes.
 
 Presenter View and multidisplay presentation workflows are outside the public-v1 support contract.
+
+The automatic-canvas and immediate-transcription contracts have deterministic coverage in 90
+focused tests and the complete 520-test native app suite. Live microphone recognition and a
+visible PowerPoint overlay remain unverified.
 
 ## Consequences
 

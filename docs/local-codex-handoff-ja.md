@@ -1,6 +1,18 @@
 # LectureBoard AI ローカル開発引継ぎ
 
-更新日：2026年9月7日
+更新日：2026年9月14日
+
+## 最新の再開点（2026年9月14日，文字起こし開始とスライド面自動確定の修正）
+
+　9月14日の本人試用画面では，PowerPoint画面の取得は進んでいたが，「スライド面が未確認のため，視覚解析を停止しています」及び「現在のスライド文脈を待機中」のまま，発話しても文字起こしが始まらなかった．原因は，利用者の文字起こし開始要求そのものを`transcriptionContextIsReady`で遮断し，手動スライド面確定と現在解析の完了までspeech providerを開始しない設計だったことである．これは利用者操作の問題ではなく，試用前に解消すべき実装上の行き止まりである．従来の`Visual-Owner-Trial-7dd1c78`は再試用又は公開に用いない．
+
+　現行working treeでは，明示された文字起こし開始要求を視覚文脈の準備状態から分離し，標準UIからspeech providerを直ちに開始する．視覚baseline，canvas又は解析が未準備でも認識表示は更新できる一方，板書候補の受入れは既存の視覚文脈境界で閉じたままとする．setup，visual epoch又は一時的なcapture-content境界では古いoperation，callback及びsegmentを無効化するが，利用者の開始要求を保持し，新しい現在文脈が整った時点で自動再開する．手動停止，手動canvas選択の取消及びcapture終了は要求を取消す．
+
+　同時に，標準UIのスライド面は，利用者が選んだ正確な聴衆向けPowerPoint slide-show windowの最初の有効frameから自動確定する．ScreenCaptureKitの検証済みcaptured-content pixel cropだけを使ってsurface paddingを除外し，正規化領域から元のpixel cropへの完全なround-trip及び既存の最小寸法を要求する．検証できない場合は視覚解析と板書をfail closedのままにし，手動選択をfallback及び診断として残す．editor window又はPresenter Viewの内部slide領域を推定する仕組みではない．
+
+　最終source及びlocalization修正後，直接影響する4 suiteは90件すべて合格し，resultは`/private/tmp/LectureBoardFixTests/Logs/Test/Test-LectureBoardAI-2026.09.14_11-08-47-+0900.xcresult`である．全native App testも41 suite・520件すべて合格し，resultは`/private/tmp/LectureBoardFinalTests/Logs/Test/Test-LectureBoardAI-2026.09.14_11-09-24-+0900.xcresult`である．いずれもworking-tree checkpointであり，clean exact commit，配布App又は公開証拠として扱わない．実microphone，PowerPoint上の可視overlay，本人PPTX及び本人受入れは未検証である．
+
+　次は，この修正をreviewと最小限の再検証後にclean commitへ固定し，そのexact commitだけから新しい不変の本人試用Appを1件生成する．それまでは本人へ再試験を依頼しない．画面収録設定，TCC reset又はSystem Settings操作を反復せず，過去の固定候補を上書きしない．GitHubへのpush，tag更新又はRelease公開には別途，exact commitと配布ZIPを特定した明示承認が必要である．
 
 ## 最新の再開点（2026年9月7日23時台，実音声と狭い空白の修正版）
 

@@ -32,7 +32,7 @@ struct AppSlideCanvasIntegrationTests {
     await model.stopWindowCapture()
   }
 
-  @Test func userTranscriptionStartWaitsForVisualContextWithoutStartingProvider() async throws {
+  @Test func userTranscriptionStartRunsBeforeVisualContextButKeepsBoardClosed() async throws {
     let capture = ManualCanvasCapture()
     let transcription = RetainingCanvasTranscriptionProvider()
     let model = makeModel(
@@ -48,9 +48,19 @@ struct AppSlideCanvasIntegrationTests {
     try await waitUntil { model.slideCanvasStatus == .confirmed }
     await model.requestTranscriptionStart()
 
-    #expect(transcription.retainedObservationCount == 0)
-    #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(transcription.retainedObservationCount == 1)
+    #expect(model.transcriptionLifecycleState == .listening)
     #expect(model.canRequestTranscriptionStop)
+    let spokenText = "Sustainability means preserving options."
+    transcription.emitRetained(
+      TranscriptionObservation(
+        segment: boardProposalDefinition(text: spokenText),
+        sourceMachTime: UInt64.max
+      ),
+      startIndex: 0
+    )
+    #expect(model.liveTranscript == spokenText)
+    #expect(model.boardScene.elements.isEmpty)
 
     await model.stopWindowCapture()
   }
@@ -72,13 +82,14 @@ struct AppSlideCanvasIntegrationTests {
     await capture.emit(frame(sequenceNumber: 1, image: image))
     try await waitUntil { model.slideCanvasStatus == .confirmed }
     await model.requestTranscriptionStart()
-    #expect(transcription.retainedObservationCount == 0)
+    #expect(transcription.retainedObservationCount == 1)
+    #expect(model.transcriptionLifecycleState == .listening)
 
     for sequenceNumber in 2...4 {
       await capture.emit(frame(sequenceNumber: UInt64(sequenceNumber), image: image))
     }
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    try await waitUntil { transcription.retainedObservationCount == 1 }
+    try await waitUntil { transcription.retainedObservationCount == 2 }
 
     #expect(model.transcriptionLifecycleState == .listening)
     #expect(model.status == .listening)
@@ -102,25 +113,26 @@ struct AppSlideCanvasIntegrationTests {
     )
 
     await model.requestTranscriptionStart()
-    #expect(model.transcriptionLifecycleState == .waitingForContext)
-    #expect(transcription.retainedObservationCount == 0)
+    #expect(model.transcriptionLifecycleState == .listening)
+    #expect(transcription.retainedObservationCount == 1)
 
     await model.startVisualWindowCapture()
     await capture.emit(frame(sequenceNumber: 1, image: image))
     try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
     #expect(model.transcriptionLifecycleState == .waitingForContext)
+    #expect(transcription.stopCallCount == 1)
 
     model.beginSlideCanvasSelection()
     #expect(model.slideCanvasStatus == .selecting)
     #expect(model.confirmSlideCanvasSelection(fullFrame))
     #expect(model.transcriptionLifecycleState == .waitingForContext)
-    #expect(transcription.retainedObservationCount == 0)
+    #expect(transcription.retainedObservationCount == 1)
 
     for sequenceNumber in 2...4 {
       await capture.emit(frame(sequenceNumber: UInt64(sequenceNumber), image: image))
     }
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    try await waitUntil { transcription.retainedObservationCount == 1 }
+    try await waitUntil { transcription.retainedObservationCount == 2 }
 
     #expect(model.transcriptionLifecycleState == .listening)
     #expect(model.status == .listening)
@@ -128,7 +140,7 @@ struct AppSlideCanvasIntegrationTests {
     await model.stopWindowCapture()
   }
 
-  @Test func stoppingQueuedUserTranscriptionPreventsLaterAutomaticStart() async throws {
+  @Test func stoppingEarlyUserTranscriptionPreventsLaterAutomaticRestart() async throws {
     let capture = ManualCanvasCapture()
     let transcription = RetainingCanvasTranscriptionProvider()
     let model = makeModel(
@@ -154,13 +166,13 @@ struct AppSlideCanvasIntegrationTests {
     try await waitUntil { model.slideAnalysisStatus == .ready }
     await drainMainActorQueue()
 
-    #expect(transcription.retainedObservationCount == 0)
+    #expect(transcription.retainedObservationCount == 1)
     #expect(model.transcriptionLifecycleState == .idle)
 
     await model.stopWindowCapture()
   }
 
-  @Test func visualModeBoardsWithoutSemanticPowerPointIdentity() async throws {
+  @Test func productionVisualModeStartsSpeechAndBoardsWithoutPowerPointIdentity() async throws {
     let capture = ManualCanvasCapture()
     let analyzer = RecordingCanvasAnalyzer(
       occupiedRegions: boardProposalOccupiedRegions()
@@ -173,7 +185,8 @@ struct AppSlideCanvasIntegrationTests {
       analyzer: analyzer,
       overlay: overlay,
       displays: [geometry.display],
-      transcriptionProvider: transcription
+      transcriptionProvider: transcription,
+      slideCanvasConfirmationMode: .automaticCapturedContent
     )
     let baselineImage = try #require(
       makeSolidImage(width: 200, height: 120, red: 128, green: 128, blue: 128)
@@ -185,6 +198,9 @@ struct AppSlideCanvasIntegrationTests {
     #expect(model.captureStatus == .capturing)
     #expect(model.visualSlideTrackingActive)
     #expect(model.slideIdentityState == .unavailable)
+    await model.requestTranscriptionStart()
+    #expect(transcription.retainedObservationCount == 1)
+    #expect(model.transcriptionLifecycleState == .listening)
 
     await capture.emit(
       frame(
@@ -200,9 +216,15 @@ struct AppSlideCanvasIntegrationTests {
         )
       )
     )
-    try await waitUntil { model.slideCanvasStatus == .needsConfirmation }
-    model.beginSlideCanvasSelection()
-    #expect(model.confirmSlideCanvasSelection(geometry.region))
+    try await waitUntil { model.slideCanvasStatus == .confirmed }
+    let automaticRegion = try #require(model.confirmedSlideCanvasRegion)
+    let automaticPixelRect = try #require(
+      automaticRegion.pixelRect(sourcePixelWidth: 200, sourcePixelHeight: 120)
+    )
+    #expect(automaticPixelRect.x == 20)
+    #expect(automaticPixelRect.y == 20)
+    #expect(automaticPixelRect.width == 160)
+    #expect(automaticPixelRect.height == 80)
 
     for sequenceNumber in 2...3 {
       await capture.emit(
@@ -250,12 +272,17 @@ struct AppSlideCanvasIntegrationTests {
       )
     )
     try await waitUntil { model.capturedFrameCount == 5 }
-    receiveConfirmedBoardProposal("Sustainability means preserving options.", on: model)
+    try await waitUntil { transcription.retainedObservationCount == 2 }
+    transcription.emitRetained(
+      TranscriptionObservation(
+        segment: boardProposalDefinition(text: "Sustainability means preserving options."),
+        sourceMachTime: UInt64.max
+      ),
+      startIndex: 1
+    )
     #expect(model.boardScene.slideNumber == 1)
     #expect(!model.boardScene.elements.isEmpty)
     #expect(overlay.isVisible)
-    await model.startTranscription()
-    #expect(transcription.retainedObservationCount == 1)
     let stopCallsBeforeTransition = transcription.stopCallCount
 
     for sequenceNumber in 6...8 {
@@ -276,7 +303,7 @@ struct AppSlideCanvasIntegrationTests {
     }
     try await waitUntil { model.slideChangeCount == 1 }
     try await waitUntil { model.slideAnalysisStatus == .ready }
-    try await waitUntil { transcription.retainedObservationCount == 2 }
+    try await waitUntil { transcription.retainedObservationCount == 3 }
     #expect(model.boardScene.slideNumber == 2)
     #expect(model.boardScene.elements.isEmpty)
     #expect(transcription.stopCallCount > stopCallsBeforeTransition)
@@ -285,7 +312,7 @@ struct AppSlideCanvasIntegrationTests {
         segment: boardProposalDefinition(text: "Stale words must not cross the slide boundary."),
         sourceMachTime: UInt64.max
       ),
-      startIndex: 0
+      startIndex: 1
     )
     #expect(model.boardScene.elements.isEmpty)
 
@@ -309,7 +336,7 @@ struct AppSlideCanvasIntegrationTests {
         segment: boardProposalDefinition(text: "Resilience means retaining function."),
         sourceMachTime: UInt64.max
       ),
-      startIndex: 1
+      startIndex: 2
     )
     #expect(!model.boardScene.elements.isEmpty)
     #expect(overlay.isVisible)

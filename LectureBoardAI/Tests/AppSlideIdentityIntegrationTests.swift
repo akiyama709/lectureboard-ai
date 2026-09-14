@@ -464,7 +464,7 @@ struct AppSlideIdentityIntegrationTests {
     #expect(transcriptionProvider.startCount == 1)
   }
 
-  @Test func retryAfterSpeechFailureQueuesWithoutKeepingStaleAppError() async {
+  @Test func retryAfterSpeechFailureRestartsWithoutKeepingStaleAppError() async {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let model = makeModel(
       capture: SlideIdentityFrameCapture(),
@@ -484,15 +484,15 @@ struct AppSlideIdentityIntegrationTests {
 
     await model.requestTranscriptionStart()
 
-    #expect(model.status == .ready)
-    #expect(model.transcriptionLifecycleState == .waitingForContext)
-    #expect(transcriptionProvider.startCount == 1)
+    #expect(model.status == .listening)
+    #expect(model.transcriptionLifecycleState == .listening)
+    #expect(transcriptionProvider.startCount == 2)
     #expect(model.canRequestTranscriptionStop)
 
     model.requestTranscriptionStop()
   }
 
-  @Test func queuedRetryDoesNotHideANewerPowerPointScanError() async {
+  @Test func immediateRetryDoesNotHideANewerPowerPointScanError() async {
     let transcriptionProvider = ControllableTranscriptionProvider()
     let model = makeModel(
       capture: SlideIdentityFrameCapture(),
@@ -518,11 +518,16 @@ struct AppSlideIdentityIntegrationTests {
       model.status
         == .error(SlideIdentityWindowScanError.controlled.localizedDescription)
     )
-    #expect(model.transcriptionLifecycleState == .waitingForContext)
-    #expect(transcriptionProvider.startCount == 1)
+    #expect(model.transcriptionLifecycleState == .listening)
+    #expect(transcriptionProvider.startCount == 2)
     #expect(model.canRequestTranscriptionStop)
 
     model.requestTranscriptionStop()
+    #expect(
+      model.status
+        == .error(SlideIdentityWindowScanError.controlled.localizedDescription)
+    )
+    #expect(model.transcriptionLifecycleState == .idle)
   }
 
   @Test func transcriptPhaseTracksAcceptedPartialFinalAndNewOperationReset() async throws {

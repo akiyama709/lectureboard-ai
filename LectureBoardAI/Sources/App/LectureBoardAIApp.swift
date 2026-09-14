@@ -19,10 +19,7 @@ struct LectureBoardAIApp: App {
     private let runtimeVerificationRunner: RuntimeVerificationRunner
 
     init() {
-      let appModel = AppModel()
       let runner = RuntimeVerificationRunner()
-      _model = StateObject(wrappedValue: appModel)
-      runtimeVerificationRunner = runner
 
       let resolvedLaunchMode: LaunchMode
       do {
@@ -34,6 +31,15 @@ struct LectureBoardAIApp: App {
       } catch {
         resolvedLaunchMode = .invalidRuntimeVerification(String(describing: error))
       }
+      let appModel: AppModel
+      switch resolvedLaunchMode {
+      case .standard:
+        appModel = AppModel(slideCanvasConfirmationMode: .automaticCapturedContent)
+      case .runtimeVerification, .invalidRuntimeVerification:
+        appModel = AppModel()
+      }
+      _model = StateObject(wrappedValue: appModel)
+      runtimeVerificationRunner = runner
       launchMode = resolvedLaunchMode
       applicationDelegate.configureTerminationCleanup {
         await appModel.prepareForApplicationTermination()
@@ -54,7 +60,7 @@ struct LectureBoardAIApp: App {
     }
   #else
     init() {
-      let appModel = AppModel()
+      let appModel = AppModel(slideCanvasConfirmationMode: .automaticCapturedContent)
       _model = StateObject(wrappedValue: appModel)
       applicationDelegate.configureTerminationCleanup {
         await appModel.prepareForApplicationTermination()

@@ -44,13 +44,13 @@ cd -- "/absolute/path/to/downloaded-release-assets"
 ## 講義開始
 
 1. LectureBoard AIを開き，sessionの言語として日本語又は英語を選ぶ．
-2. 画面収録が許可済みであることを確認し，「PowerPointウィンドウを再検出」を選ぶ．
-3. 聴衆に見せるPowerPointのslide-show又はpresentation画面を1件選ぶ．slide showを後から開いた場合は，再検出して新しい画面を選ぶ．
-4. 「この画面で板書を開始」を選ぶ．
-5. frozen preview上でPowerPoint操作部と周囲UIを除外し，表示中slideだけを囲んでスライド面を確定する．
-6. visual baseline及び解析の準備後に文字起こしを開始し，PowerPointへ戻って自然に話す．
+2. 「文字起こしを開始」を選ぶ．端末内音声認識は視覚解析を待たず直ちに開始できる．
+3. 画面収録が許可済みであることを確認し，「PowerPointウィンドウを再検出」を選ぶ．
+4. 聴衆に見せるPowerPointのslide-show又はpresentation画面を1件選ぶ．slide showを後から開いた場合は，再検出して新しい画面を選ぶ．
+5. 「この画面で板書を開始」を選ぶ．最初の有効frameから，Appが周囲のsurface paddingを除いた取得内容をproduction canvasとして自動確定する．
+6. PowerPointへ戻って自然に話す．自動確定に失敗して再選択を求められた場合だけ，frozen preview上で表示中slideを囲んで手動確定する．
 
-　実行時診断は，アプリ状態と文字起こし状態を別々に表示する．「現在のスライド文脈を待機中」は，visual slide epoch，canvas及びcurrent解析が揃うまで出力を閉じている状態である．「描画要求済み」はrenderer呼出しだけを示すため，板書がPowerPoint上に見えることを講師が確認する．
+　実行時診断は，アプリ状態と文字起こし状態を別々に表示する．認識中の発話はcanvas又はcurrent解析の準備前でも表示できるが，板書生成だけはvisual slide epoch，canvas及びcurrent解析が揃うまで閉じる．visual境界で一時的に「現在のスライド文脈を待機中」となった場合，準備後に利用者の開始要求を保持したまま認識を自動再開する．「描画要求済み」はrenderer呼出しだけを示すため，板書がPowerPoint上に見えることを講師が確認する．
 
 　講義中はPowerPointを通常どおり操作する．mouse又はpenによる人間入力が常に優先される．「板書を隠す」はAI出力を直ちに隠す．canvas，current analysis，focus又はwindow geometryが不確実になれば，overlayは推測せず非表示になる．安定した視覚変化をlocal slide epochとし，PowerPoint内部のslide IDを知るとは主張しない．
 
@@ -68,7 +68,7 @@ cd -- "/absolute/path/to/downloaded-release-assets"
 - **PowerPoint windowが出ない**：画面収録許可とpresentation又はslide-show画面を確認し，1回再検出する．PowerPointが新しいslide-show画面を作った場合は，それを選ぶ．
 - **slide切替を検出しない**：新しいslideで短く停止する．視覚的に同じ切替又は高速animationは新しいvisual epochにならない場合がある．
 - **端末内音声認識を利用できない**：文字起こしなしで続行するかsessionを停止する．Appは意図的にnetwork fallbackを持たない．
-- **overlayが消える**：PowerPointを前面へ戻し，windowを移動・resizeせず，再選択を求められた場合だけslide面を確定し直す．非表示が安全状態である．
+- **overlayが消える**：PowerPointを前面へ戻し，windowを移動・resizeせず，再選択を求められた場合だけslide面を手動確定する．非表示が安全状態である．
 - **exportが無効**：取得を停止し，public board sceneが1件以上生成されたか確認する．
 - **crash，誤window，根拠のない内容，入力妨害又はfile変更**：Appの利用を停止する．privacy確認前にslide，画像，音声，文字起こし又はexportをissueへ添付しない．
 

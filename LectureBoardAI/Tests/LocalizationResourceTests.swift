@@ -62,9 +62,9 @@ struct LocalizationResourceTests {
         "capture.slideIdentityFrameSync.timedOut":
           "Fresh-frame wait timed out; analysis remains paused",
         "capture.slideCanvas.needsConfirmation":
-          "Slide area has not been confirmed; visual analysis is paused",
+          "The slide area could not be established automatically; visual analysis is paused",
         "capture.slideCanvas.confirmed":
-          "User-confirmed slide area is active",
+          "The active area of the selected PowerPoint view is in use",
         "capture.slideCanvas.invalidated":
           "Window geometry changed; confirm the slide area again",
         "capture.slideCanvas.confirm": "Confirm slide area",
@@ -134,9 +134,9 @@ struct LocalizationResourceTests {
         "capture.slideIdentityFrameSync.timedOut":
           "新しいフレームの待機が時間切れになり，解析を停止しています",
         "capture.slideCanvas.needsConfirmation":
-          "スライド面が未確認のため，視覚解析を停止しています",
+          "スライド面を自動確定できないため，視覚解析を停止しています",
         "capture.slideCanvas.confirmed":
-          "利用者が確認したスライド面を使用しています",
+          "選択したPowerPoint画面の有効領域を使用しています",
         "capture.slideCanvas.invalidated":
           "ウィンドウ寸法が変わったため，スライド面を再確認してください",
         "capture.slideCanvas.confirm": "スライド面を確定",
