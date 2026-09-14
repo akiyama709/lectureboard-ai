@@ -2529,3 +2529,21 @@ These results are working-tree checkpoints rather than clean exact-commit, relea
 publication evidence. Live microphone input, visible PowerPoint overlay output, the owner's PPTX,
 export, original-file preservation, owner acceptance, Gatekeeper, and public re-download remain
 unverified.
+
+The code-bearing source was then fixed at commit
+`a0a452fadaaa0e1afe2a1920690ecbe0eb08b445`. An isolated Git archive of that exact commit was built
+once as an arm64 Release version 1.0.0 build 1 with ad hoc signing and Hardened Runtime. The fixed
+copy is
+`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-a0a452f/LectureBoard AI.app`.
+Its executable SHA-256 is `ae89ba94163ae681728e6ee1133e5e29acf35b6cbae84875a4fcf37dc7fa9a65`,
+its CDHash is `ff15bb1ef493e7c993fb65c649ea9c013d62708b`, and its normalized tree-manifest
+SHA-256 is `21d1301010b9f740decb58860460fcdc64348cb6eb4124b7517a3d9315491924`.
+The copied tree exactly matches the build after normalizing its group from the temporary build
+environment to the owner's `staff` group. The app is thin arm64, reports `adhoc,runtime`, contains
+only the audio-input entitlement, has no TeamIdentifier, embeds the exact source commit with
+unbound release-tag fields, and passes strict deep signature verification. Codex did not launch
+the app or alter Screen Recording or TCC state. This new ad hoc code identity may require one
+Screen Recording authorization for the exact fixed path; failure after reopening that same app is
+a stop condition, not a reason to repeat permission requests or reset TCC. The build is owner-trial
+evidence only, not a GitHub Release or proof of live microphone recognition, visible overlay,
+export, source-file preservation, owner acceptance, Gatekeeper, or public re-download.

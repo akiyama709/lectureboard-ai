@@ -12,7 +12,7 @@
 
 　最終source及びlocalization修正後，直接影響する4 suiteは90件すべて合格し，resultは`/private/tmp/LectureBoardFixTests/Logs/Test/Test-LectureBoardAI-2026.09.14_11-08-47-+0900.xcresult`である．全native App testも41 suite・520件すべて合格し，resultは`/private/tmp/LectureBoardFinalTests/Logs/Test/Test-LectureBoardAI-2026.09.14_11-09-24-+0900.xcresult`である．いずれもworking-tree checkpointであり，clean exact commit，配布App又は公開証拠として扱わない．実microphone，PowerPoint上の可視overlay，本人PPTX及び本人受入れは未検証である．
 
-　次は，この修正をreviewと最小限の再検証後にclean commitへ固定し，そのexact commitだけから新しい不変の本人試用Appを1件生成する．それまでは本人へ再試験を依頼しない．画面収録設定，TCC reset又はSystem Settings操作を反復せず，過去の固定候補を上書きしない．GitHubへのpush，tag更新又はRelease公開には別途，exact commitと配布ZIPを特定した明示承認が必要である．
+　修正はcode-bearing commit `a0a452fadaaa0e1afe2a1920690ecbe0eb08b445`へ固定した．同exact commitのGit archiveだけからarm64 Release，version 1.0.0 build 1，Hardened Runtime及びad hoc署名のAppを一度buildし，`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-a0a452f/LectureBoard AI.app`へ旧候補を上書きせず固定した．executable SHA-256は`ae89ba94163ae681728e6ee1133e5e29acf35b6cbae84875a4fcf37dc7fa9a65`，CDHashは`ff15bb1ef493e7c993fb65c649ea9c013d62708b`，group正規化後のtree manifest SHA-256は`21d1301010b9f740decb58860460fcdc64348cb6eb4124b7517a3d9315491924`である．copy treeは正規化後のbuild treeと完全一致し，thin arm64，`adhoc,runtime`，audio-input entitlementのみ，TeamIdentifierなし及びstrict deep署名を確認した．CodexはAppを起動せず，画面収録設定又はTCCを変更していない．新しいad hoc code identityであるため，この正確な固定pathには画面収録の1回の許可が必要な場合がある．同じAppを終了・再起動してもpreflightが有効にならなければ，要求又はTCC resetを反復せず不合格として停止する．実microphone，可視overlay，本人PPTX，export，原本不変及び本人受入れは引き続き未検証である．GitHubへのpush，tag更新又はRelease公開には別途，exact commitと配布ZIPを特定した明示承認が必要である．
 
 ## 最新の再開点（2026年9月7日23時台，実音声と狭い空白の修正版）
 

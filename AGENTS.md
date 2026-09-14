@@ -206,6 +206,18 @@ Implemented:
   These are working-tree checkpoints rather than exact-commit or release evidence. Live
   microphone input, visible overlay output, the owner's PPTX, and owner acceptance remain
   unverified.
+  The code-bearing source is fixed at commit `a0a452fadaaa0e1afe2a1920690ecbe0eb08b445`.
+  An isolated Git archive of that exact commit was built once as an arm64 Release version 1.0.0
+  build 1 with ad hoc signing and Hardened Runtime. The fixed copy is
+  `/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-a0a452f/LectureBoard AI.app`.
+  Its executable SHA-256 is `ae89ba94163ae681728e6ee1133e5e29acf35b6cbae84875a4fcf37dc7fa9a65`,
+  CDHash is `ff15bb1ef493e7c993fb65c649ea9c013d62708b`, and normalized tree-manifest
+  SHA-256 is `21d1301010b9f740decb58860460fcdc64348cb6eb4124b7517a3d9315491924`.
+  The copied tree exactly matches the build after group normalization, is thin arm64, reports
+  `adhoc,runtime`, contains only the audio-input entitlement, has no TeamIdentifier, and passes
+  strict deep signature verification. Codex did not launch the app or alter TCC. Because this is a
+  new ad hoc identity, Screen Recording may require one authorization for this exact fixed path;
+  never repeat the request or reset TCC if reopening the same app does not make preflight true.
 
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
