@@ -2576,3 +2576,53 @@ audio-input entitlement, has no TeamIdentifier, embeds the exact commit, and pas
 signature verification. The rejected `a0a452f` process was terminated and only this new fixed copy
 was launched. Codex did not alter TCC or PowerPoint. Live microphone-to-visible-PowerPoint output,
 owner acceptance, the complete publication gate, and public release remain unverified.
+
+## 2026-09-15 final natural-speech board-admission correction
+
+Owner trials through `69a4d0c6509c4fa544ba75a7f5ff9c7a783bc1f5` showed that fixing one
+recognized phrase at a time was insufficient. Recognized content could still be lost at stable
+partial versus final boundaries, same-source cumulative updates, the pending and unplaced queues,
+Apple Speech provider rollover, cross-cycle correction, a visual-epoch restart, or withdrawal of
+provisional partial output. Code-bearing commit
+`70164338af27d020d9f667f70b61a38f80f4970e` treats those boundaries as one current-source
+pipeline. It admits natural Japanese and English importance expressions and explicit board
+requests from stable partials and finals, high-confidence slide-grounded natural assertions, and
+independent repetition. It also prevents pending, unplaced, and queue starvation; retains later
+units in cumulative same-source speech; reconciles provider-rollover and cross-cycle corrections;
+automatically resumes an explicit transcription request after a visual epoch; withdraws corrected
+provisional output; and preserves export history consistently across visual epochs.
+
+The product does not and cannot literally guarantee correct importance inference for every
+possible manner of speaking. Unexpressed implications, ambiguous speech, and speech-recognition
+errors can still fail closed. The verified contract is narrower: recognized natural importance
+cues, explicit board requests, high-confidence slide-grounded assertions, and independent
+repetition must not be silently lost at the pipeline boundaries above. Uncertain content is not
+guessed merely to force visible output.
+
+The exact commit passed all 340 Core tests in 19 suites and all 575 native App tests in 41 suites.
+The App result had zero failures, zero skips, and zero expected failures. The exact-commit
+`make verify` gate passed all 26 stages. Its authoritative result is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.15_04-35-51-+0900.xcresult`.
+Independent final review found no remaining P0 or P1 issue. These results verify deterministic
+source behavior and the exact-commit build transaction; they do not substitute for live owner
+observation.
+
+An isolated Git archive of the exact commit was built once as a thin arm64 Release 1.0.0 build 1
+app with ad hoc signing and Hardened Runtime. The fixed copy is
+`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7016433/LectureBoard AI.app`.
+Its executable SHA-256 is
+`7f8d9f9ec9c329a13d7d79aaf0b246588a7af0b0f145b0bc22e7514bc8bb7958`, its CDHash is
+`db5b55f247cc366890d626bb56d29ab2bf1ff4a7`, and its normalized tree-manifest SHA-256 is
+`ec4ed7aa9ba9230df9c98f24f2c2e5f37d9e5ef69737e0d87011c8e1ed92d0d9`. It reports
+`adhoc,runtime`, contains only the audio-input entitlement, has no TeamIdentifier, embeds the exact
+commit, passes strict deep signature verification, and matches the build tree after normalization.
+Codex did not launch the app or operate TCC, System Settings, or PowerPoint. Every older owner-trial
+candidate is rejected historical evidence and must not be reused for owner acceptance or release.
+
+The only next live step is one owner-acceptance run with this exact fixed app. Transcription may be
+started before visual readiness; board admission waits for the current visual context. The
+standard UI automatically confirms the validated captured-content crop of the selected audience
+view, with manual selection retained only as a fallback. Real microphone-to-preview-to-visible
+PowerPoint overlay behavior, the owner's PPTX, JSON/SVG export, original-file preservation, owner
+acceptance, Gatekeeper, and the GitHub Release remain unverified. No tag or release publication is
+authorized by this checkpoint.

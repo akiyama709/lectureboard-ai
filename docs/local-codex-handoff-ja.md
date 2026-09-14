@@ -1,8 +1,26 @@
 # LectureBoard AI ローカル開発引継ぎ
 
-更新日：2026年9月14日
+更新日：2026年9月15日
 
-## 最新の再開点（2026年9月14日，文字起こし開始とスライド面自動確定の修正）
+## 最新の再開点（2026年9月15日，自然発話から板書までの最終修正）
+
+　最終code-bearing commitは`70164338af27d020d9f667f70b61a38f80f4970e`である．この修正では，日本語及び英語の自然な重要表現と明示的な板書要求をstable partial及びfinalの両方から扱い，高信頼かつスライドにgroundingできる自然な断定，独立した反復，複数文及び同一sourceの累積発話も板書候補へ到達させる．同時に，pending／unplaced／queueのstarvation，同一sourceの累積更新，Apple Speech providerのrolloverをまたぐ訂正，visual epoch後の文字起こし自動再開，partial由来のprovisional板書の訂正時撤回及びvisual epochをまたぐexport履歴を一貫して処理する．文字起こしは視覚文脈の準備前でも開始できるが，板書候補の受入れは現在の視覚文脈が整うまでfail closedとする．標準UIは，利用者が選んだ聴衆向けPowerPoint windowのvalidated captured-content pixel cropを自動確定し，検証できない場合だけ手動selectionをfallbackとして使う．
+
+　文字どおり「どんな話し方でも」重要性を完全に推定することは技術的に保証できない．明示されない含意，曖昧な発話又は音声認識の誤りは安全側で板書されない場合がある．今回の契約は，認識された自然な重要表現，明示的な板書要求，高信頼でスライドにgroundingできる自然な断定及び独立した反復を，認識cycle，訂正，queue又はvisual epochの境界で失わないことである．不確実な内容を推測して誤板書することまでは許容しない．
+
+　同exact commitで，Core 340件・19 suite及びnative App 575件・41 suiteが合格し，Appの失敗，skip及びexpected failureはいずれも0件である．全26段階のexact-commit `make verify`も合格した．authoritative xcresultは`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.15_04-35-51-+0900.xcresult`であり，独立監査でも残るP0／P1 findingはない．これは自動化されたsource及びbuild検証であり，実microphone又は可視overlayの本人確認を代替しない．
+
+　同commitのGit archiveだけから，thin arm64，Release 1.0.0 build 1，Hardened Runtime及びad hoc署名のAppを一度buildし，`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7016433/LectureBoard AI.app`へ旧候補を上書きせず固定した．executable SHA-256は`7f8d9f9ec9c329a13d7d79aaf0b246588a7af0b0f145b0bc22e7514bc8bb7958`，CDHashは`db5b55f247cc366890d626bb56d29ab2bf1ff4a7`，正規化tree manifest SHA-256は`ec4ed7aa9ba9230df9c98f24f2c2e5f37d9e5ef69737e0d87011c8e1ed92d0d9`である．`adhoc,runtime`，audio-input entitlementのみ，TeamIdentifierなし，exact commit埋込み，strict deep署名及びbuild／copy tree一致を確認した．CodexはこのAppを起動せず，TCC，System Settings又はPowerPointを操作していない．`69a4d0c`以前のAppを含む旧候補は，不合格となった履歴証拠として固定保存し，再試用又は公開に用いない．
+
+### 現在の再開手順
+
+　再開時は，上記の固定App `Visual-Owner-Trial-7016433/LectureBoard AI.app`だけを用いる．PowerPointで本人PPTXの作業用copyを開き，通常の全画面又はwindow表示slide showの聴衆向け画面を選び，「この画面で板書を開始」及び「文字起こしを開始」を使う．開始順は固定しない．文字起こしは視覚準備前でも開始でき，標準UIはvalidated captured-content cropを自動確認するため，通常は手動selectionを行わない．自動確認が検証できない場合に限り，手動selectionをfallbackとして使う．同じ固定Appに画面収録が既に許可されていれば設定画面を開かない．許可が必要な場合もこのexact pathへ1回だけ行い，同じAppの再起動後も有効にならなければ反復又はTCC resetをせず，不合格として停止する．
+
+### 唯一の次工程
+
+　次に行う工程は，この固定Appによる一度の本人受入れだけである．短い自然発話で，実microphoneの文字起こし，板書preview，PowerPoint上の可視overlay，JSON／SVG export及び原本不変を確認する．実microphoneからpreview及びPowerPoint可視overlayまでの到達，本人PPTX，export，原本不変，owner acceptance，Gatekeeper並びにGitHub Releaseは未検証である．これらを確認する前に旧候補へ戻らず，新たな候補を反復buildせず，tag又はReleaseを公開しない．
+
+## 直前の再開点（2026年9月14日，文字起こし開始とスライド面自動確定の修正）
 
 　9月14日の本人試用画面では，PowerPoint画面の取得は進んでいたが，「スライド面が未確認のため，視覚解析を停止しています」及び「現在のスライド文脈を待機中」のまま，発話しても文字起こしが始まらなかった．原因は，利用者の文字起こし開始要求そのものを`transcriptionContextIsReady`で遮断し，手動スライド面確定と現在解析の完了までspeech providerを開始しない設計だったことである．これは利用者操作の問題ではなく，試用前に解消すべき実装上の行き止まりである．従来の`Visual-Owner-Trial-7dd1c78`は再試用又は公開に用いない．
 
@@ -217,29 +235,29 @@
 
 ## 4．現在のローカル再開手順
 
-　旧`c525ee4…`及び`f18c873…`のAppは履歴証拠であり，再起動，移動，置換又は公開しない．次の本人予備再試験には，commit `e2c66af09c716ccbbffa3623350497bbf6355e66`から固定した`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-e2c66af/LectureBoard AI.app`だけを使う．この段階では再build又は全gate再実行を行わない．
+　旧候補はすべて不合格となった履歴証拠であり，再起動，移動，置換又は公開しない．本人受入れには，commit `70164338af27d020d9f667f70b61a38f80f4970e`から固定した`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7016433/LectureBoard AI.app`だけを使う．この固定Appを再build，移動又は置換しない．
 
-1. PowerPointの通常の全画面又はwindow表示slide showを利用者が開始する．Presenter View及び複数displayは使わない．
-2. 上記固定Appを通常起動する．画面収録が許可済みなら設定buttonを押さない．未許可表示が残る場合は反復操作せず，その状態を記録して停止する．
-3. `PowerPointウィンドウを再検出`で受講者に見せる正確な画面を選び，`この画面で板書を開始`を押す．凍結preview上でslide面だけを選択して確定する．
-4. `文字起こしを開始`はcurrent視覚contextの準備前に押してもよい．修正版は要求を待機させ，capture，canvas及びcurrent analysisが揃った後に自動開始する．
-5. PowerPointを前面に戻して自然に発話し，App内の板書preview及びPowerPoint overlayの両方を確認する．最初の限定確認では，自然な重要表現，定義，因果，比較又は列挙を含む一つの完結文を使える．音声commandの暗記は要件ではない．
-6. 成否と診断表示だけを記録する．本人PPTX，slide画像，文字起こし又は音声をGit，connector，cloud若しくは別のmodel contextへ送らない．
+1. PowerPointで本人PPTXの作業用copyを開く．通常の全画面又はwindow表示slide showは，固定Appの起動前又は起動後のどちらで開始してもよい．Presenter View及び複数displayは使わない．
+2. 上記固定Appを通常起動する．このexact pathに画面収録が許可済みなら設定buttonを押さない．許可が必要な場合は1回だけ行い，同じAppの再起動後も無効なら反復又はTCC resetをせず，その状態を記録して停止する．
+3. `PowerPointウィンドウを再検出`で受講者に見せる正確な画面を選び，`この画面で板書を開始`を押す．標準UIはvalidated captured-content pixel cropを自動確定する．自動確認が検証できない場合に限り，凍結preview上の手動selectionをfallbackとして使う．
+4. `文字起こしを開始`はcurrent視覚contextの準備前又は準備後のどちらで押してもよい．speech providerは利用者の明示要求で直ちに開始し，認識表示を更新できる．板書候補の受入れだけは，capture，canvas及びcurrent analysisが揃うまでfail closedとする．visual epoch又は一時的なcapture-content境界では古いcallback及びsegmentを無効化し，明示要求が残る場合は新しい現在文脈の準備後に自動再開する．
+5. PowerPointを前面に戻して自然に発話し，App内の板書preview及びPowerPoint overlayの両方を確認する．音声commandの暗記は要件ではない．自然な日英重要表現，明示的な板書要求，高信頼でスライドにgroundingできる自然な断定又は独立した反復を用いる．文字どおり任意の話し方から暗黙的重要性を完全に推定することは保証しない．
+6. JSON／SVG export，capture停止後のPowerPoint通常操作及び作業用copyの原本不変を同じsessionで確認する．成否とmetadata診断だけを記録し，本人PPTX，slide画像，文字起こし又は音声をGit，connector，cloud若しくは別のmodel contextへ送らない．
 
 　previewが変わってoverlayだけが見えない場合はfocus／mapping境界，認識中の発話が変わってpreviewが空のままならgrounding／importance／空白配置境界として切り分ける．成功・失敗を問わず`docs/build-verification.md`及び指定Obsidian開発ノートへ記録する．
 
-## 5．次の実装単位
+## 5．唯一の次工程
 
-　現在の唯一の次工程は，上記固定Appによる短いmicrophone-to-board予備再試験である．成功した場合だけ，slide切替，mouse入力優先，JSON／SVG export，停止後のPowerPoint通常操作及びPPTX不変性を同候補で確認する．失敗した場合は，診断で特定した一つの境界だけを修正し，新しいcommitと固定候補で再試験する．
+　現在の唯一の次工程は，上記`Visual-Owner-Trial-7016433/LectureBoard AI.app`による一度の本人受入れである．実microphoneから認識表示，板書preview及びPowerPoint可視overlayまでの到達，slide切替，mouse入力優先，JSON／SVG export，停止後のPowerPoint通常操作並びにPPTX原本不変性を，同じ固定候補及び一つのsessionで確認する．この確認前に別候補をbuildせず，旧候補へ戻らない．不合格の場合は反復して候補を差し替えず，診断metadataを記録して機能未完成として停止する．
 
-　本人予備再試験及び残る機能確認が合格した後，clean exact release commitで全gateと5 assetを生成し，Gatekeeper及びGitHub Actionsを確認する．正確なcommitとarchive SHA-256を示してユーザーの明示承認を得た場合だけ，public `v1.0.0` GitHub Releaseを作成して未認証再downloadを検証する．managed slide show，PowerPoint Automation，旧固定App及びcloud providerをこの経路へ戻さない．
+　本人受入れが合格した後，code commit `70164338af27d020d9f667f70b61a38f80f4970e`に結合した正確な5 assetを生成して検証し，Gatekeeper及びGitHub Actionsを確認する．正確なcommitとarchive SHA-256を示してユーザーの明示承認を得た場合だけ，public `v1.0.0` GitHub Releaseを作成して未認証再downloadを検証する．managed slide show，PowerPoint Automation，旧固定App及びcloud providerをこの経路へ戻さない．
 
 ## 6．ローカルCodex開始時の指示文
 
 　次の文章をローカルCodexの最初のメッセージとして使用できる．
 
 ```text
-AGENTS.md，docs/local-codex-handoff-ja.md，ROADMAP.md，docs/build-verification.mdを最初に読んでください．次にmake doctorとmake local-setupを実行し，このMac上でネイティブmacOSアプリがビルドできる状態にしてください．発生した問題を一つずつ修正し，各修正にテストを追加し，検証結果をdocs/build-verification.mdへ記録してください．現段階で未検証の機能を，動作確認済みであるかのように記述しないでください．
+AGENTS.md，docs/local-codex-handoff-ja.md，ROADMAP.md，docs/build-verification.mdを最初に読んでください．code commit 70164338af27d020d9f667f70b61a38f80f4970eから固定した/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7016433/LectureBoard AI.appだけを現在の本人受入候補として扱ってください．旧候補を起動せず，Appを再build，移動又は置換せず，TCC若しくはSystem Settingsの操作を反復しないでください．次は一度のowner acceptanceだけを行い，実microphoneから板書preview及びPowerPoint可視overlayまでの到達，export及び原本不変を確認してください．現段階で未検証の機能を，動作確認済みであるかのように記述しないでください．
 ```
 
 ## 7．公開方針

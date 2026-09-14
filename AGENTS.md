@@ -219,6 +219,36 @@ Implemented:
   new ad hoc identity, Screen Recording may require one authorization for this exact fixed path;
   never repeat the request or reset TCC if reopening the same app does not make preflight true.
 
+- The final 2026-09-15 code-bearing source is fixed at commit
+  `70164338af27d020d9f667f70b61a38f80f4970e`. It accepts broad natural Japanese and English
+  importance cues and explicit board requests from stable partial or final recognition, admits a
+  high-confidence slide-grounded natural assertion without a cue, and retains independent
+  repetition as supporting evidence. The live admission path now prevents pending, unplaced, and
+  queue starvation; preserves later units in same-source cumulative recognition; reconciles
+  provider rollover and cross-cycle corrections; resumes speech automatically after visual-epoch
+  boundaries; withdraws provisional content when recognition is corrected or retracted; and keeps
+  export history consistent across visual epochs. Literal support for every possible way of
+  speaking is not achievable: implicit or ambiguous importance, and speech that recognition
+  mishears, can still fail closed rather than cause the app to invent board content.
+  All 340 Core tests in 19 suites passed. All 575 App tests in 41 suites passed with zero failures,
+  zero skipped tests, and zero expected failures; the exact result is
+  `DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.15_04-35-51-+0900.xcresult`.
+  The exact-commit `make verify` gate passed all 26 of 26 stages, and an independent audit found no
+  remaining P0 or P1 issue.
+
+- The only current owner-trial application is the isolated exact-commit Release 1.0.0 build 1 at
+  `/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7016433/LectureBoard AI.app`.
+  Its thin arm64 executable has SHA-256
+  `7f8d9f9ec9c329a13d7d79aaf0b246588a7af0b0f145b0bc22e7514bc8bb7958`, CDHash
+  `db5b55f247cc366890d626bb56d29ab2bf1ff4a7`, and normalized tree-manifest SHA-256
+  `ec4ed7aa9ba9230df9c98f24f2c2e5f37d9e5ef69737e0d87011c8e1ed92d0d9`. It reports
+  `adhoc,runtime`, contains only the audio-input entitlement, has no TeamIdentifier, embeds the
+  exact code commit, passes strict deep signature verification, and has verified build/copy tree
+  identity. Codex has not launched this application and did not touch TCC, System Settings, or
+  PowerPoint while producing or verifying it. Every older owner-trial candidate listed above is
+  rejected historical evidence and must not be used, relaunched, substituted, retagged, pushed,
+  or published as the current candidate.
+
 Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 - A historical schema-1 build completed a 40-second exact-window run with 372 frames, 6 stable snapshots, and 5 image-difference events then recorded as slide changes. Those five values are legacy heuristic classifications, not verified slide identities and not runtime evidence for the current semantic build.
@@ -250,6 +280,11 @@ Narrow runtime evidence from controlled synthetic PowerPoint runs:
 
 Not yet implemented or verified:
 
+- For the current `70164338af27d020d9f667f70b61a38f80f4970e` candidate, real
+  microphone-to-preview-to-PowerPoint-visible overlay output, operation with an owner-selected
+  PPTX, live JSON/SVG export, preservation of the original PPTX, owner acceptance, Gatekeeper
+  handling, and the final GitHub Release remain unverified.
+
 - Independent LaunchServices capture authorization and post-restart permission persistence beyond the narrow schema-8 start-and-fail report and saved-path executable diagnostics.
 - Representative dynamic calibration and semantic same-slide mouse-ink validation. The decoder-hardened fixed build now has one six-revision run whose paired operator-captured helper output supports six input-window attributions but is not cryptographically bound or release-grade, plus one single-stroke/erase run with a separate aggregate post-erase visual revision and byte-identical pixel restoration. Semantic or per-input ink/erase classification, existing-ink recognition, representative-deck coverage, and reliable classification remain unverified.
 - Live validation of the capture-failure source classification introduced by schema 10 and retained by schema 11. Its bounded first-terminal-event diagnostics currently have deterministic automated coverage only.
@@ -271,7 +306,7 @@ Not yet implemented or verified:
 
 ## Immediate next milestone
 
-Keep every historical verification app and evidence file fixed; never substitute it for current-source evidence. The `c525ee4` and `e32917e` apps and the five `e32917e` assets are historical rejected candidates and must not be relaunched, retagged, pushed, or published. Freeze the visual-only source as a new clean exact commit, build one minimal Release owner candidate from that commit, and keep it at one stable path. Then validate the remaining narrow contract in `docs/supported-environment.md`: standard full-screen or windowed exact-view selection, real microphone-to-board output, local visual epochs, owner-confirmed canvas, visible alignment, click-through mouse priority, JSON/SVG export, capture stop that leaves PowerPoint usable, and original-file immutability on a working copy of an owner-selected PPTX. Do not repeat Screen Recording settings work; grant the newly frozen exact candidate at most once if needed. Presenter View, multiple displays, code switching, physical pen tablets, speaker-note import, and cloud adapters are post-v1 work. After owner acceptance, run the fresh exact-commit gate, generate the five final assets, complete Gatekeeper and CI checks, and obtain explicit publication approval naming the exact commit and ZIP SHA-256.
+Keep every historical verification app and evidence file fixed; never substitute it for current-source evidence. The `c525ee4`, `e32917e`, and all pre-`7016433` owner-trial apps and assets are historical rejected candidates and must not be relaunched, retagged, pushed, or published. Keep the current fixed candidate at `/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-7016433/LectureBoard AI.app` without rebuilding, moving, or replacing it. The single remaining owner-acceptance step is one bounded session with a working copy of an owner-selected PPTX that confirms the real microphone-to-recognized-preview-to-visible-PowerPoint-overlay path, local visual-epoch behavior, visible alignment, click-through mouse priority, JSON/SVG export, capture stop that leaves PowerPoint usable, and original-file immutability. Do not repeat Screen Recording settings work; authorize this exact fixed path at most once if needed, and never reset TCC. Presenter View, multiple displays, code switching, physical pen tablets, speaker-note import, and cloud adapters are post-v1 work. After owner acceptance, generate and verify the five final assets, complete Gatekeeper and CI checks, and obtain explicit publication approval naming exact commit `70164338af27d020d9f667f70b61a38f80f4970e` and the final ZIP SHA-256 before creating the GitHub Release.
 
 Implement and validate the observable lecture path in this order:
 
