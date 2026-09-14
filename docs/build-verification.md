@@ -2547,3 +2547,32 @@ Screen Recording authorization for the exact fixed path; failure after reopening
 a stop condition, not a reason to repeat permission requests or reset TCC. The build is owner-trial
 evidence only, not a GitHub Release or proof of live microphone recognition, visible overlay,
 export, source-file preservation, owner acceptance, Gatekeeper, or public re-download.
+
+## 2026-09-14 explicit board-request owner trial
+
+Owner testing showed that the final recognized phrase `問題を板書してください` produced no public board
+element because it remained below the ordinary importance threshold. Commit
+`69a4d0c6509c4fa544ba75a7f5ff9c7a783bc1f5` adds a strictly whole-utterance Japanese and
+English request parser. Only finite, internally consistent final recognition evidence may bypass
+the score gate, and the extracted requested content is confirmed without publishing the command.
+Quoted, multi-sentence, nested-command, deictic, and malformed-metadata cases fail closed. A
+proposed 700-millisecond partial-command path was removed after independent review because a
+reported-speech continuation could otherwise arrive after premature publication.
+
+All 274 Core tests in 19 suites and all 521 native App tests in 41 suites passed. The targeted App
+test verifies final recognition through the public scene, the rendered `• 問題` preview, and the overlay
+render invocation. The complete native result is
+`DerivedData/AppTests/Logs/Test/Test-LectureBoardAI-2026.09.14_22-27-17-+0900.xcresult`.
+Independent review found no P0 or P1 issue.
+
+An exact Git archive of the commit was built as an arm64 Release 1.0.0 build 1 with ad hoc signing
+and Hardened Runtime. The fixed copy is
+`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-69a4d0c/LectureBoard AI.app`.
+Its executable SHA-256 is `a220bbd1f0de2d1ca1b3fce520847c79cdeecdcbb6c8cf54d019b379438e8fe6`,
+its CDHash is `613e524410e97b02506e2de2af16d8fdc4a75201`, and its normalized tree-manifest
+SHA-256 is `ddcea93e4366248869f7c42d46dee04fc0cc36ebfc43abe9cfdcfb15a24c1394`.
+The copy matches the built tree, is thin arm64, reports `adhoc,runtime`, contains only the
+audio-input entitlement, has no TeamIdentifier, embeds the exact commit, and passes strict deep
+signature verification. The rejected `a0a452f` process was terminated and only this new fixed copy
+was launched. Codex did not alter TCC or PowerPoint. Live microphone-to-visible-PowerPoint output,
+owner acceptance, the complete publication gate, and public release remain unverified.

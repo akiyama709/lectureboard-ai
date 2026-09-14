@@ -273,3 +273,9 @@ make verify
 　新しい隔離checkoutで480件testを1回生成し，生成直後の`.xcresult`を保持してcopy前後の完全manifestを比較した．sourceは2回のmanifest間で不変だった．Xcodeがtemporary checkoutへ作成した全entryはowner 501・group 0であり，通常userが指定検証directoryへ`ditto --rsrc --extattr --acl`でcopyすると，path，bytes，mode，flag，ACL及び拡張属性は一致したまま，保存先entryのgroupだけが20になった．userはgroup 0を保存先へ再現できないため，配置依存の正常な所有group正規化をcopy破損と誤判定していたことが原因である．
 
 　修正はprivate `.xcresult`専用digestのowner及びgroup fieldだけを正規化する．path，bytes，mode，flag，ACL及び拡張属性の完全一致は維持する．source／candidateのstability tokenはuid，gid，inode，size，mtime及びctimeを引き続き含むため，観測中の所有変更はfail closedとなる．copy上限は2回，deadlineは600秒へ戻した．新回帰testはcopy側のgroupだけを変更した場合の一致を要求し，mode変更及びcontent変更は別々に拒否する．既存の連続改変，期限，final seal，source／candidate改変，root／parent／path差替え及びquery分離境界も維持する．次はこの根本修正をclean commitへ固定し，そのexact commitで`evidence`を再実行する．
+
+## 10．2026-09-14明示的板書要求の修正
+
+　本人試験で，final認識「問題を板書してください」がimportance scoreの閾値とpublic state境界により0件のままとなる原因を特定した．commit `69a4d0c6509c4fa544ba75a7f5ff9c7a783bc1f5`は，日英の厳密な全文一致命令から内容だけを取り出し，有限で整合的なfinal認識をconfirmed keywordとしてpublic sceneへ渡す．引用，複文，命令の入れ子，指示語及び不正metadataは拒否する．partialを700ミリ秒で確定する案は後続発話の先行誤確定リスクがあるため採用せず，final限定とした．
+
+　Core全274件／19 suite及びnative App全521件／41 suiteは失敗0であり，実際の認識文から「• 問題」のpreviewとoverlay render呼出までのApp回帰試験も合格した．exact Git archiveから作成した新候補は`/Users/akiyama/Documents/LectureBoard AI Verification/Visual-Owner-Trial-69a4d0c/LectureBoard AI.app`である．executable SHA-256は`a220bbd1f0de2d1ca1b3fce520847c79cdeecdcbb6c8cf54d019b379438e8fe6`，CDHashは`613e524410e97b02506e2de2af16d8fdc4a75201`，正規化tree-manifest SHA-256は`ddcea93e4366248869f7c42d46dee04fc0cc36ebfc43abe9cfdcfb15a24c1394`である．thin arm64，`adhoc,runtime`，audio-input entitlementのみ，TeamIdentifierなし，exact commit埋込み，strict deep signature及びbuild／copy tree一致を確認した．旧`a0a452f` Appは正常終了し，新候補PID 74205のみを起動した．TCC及びPowerPointは変更していない．実マイクからPowerPoint上の可視板書までは，この新候補に対する本人確認待ちである．
